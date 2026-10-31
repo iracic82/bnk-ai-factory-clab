@@ -44,25 +44,28 @@ The three controls, each shown first on its own (and insufficient), then togethe
 
 ## Chapters
 
-| # | Title | The learner does | The lesson |
-|---|---|---|---|
-| 1 | One VM, a whole factory | `vtysh` on leaf1 and border1, TMM's BGP sessions, the VIP routes on r5, `kubectl get nodes` | the fabric and the cluster are real |
-| 2 | Three tenants | apply one tenant end to end: namespace, Vrf/Vxlan/RoutingConfig, F5SPKVlan leg, Gateway, EgressGateway, AI Gateway tenant + virtual key; curl its VIP from the client | isolation at every layer, declared as CRDs |
-| 3 | GPUs without GPUs | fake GPU operator (`nvidia-smi` inside a pod), Dynamo mocker workers, KAI queues; a job per tenant; watch quota and borrowing | scheduling is a tenant boundary too |
-| 4 | The picker | F5EPP in front of the mocker, prefix-cache and prefill-load scorers, `disaggregated` mode, InferenceObjective priority | BNK picks pods, and can shed the suspect ones |
-| 5 | MCP, A2A and iRules on BNK | attach an `F5BigPersistenceProfile` (`MODEL_CONTEXT_PROTOCOL`) to the tenant MCP route and watch sessions stick while the MCP server scales to 3; same with `AGENT2AGENT` on the agents' A2A route; put a `F5BigAccessJwtConfig` in front and call with and without a valid token; then an `F5BigCneIrule` through the same `NetPolicy`: a header stamp, a per-tenant token budget, the guardrail sideband | BNK is protocol-aware for agents, and programmable where the CRDs stop |
-| 6 | Agent Substrate | WorkerPool, ActorTemplate, a `SandboxAgent`; Substrate's router in, Substrate's egress out; what it adds over plain pods | agents get a scheduler and an egress path of their own |
-| 7 | OpenShell | the sanctioned agents run in OpenShell sandboxes: provider profile (key injected only toward the AI Gateway), network policy with an allow-list, the advisor flagging a policy change that would add a new host | the runtime enforces what the agent may touch, in the kernel |
-| 8 | Meet the agents | each tenant's kagent agent, its tools, its model, its key; ask Aurora's agent for a queue summary; watch the trace in Polaris | agents are tenants' workloads |
-| 9 | The shadow agent | deploy it outside any sandbox; copied key refused by Polaris; borrow the real key; it starts working and the export leaves | identity is necessary, not sufficient |
-| 10 | Guardrails in the data path | enable the CalypsoAI iRule on Cobalt's Gateway; rerun the same task; `X-Guardrail: blocked`, Polaris record, TMM log | content is inspected where it flows |
-| 11 | Nowhere to send it | clean prompt, same webhook: sandboxed agent refused by OpenShell, unsandboxed one dropped in VRF tenant-c; `tcpdump` on border1 | the packet never leaves |
-| 12 | On the record | Polaris console, Prometheus, TMM logs, OpenShell audit: reconstruct the attempt in order | one place to answer "who tried it" |
-| 13 | Topology as a contract (optional) | llm-d's topology scoring vs BNK's picker, with labels on the mocker pods | what the picker knows and does not |
+The frame: Northlight Compute is a neocloud. It runs one AI factory and rents slices of it to enterprises that
+will never build their own. Aurora Health, Borealis Bank and Cobalt Labs are its customers; the learner is
+Northlight's platform team. Every chapter opens where that story is.
 
-Chapters 1-4 build the factory. 5-7 introduce the three mechanisms the story later relies on (iRules, Substrate,
-OpenShell) in their normal use, so that chapters 9-11 can use them without stopping to explain. 12 closes the
-loop. About 3.5 hours; 13 is a bonus.
+| # | Title | The learner does |
+|---|---|---|
+| 1 | One VM, a whole factory | walk the fabric, the cluster, TMM's session, a request end to end |
+| 2 | Three tenants | read one tenant on every layer, publish a service for another |
+| 3 | GPUs without GPUs | fake H100s, KAI queues, jobs over quota |
+| 4 | The picker | F5EPP picks a worker by cache and load |
+| 5 | Sessions that stick | MCP and A2A persistence profiles through NetPolicy, scale the MCP server to three |
+| 6 | The programmable data path | an iRule on the same listener, the Access CRDs read |
+| 7 | Agent Substrate | the components, the WorkerPool, a SandboxAgent on a worker |
+| 8 | OpenShell | provider, deny log, policy changed live and put back |
+| 9 | Meet the agents | A2A to Aurora's assistant, the tenant app, a key stopping at its tenant |
+| 10 | The agent nobody approved | the unsanctioned agent: copied key refused, own key passes, the webhook |
+| 11 | Guardrails in the data path | the CalypsoAI iRule attached to Cobalt's route, the rerun blocked |
+| 12 | Nowhere to send it | clean prompt: sandbox refuses, egress declaration removed, border1 sees nothing |
+| 13 | On the record | Polaris, TMM, OpenShell logs, Prometheus into one timeline |
+| 14 | Topology as a contract (optional) | labels on the workers, what the picker reads |
+
+About four hours. Chapters 10 to 12 are the incident; 5 to 8 introduce what they rely on.
 
 ## What is real in each product, checked 2026-10-31
 

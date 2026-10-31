@@ -26,7 +26,7 @@ description: |-
   carried inline by a BNK iRule, OpenShell's network policy around the sandbox, and BNK's egress in the tenant's
   VRF, where the packet is dropped before it reaches a router.
 
-  Thirteen chapters, about three and a half hours, every command ready to run.
+  Fourteen chapters, about four hours, every command ready to run.
 icon: ./assets/icon.png
 tags:
 - nvidia
