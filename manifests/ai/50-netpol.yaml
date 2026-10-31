@@ -1,0 +1,17 @@
+# Who may reach the model backends. TMM's server-side connections come from its internal leg (a node-network
+# address, __KIND_SUBNET__, filled in by install/40-ai.sh) or from the TMM pod itself (namespace f5-bnk); the
+# picker and Dynamo's frontend live beside the workers; nothing else gets in. Calico enforces these.
+# Open (as on EVE): the F5EPP's secureServing and metricsEndpointAuth are off for the first data-path test.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: models-from-bnk-and-dynamo, namespace: aigw-models}
+spec:
+  podSelector:
+    matchExpressions: [{key: trust.lab/state, operator: NotIn, values: [quarantined]}]
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
+    - ipBlock: {cidr: __KIND_SUBNET__}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: aigw-models}}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: dynamo-system}}
