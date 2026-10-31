@@ -1,6 +1,15 @@
-# The three tenant namespaces and a hello app in each: the first thing behind each tenant's VIP (chapter 2), and a
-# pod that belongs to the tenant for the egress tests (chapter 11). Labels name the tenant the way the agents,
-# NetworkPolicies and KAI queues expect.
+# The three tenant namespaces and two kinds of hello app per tenant.
+#
+#   f5-bnk/tenant-<x>-hello   the pool members behind the tenant's VIP (manifests/bnk/40-tenants.yaml, chapter 2).
+#                             They live in f5-bnk, not in the tenant namespace: the controller does not index the
+#                             endpoints of a namespace that an F5SPKEgress steers, so a Pool pointing there stays
+#                             empty, the virtual stays down and TMM never advertises the VIP. The EVE lab found the
+#                             same and keeps its hello apps in BNK's namespace; verified on the VM 2026-10-31 (leaf1
+#                             received only the SNAT /32 from TMM, never the VIP).
+#   tenant-<x>/hello          a pod that belongs to the tenant: it leaves through the tenant's VRF and is the subject
+#                             of the isolation and egress checks in chapters 2 and 11. Not a pool member.
+#
+# Labels name the tenant the way the agents, NetworkPolicies and KAI queues expect.
 apiVersion: v1
 kind: Namespace
 metadata: {name: tenant-a, labels: {factory.lab/tenant: tenant-a, factory.lab/display: aurora-health}}
@@ -13,16 +22,80 @@ apiVersion: v1
 kind: Namespace
 metadata: {name: tenant-c, labels: {factory.lab/tenant: tenant-c, factory.lab/display: cobalt-labs}}
 ---
+# ---- pool members, in f5-bnk --------------------------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tenant-a-hello, namespace: f5-bnk, labels: {app: tenant-a-hello, factory.lab/tenant: tenant-a}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: tenant-a-hello}}
+  template:
+    metadata: {labels: {app: tenant-a-hello, factory.lab/tenant: tenant-a}}
+    spec:
+      nodeSelector: {workload: ai}
+      containers:
+      - name: hello
+        image: nginxdemos/hello:0.4-plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tenant-a-hello, namespace: f5-bnk}
+spec: {selector: {app: tenant-a-hello}, ports: [{port: 80, targetPort: 80}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tenant-b-hello, namespace: f5-bnk, labels: {app: tenant-b-hello, factory.lab/tenant: tenant-b}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: tenant-b-hello}}
+  template:
+    metadata: {labels: {app: tenant-b-hello, factory.lab/tenant: tenant-b}}
+    spec:
+      nodeSelector: {workload: ai}
+      containers:
+      - name: hello
+        image: nginxdemos/hello:0.4-plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tenant-b-hello, namespace: f5-bnk}
+spec: {selector: {app: tenant-b-hello}, ports: [{port: 80, targetPort: 80}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tenant-c-hello, namespace: f5-bnk, labels: {app: tenant-c-hello, factory.lab/tenant: tenant-c}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: tenant-c-hello}}
+  template:
+    metadata: {labels: {app: tenant-c-hello, factory.lab/tenant: tenant-c}}
+    spec:
+      nodeSelector: {workload: ai}
+      containers:
+      - name: hello
+        image: nginxdemos/hello:0.4-plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tenant-c-hello, namespace: f5-bnk}
+spec: {selector: {app: tenant-c-hello}, ports: [{port: 80, targetPort: 80}]}
+---
+# ---- a pod of each tenant, in the tenant namespace -----------------------------------------------------------
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: hello, namespace: tenant-a, labels: {app: hello}}
 spec:
-  replicas: 2
+  replicas: 1
   selector: {matchLabels: {app: hello}}
   template:
     metadata: {labels: {app: hello}}
     spec:
-      nodeSelector: {workload: ai}
       containers:
       - name: hello
         image: nginxdemos/hello:0.4-plain-text
@@ -38,12 +111,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata: {name: hello, namespace: tenant-b, labels: {app: hello}}
 spec:
-  replicas: 2
+  replicas: 1
   selector: {matchLabels: {app: hello}}
   template:
     metadata: {labels: {app: hello}}
     spec:
-      nodeSelector: {workload: ai}
       containers:
       - name: hello
         image: nginxdemos/hello:0.4-plain-text
@@ -59,12 +131,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata: {name: hello, namespace: tenant-c, labels: {app: hello}}
 spec:
-  replicas: 2
+  replicas: 1
   selector: {matchLabels: {app: hello}}
   template:
     metadata: {labels: {app: hello}}
     spec:
-      nodeSelector: {workload: ai}
       containers:
       - name: hello
         image: nginxdemos/hello:0.4-plain-text

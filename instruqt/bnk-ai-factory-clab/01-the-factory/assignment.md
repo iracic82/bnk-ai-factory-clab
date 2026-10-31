@@ -83,7 +83,7 @@ docker exec client curl -s -m 5 http://10.201.100.10/ | head -5
 ```
 
 Trace it back: r5 learned `10.201.100.0/24` from border1, border1 learned it as a type-5 from leaf1, leaf1 learned
-it over eBGP from TMM in VRF tenant-a, and TMM answered from the hello pod in namespace tenant-a.
+it over eBGP from TMM in VRF tenant-a, and TMM answered from Aurora's hello pods (`f5-bnk/tenant-a-hello`).
 
 ```bash,run
 docker exec r5 vtysh -c 'show ip route 10.201.100.10'

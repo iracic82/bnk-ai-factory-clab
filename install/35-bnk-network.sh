@@ -56,6 +56,7 @@ step "global routing (TMM's routing init waits for this)"
 apply_immutable "$M/bnk/20-routing-global.yaml"
 step "tenant namespaces and hello apps"
 kubectl apply -f "$M/tenants/hello.yaml" >/dev/null
+for t in a b c; do kubectl -n f5-bnk rollout status deploy/tenant-$t-hello --timeout=180s >/dev/null 2>&1 || warn "tenant-$t-hello not up yet (the VIP stays down until its pool has members)"; done
 step "TMM legs and VIP pool"
 # the internal leg lives on the kind docker network, whose subnet docker chooses per host
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)

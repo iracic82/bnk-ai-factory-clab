@@ -19,7 +19,7 @@ apiVersion: k8s.f5net.com/v1
 kind: Pool
 metadata: {name: tenant-a-hello, namespace: f5-bnk}
 spec:
-  dynamicMembers: [{serviceName: hello, serviceNamespace: tenant-a}]
+  dynamicMembers: [{serviceName: tenant-a-hello, serviceNamespace: f5-bnk}]   # f5-bnk, not the egress namespace: see manifests/tenants/hello.yaml
 ---
 apiVersion: k8s.f5net.com/v1
 kind: F5VirtualServer
@@ -50,7 +50,7 @@ apiVersion: k8s.f5net.com/v1
 kind: Pool
 metadata: {name: tenant-b-hello, namespace: f5-bnk}
 spec:
-  dynamicMembers: [{serviceName: hello, serviceNamespace: tenant-b}]
+  dynamicMembers: [{serviceName: tenant-b-hello, serviceNamespace: f5-bnk}]   # f5-bnk, not the egress namespace: see manifests/tenants/hello.yaml
 ---
 apiVersion: k8s.f5net.com/v1
 kind: F5VirtualServer
@@ -81,7 +81,7 @@ apiVersion: k8s.f5net.com/v1
 kind: Pool
 metadata: {name: tenant-c-hello, namespace: f5-bnk}
 spec:
-  dynamicMembers: [{serviceName: hello, serviceNamespace: tenant-c}]
+  dynamicMembers: [{serviceName: tenant-c-hello, serviceNamespace: f5-bnk}]   # f5-bnk, not the egress namespace: see manifests/tenants/hello.yaml
 ---
 apiVersion: k8s.f5net.com/v1
 kind: F5VirtualServer
