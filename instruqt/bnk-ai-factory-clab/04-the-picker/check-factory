@@ -6,5 +6,6 @@ P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1)
 code=$(docker exec client curl -s -m 60 -o /dev/null -w '%{http_code}' http://172.16.100.12:8000/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"Qwen/Qwen3-0.6B","messages":[{"role":"user","content":"ping"}],"max_tokens":4}' 2>/dev/null)
 [ "$code" = 200 ] || fail-message "a request through the pool VIP 172.16.100.12:8000 returned HTTP '$code'; expected 200."
-kubectl -n aigw-models logs "$P" --since=30m 2>/dev/null | grep -qiE 'pick|select|endpoint' || fail-message "the picker has not logged a choice in the last 30 minutes; send a request through the pool VIP first."
+n=$(for p in $(kubectl -n aigw-models get pods -o name | grep mocker-decode); do kubectl -n aigw-models exec $p -c main -- python3 -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:9090/metrics', timeout=5).read().decode())" 2>/dev/null | awk '/^dynamo_component_requests_total/{s+=$NF} END{print s+0}'; done | awk '{s+=$1} END{print s+0}')
+[ "${n:-0}" -ge 1 ] || fail-message "no decode worker has served a request yet; send one through the pool VIP 172.16.100.12:8000 first."
 exit 0

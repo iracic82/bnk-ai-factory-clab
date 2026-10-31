@@ -99,52 +99,62 @@ kubectl -n aigw-models get httproute -o jsonpath='{range .items[*]}{.metadata.na
 
 ## Watch a pick
 
-Send one prompt, then the same prompt again, and read which worker the picker named each time. Put **Terminal 2** on
-the picker's log so you see the choices as they happen:
-
-```
-P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1); kubectl -n aigw-models logs -f $P | grep -iE 'pick|select|endpoint'
-```
-
-Here, the helper `ask` sends one chat request through the pool VIP and prints the first line of the answer:
+The picker does not write its choice to its log at the default verbosity. The workers do count what they serve,
+and that is the better witness: each decode worker publishes `dynamo_component_requests_total`, and reading it
+inside the pod before and after a request shows exactly which worker took it. Two helpers, `counts` and `ask`:
 
 ```bash,run
-P=$(kubectl -n aigw-models get pods -l app=model-pool-epp -o name 2>/dev/null | head -1); [ -n "$P" ] || P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1)
+counts() { for p in $(kubectl -n aigw-models get pods -o name | grep mocker-decode); do
+  n=$(kubectl -n aigw-models exec $p -c main -- python3 -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:9090/metrics', timeout=5).read().decode())" 2>/dev/null | awk '/^dynamo_component_requests_total/{s+=$NF} END{print s+0}')
+  echo "  ${p#pod/}: $n requests served"; done; }
 ask() { docker exec client curl -s -m 60 http://172.16.100.12:8000/v1/chat/completions -H 'Content-Type: application/json' \
-  -d "{\"model\":\"Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"$1\"}],\"max_tokens\":32}" | jq -r '.choices[0].message.content // .error' | head -c 120; echo; }
-ask "Describe the water cycle in three sentences for a ten year old."
-sleep 2
-ask "Describe the water cycle in three sentences for a ten year old."
-kubectl -n aigw-models logs $P --since=2m | grep -iE 'pick|select|endpoint' | tail -6
+  -d "{\"model\":\"Qwen/Qwen3-0.6B\",\"messages\":[{\"role\":\"user\",\"content\":\"$1\"}],\"max_tokens\":32}" | jq -r '.choices[0].message.content // .error' | head -c 80; echo; }
+counts
 ```
 
-The second request has a prefix the first one pushed into one worker's KV cache, so the prefix-cache scorer pulls it
-to that worker. A different prompt has no such pull and is free to go to the other one:
+Now one prompt, then the same prompt again. Keep **Terminal 2** on the picker's log meanwhile: every request shows
+up as "EPP received request" and "EPP sent request body response(s) to proxy" with its request id, which is TMM
+asking and the picker answering:
+
+```
+P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1); kubectl -n aigw-models logs -f $P | grep -E 'EPP (received|sent)|dynamo'
+```
 
 ```bash,run
-ask "List four prime numbers above 100."
-kubectl -n aigw-models logs $P --since=1m | grep -iE 'pick|select|endpoint' | tail -3
+ask "Describe the water cycle in three sentences for a ten year old."; counts
+sleep 2
+ask "Describe the water cycle in three sentences for a ten year old."; counts
+```
+
+The mocker answers with filler text, which is what it is for; the counters are the point. The second request has
+a prefix the first one pushed into one worker's KV cache, so the prefix-cache scorer pulls it to that worker: the
+same counter moves twice. A different prompt has no such pull and is free to go to the other one:
+
+```bash,run
+ask "List four prime numbers above 100."; counts
 ```
 
 This is the answer to Aurora's engineer. The gateway did not hash on a header or round-robin. It asked.
 
 ## Load-aware
 
-Cache is one signal. Load is the other. Put one worker under load with a burst of long prompts and send a short one
-behind them. Open the **Prometheus** tab and graph `dynamo_component_inflight_requests` while this runs:
+Cache is one signal. Load is the other. Put the workers under a burst of long prompts and read the counters: the
+picker spreads the burst, and the next short question goes to whichever worker has less in flight. Open the
+**Prometheus** tab and graph `rate(dynamo_component_requests_total[1m])` while this runs:
 
 [button label="Open Prometheus" variant="success"](tab-2)
 
 ```bash,run
+counts
 for i in $(seq 1 12); do ask "Write a 200 word story about a lighthouse keeper, variation $i." >/dev/null & done; sleep 3
 ask "What is the capital of Norway?"
-wait
-kubectl -n aigw-models logs $P --since=1m | grep -iE 'pick|select|endpoint' | tail -4
-curl -s 'http://127.0.0.1:30909/api/v1/query?query=dynamo_component_inflight_requests' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
+wait; counts
 ```
 
-The short question went to the less loaded worker even though neither had its prefix. The prefill-load and queue
-scorers outweighed the cache scorer, which had nothing to say.
+Both counters moved, and the burst was not sent to one worker only: the prefill-load and queue scorers outweighed
+the cache scorer, which had nothing to say for twelve different prompts. The mocker answers in milliseconds, so
+`dynamo_component_inflight_requests` is almost always zero when you look; the rate of the total is the graph that
+shows the burst.
 
 ## TMM's side of it
 
