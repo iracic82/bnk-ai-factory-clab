@@ -116,14 +116,14 @@ terminal, a request through Borealis's route with Borealis's key:
 ```bash,run
 K=$(cat /root/.bnk/aigw/tenant-b.key)
 docker exec client curl -s -m 120 http://172.16.100.21/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
-  -d '{"model":"qwen2.5-1.5b","messages":[{"role":"user","content":"In one sentence, what is a VRF?"}],"max_tokens":60}' | jq -r '.choices[0].message.content'
+  -d '{"model":"tenant-b-qwen2.5-1.5b","messages":[{"role":"user","content":"In one sentence, what is a VRF?"}],"max_tokens":60}' | jq -r '.choices[0].message.content'
 ```
 
 The same key on Aurora's route is refused: keys belong to a tenant.
 
 ```bash,run
 docker exec client curl -s -m 20 http://172.16.100.20/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
-  -d '{"model":"qwen2.5-1.5b","messages":[{"role":"user","content":"hi"}]}' | jq -c '{error: (.error.message // .error // "none")}'
+  -d '{"model":"tenant-b-qwen2.5-1.5b","messages":[{"role":"user","content":"hi"}]}' | jq -c '{error: (.error.message // .error // "none")}'
 ```
 
 Click **Check** when the client reaches `10.202.100.11`.

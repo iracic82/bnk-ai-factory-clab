@@ -98,7 +98,11 @@ aigw_tenant() {   # name display vip
   done
   local MODELS=()
   for spec in "qwen3-0.6b-dynamo|dynamo|Qwen/Qwen3-0.6B" "qwen2.5-1.5b|ollama|qwen2.5:1.5b" "qwen2.5-0.5b|ollama|qwen2.5:0.5b"; do
-    IFS='|' read -r name prov up <<<"$spec"; MODELS+=("$name")
+    IFS='|' read -r name prov up <<<"$spec"
+    # a model is backed by an AIModel object named after it, one per cluster: a second tenant cannot register the same
+    # name ("already exists", bake of 2026-10-31). The EVE lab prefixes tenant models with the tenant; so does this.
+    [ "$T" = lab ] || name="$T-$name"
+    MODELS+=("$name")
     r=$(jq -n --arg n "$name" --arg p "${REF[$prov]}" --arg u "$up" '{name:$n,deployments:[{providerRef:$p,upstream:$u,dialects:["openai"]}]}' | j "$TA/models" --data-binary @-)
     echo "$r" | jq -e '(.data.name // .name // .id) != null' >/dev/null 2>&1 || j "$TA/models" | jq -e --arg n "$name" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1 \
       || warn "$T: model $name not created: $(echo "$r" | head -c 300)"
@@ -154,7 +158,7 @@ kubectl get queues.scheduling.run.ai
 step "the two paths to an AI Gateway route: the fabric (client behind r5) and TMM's internal leg (a node, as pods do)"
 K=$(cat "$SECRETS_DIR/aigw/tenant-a.key" 2>/dev/null || true)
 [ -n "$K" ] && docker exec client curl -sS -m 120 http://172.16.100.20/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
-  -d '{"model":"qwen2.5-1.5b","messages":[{"role":"user","content":"Reply with exactly: ready"}],"max_tokens":8}' | jq -c '{model, reply:.choices[0].message.content, err:.error}' || warn "no tenant-a key to test with"
+  -d '{"model":"tenant-a-qwen2.5-1.5b","messages":[{"role":"user","content":"Reply with exactly: ready"}],"max_tokens":8}' | jq -c '{model, reply:.choices[0].message.content, err:.error}' || warn "no tenant-a key to test with"
 unset K
 # kagent and the sandboxes reach the lab route on 172.16.100.13 through the node route added in 35-bnk-network.sh
 L=$(cat "$SECRETS_DIR/aigw/lab.key" 2>/dev/null || true)

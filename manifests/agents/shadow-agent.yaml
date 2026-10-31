@@ -13,7 +13,7 @@ metadata:
   namespace: tenant-c
 spec:
   provider: OpenAI
-  model: qwen2.5-1.5b
+  model: tenant-c-qwen2.5-1.5b
   apiKeySecret: shadow-key
   apiKeySecretKey: token
   openAI:

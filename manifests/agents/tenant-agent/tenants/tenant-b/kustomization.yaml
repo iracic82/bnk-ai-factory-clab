@@ -8,6 +8,7 @@ patches:
   patch: |-
     - {op: replace, path: /spec/template/spec/containers/0/env/0/value, value: "b"}
     - {op: replace, path: /spec/template/spec/containers/0/env/1/value, value: "http://172.16.100.21/v1"}   # AI Gateway tenant tenant-b
+    - {op: replace, path: /spec/template/spec/containers/0/env/2/value, value: "tenant-b-qwen2.5-1.5b"}   # this tenant's model name in Polaris
     - {op: replace, path: /spec/template/spec/containers/1/env/0/value, value: "b"}
 - target: {kind: Gateway, name: tenant-gw}
   patch: |-
@@ -18,3 +19,4 @@ patches:
 - target: {kind: ModelConfig, name: tenant-model}
   patch: |-
     - {op: replace, path: /spec/openAI/baseUrl, value: "http://172.16.100.21/v1"}
+    - {op: replace, path: /spec/model, value: "tenant-b-qwen2.5-1.5b"}

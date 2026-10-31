@@ -141,7 +141,7 @@ def identity():
             "vip_vtep": n["vip_vtep"], "egress_snat": n["snat"],
             "egress_path": f"pod -> TMM ({n['vrf']}, SNAT) -> {n['leg']} -> EVPN -> {n['exit']}",
             "ai_gateway": f"http://{n['ai_gw']}/v1, AI Gateway tenant tenant-{TENANT} (own route and VIP, reached through this "
-                          f"tenant's exit), principal assistant, model qwen2.5-1.5b"}
+                          f"tenant's exit), principal assistant, model {os.environ.get('MODEL', 'tenant-' + TENANT + '-qwen2.5-1.5b')}"}
 
 
 def egress_check():
