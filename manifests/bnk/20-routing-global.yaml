@@ -1,0 +1,76 @@
+# OcNOS routing on TMM (ZEBOS_STATE=ocnos), rendered from these templates by the controller. Templates are plain Go
+# templates (no Sprig), and templates and routing CRs are immutable: change = delete and recreate.
+#
+# Global: one eBGP session in the default route domain to leaf1's external leg, 172.16.10.1 (the leaf speaks AS 65000
+# there, what TMM's gateway is expected to be). Only the shared VIP pool leaves; the leaf sends a default.
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingTemplate
+metadata:
+  name: bnk-routing
+  namespace: f5-bnk
+spec:
+  body: |
+    ip prefix-list TO-LEAF seq 5 permit 172.16.100.0/24 le 32
+    route-map TO-LEAF permit 10
+    match ip address prefix-list TO-LEAF
+    exit
+    router bgp {{ .global.spec.bgp.startASN }}
+    bgp router-id {{ .global.spec.bgp.routerIdSource }}
+    bgp log-neighbor-changes
+    {{- range $nbr := .global.spec.bgp.neighbors }}
+    neighbor {{ $nbr.ip }} remote-as {{ $nbr.remoteAs }}
+    {{- end }}
+    address-family ipv4 unicast
+    redistribute kernel
+    {{- range $nbr := .global.spec.bgp.neighbors }}
+    neighbor {{ $nbr.ip }} activate
+    neighbor {{ $nbr.ip }} route-map TO-LEAF out
+    {{- end }}
+    exit-address-family
+    exit
+---
+# Tenant: the VRF with an RD (OcNOS takes BGP in a VRF only once the VRF has one), eBGP in the VRF to the leaf over the
+# tenant's VLAN leg, kernel routes (VIPs, SNAT pool) redistributed. No L3VNI on TMM: the leaf is the VTEP.
+# A field the RoutingConfig leaves out is a missing key, which "if" reads as false, hence the chain on .tenant.spec.vrf.
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingTemplate
+metadata:
+  name: bnk-tenant
+  namespace: f5-bnk
+spec:
+  body: |
+    {{- if eq .tenant.spec.vrf "tenant-a" }}
+    ip vrf tenant-a
+    rd {{ .global.spec.bgp.routerIdSource }}:10001
+    exit
+    {{- else if eq .tenant.spec.vrf "tenant-b" }}
+    ip vrf tenant-b
+    rd {{ .global.spec.bgp.routerIdSource }}:10002
+    exit
+    {{- else if eq .tenant.spec.vrf "tenant-c" }}
+    ip vrf tenant-c
+    rd {{ .global.spec.bgp.routerIdSource }}:10003
+    exit
+    {{- end }}
+    router bgp {{ .global.spec.bgp.startASN }}
+    address-family ipv4 vrf {{ .tenant.spec.vrf }}
+    redistribute kernel
+    {{- range $nbr := .tenant.spec.neighbors }}
+    neighbor {{ $nbr.ip }} remote-as {{ $nbr.remoteAs }}
+    neighbor {{ $nbr.ip }} activate
+    {{- end }}
+    exit-address-family
+    exit
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: GlobalRoutingConfig
+metadata:
+  name: global-config
+  namespace: f5-bnk
+spec:
+  templateRef: {name: bnk-routing}
+  bgp:
+    startASN: 65100
+    routerIdSource: "%POD_IP%"
+    neighbors:
+    - {ip: 172.16.10.1, remoteAs: 65000, families: ["ipv4-unicast"]}

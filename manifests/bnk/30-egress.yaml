@@ -1,0 +1,82 @@
+# Per-tenant egress: one F5SPKEgress per application namespace (pseudoCNIConfig.namespaces takes exactly one), each
+# with its own SNAT pool in the tenant's VRF, so a tenant's pods always leave through that tenant's VRF with that
+# tenant's addresses (leaf1 accepts the pool from TMM, border1 passes it to r5). pseudoCNIConfig.vxlan.create builds the
+# node -> TMM tunnel on the internal leg. addressList: one inner list per TMM replica. The webhook wants the tunnel's
+# IPv4 and IPv6 subnets together; the IPv6 one is unused.
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKSnatpool
+metadata: {name: tenant-a-snat, namespace: f5-bnk}
+spec:
+  name: tenant-a-snat
+  vrf: tenant-a
+  addressList: [[10.201.200.10]]
+---
+apiVersion: k8s.f5net.com/v3
+kind: F5SPKEgress
+metadata: {name: tenant-a-egress, namespace: f5-bnk}
+spec:
+  snatType: SRC_TRANS_SNATPOOL
+  egressSnatpool: tenant-a-snat
+  pseudoCNIConfig:
+    namespaces: [tenant-a]
+    appPodInterface: eth0
+    vxlan:
+      create: true
+      tmmInterfaceName: internal
+      vrf: tenant-a
+      ipv4Subnet: 10.0.0.0
+      ipv4PrefixLen: 18
+      ipv6Subnet: "fd00:10:0:0::"
+      ipv6PrefixLen: 112
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKSnatpool
+metadata: {name: tenant-b-snat, namespace: f5-bnk}
+spec:
+  name: tenant-b-snat
+  vrf: tenant-b
+  addressList: [[10.202.200.10]]
+---
+apiVersion: k8s.f5net.com/v3
+kind: F5SPKEgress
+metadata: {name: tenant-b-egress, namespace: f5-bnk}
+spec:
+  snatType: SRC_TRANS_SNATPOOL
+  egressSnatpool: tenant-b-snat
+  pseudoCNIConfig:
+    namespaces: [tenant-b]
+    appPodInterface: eth0
+    vxlan:
+      create: true
+      tmmInterfaceName: internal
+      vrf: tenant-b
+      ipv4Subnet: 10.0.64.0
+      ipv4PrefixLen: 18
+      ipv6Subnet: "fd00:10:0:1::"
+      ipv6PrefixLen: 112
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKSnatpool
+metadata: {name: tenant-c-snat, namespace: f5-bnk}
+spec:
+  name: tenant-c-snat
+  vrf: tenant-c
+  addressList: [[10.203.200.10]]
+---
+apiVersion: k8s.f5net.com/v3
+kind: F5SPKEgress
+metadata: {name: tenant-c-egress, namespace: f5-bnk}
+spec:
+  snatType: SRC_TRANS_SNATPOOL
+  egressSnatpool: tenant-c-snat
+  pseudoCNIConfig:
+    namespaces: [tenant-c]
+    appPodInterface: eth0
+    vxlan:
+      create: true
+      tmmInterfaceName: internal
+      vrf: tenant-c
+      ipv4Subnet: 10.0.128.0
+      ipv4PrefixLen: 18
+      ipv6Subnet: "fd00:10:0:2::"
+      ipv6PrefixLen: 112

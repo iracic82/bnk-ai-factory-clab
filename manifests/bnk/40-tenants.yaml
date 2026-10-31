@@ -1,0 +1,95 @@
+# One block per tenant: the VRF (route domain, strict), the RoutingConfig that peers it with leaf1 over the tenant's
+# VLAN leg, and a first VIP in the VRF in front of the tenant's hello app (manifests/tenants/hello.yaml), advertised
+# by routing (redistribute kernel in the VRF), which the leaf turns into an EVPN type-5 for border1 and r5.
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-a, namespace: f5-bnk}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-a, namespace: f5-bnk}
+spec:
+  templateRef: {name: bnk-tenant}
+  vrf: tenant-a
+  neighbors:
+  - {ip: 172.17.101.1, remoteAs: 65000, families: ["ipv4-unicast"]}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Pool
+metadata: {name: tenant-a-hello, namespace: f5-bnk}
+spec:
+  dynamicMembers: [{serviceName: hello, serviceNamespace: tenant-a}]
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5VirtualServer
+metadata: {name: tenant-a-vip, namespace: f5-bnk}
+spec:
+  destinationAddress: 10.201.100.10
+  destinationPort: 80
+  vrf: tenant-a
+  pool: tenant-a-hello
+  routeAdvertisement: true
+  snat: {type: automap}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-b, namespace: f5-bnk}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-b, namespace: f5-bnk}
+spec:
+  templateRef: {name: bnk-tenant}
+  vrf: tenant-b
+  neighbors:
+  - {ip: 172.17.102.1, remoteAs: 65000, families: ["ipv4-unicast"]}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Pool
+metadata: {name: tenant-b-hello, namespace: f5-bnk}
+spec:
+  dynamicMembers: [{serviceName: hello, serviceNamespace: tenant-b}]
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5VirtualServer
+metadata: {name: tenant-b-vip, namespace: f5-bnk}
+spec:
+  destinationAddress: 10.202.100.10
+  destinationPort: 80
+  vrf: tenant-b
+  pool: tenant-b-hello
+  routeAdvertisement: true
+  snat: {type: automap}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-c, namespace: f5-bnk}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-c, namespace: f5-bnk}
+spec:
+  templateRef: {name: bnk-tenant}
+  vrf: tenant-c
+  neighbors:
+  - {ip: 172.17.103.1, remoteAs: 65000, families: ["ipv4-unicast"]}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Pool
+metadata: {name: tenant-c-hello, namespace: f5-bnk}
+spec:
+  dynamicMembers: [{serviceName: hello, serviceNamespace: tenant-c}]
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5VirtualServer
+metadata: {name: tenant-c-vip, namespace: f5-bnk}
+spec:
+  destinationAddress: 10.203.100.10
+  destinationPort: 80
+  vrf: tenant-c
+  pool: tenant-c-hello
+  routeAdvertisement: true
+  snat: {type: automap}

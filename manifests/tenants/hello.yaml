@@ -1,0 +1,77 @@
+# The three tenant namespaces and a hello app in each: the first thing behind each tenant's VIP (chapter 2), and a
+# pod that belongs to the tenant for the egress tests (chapter 11). Labels name the tenant the way the agents,
+# NetworkPolicies and KAI queues expect.
+apiVersion: v1
+kind: Namespace
+metadata: {name: tenant-a, labels: {factory.lab/tenant: tenant-a, factory.lab/display: aurora-health}}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: tenant-b, labels: {factory.lab/tenant: tenant-b, factory.lab/display: borealis-bank}}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: tenant-c, labels: {factory.lab/tenant: tenant-c, factory.lab/display: cobalt-labs}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: hello, namespace: tenant-a, labels: {app: hello}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: hello}}
+  template:
+    metadata: {labels: {app: hello}}
+    spec:
+      nodeSelector: {workload: ai}
+      containers:
+      - name: hello
+        image: nginxdemos/hello:0.4-plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: hello, namespace: tenant-a}
+spec: {selector: {app: hello}, ports: [{port: 80, targetPort: 80}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: hello, namespace: tenant-b, labels: {app: hello}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: hello}}
+  template:
+    metadata: {labels: {app: hello}}
+    spec:
+      nodeSelector: {workload: ai}
+      containers:
+      - name: hello
+        image: nginxdemos/hello:0.4-plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: hello, namespace: tenant-b}
+spec: {selector: {app: hello}, ports: [{port: 80, targetPort: 80}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: hello, namespace: tenant-c, labels: {app: hello}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: hello}}
+  template:
+    metadata: {labels: {app: hello}}
+    spec:
+      nodeSelector: {workload: ai}
+      containers:
+      - name: hello
+        image: nginxdemos/hello:0.4-plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: hello, namespace: tenant-c}
+spec: {selector: {app: hello}, ports: [{port: 80, targetPort: 80}]}

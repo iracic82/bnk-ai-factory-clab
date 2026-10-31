@@ -1,0 +1,134 @@
+# Tenant EVPN on the legacy CRDs (docs/fabric-evpn.md, step 2), after F5 "Sample YAML files by use case", use cases 3/4,
+# and "Configure VXLAN for EVPN" / "Configure VRF isolation" / "Configure tenant BGP routing".
+# Per tenant: Vrf (route domain), Vxlan (L3VNI, VTEP addresses from localIpSubnet, the same subnet in every Vxlan: the
+# webhook requires it although the CRD reference says unique, so all tenants share one VTEP per TMM, as OcNOS's
+# single vtep-ip-global expects; no vlan, as in "Configure VXLAN for
+# EVPN": the webhook rejects vlan together with vrf; the underlay is whatever route-domain-0 VLAN reaches the VTEP, tunnel
+# self IPs: none, the L3VNI routes without them; the webhook requires ipv4Subnet+ipv6Subnet+both prefix lengths together),
+# RoutingConfig (vxlanRef) that renders the tenant into OcNOS. Only one Vxlan may carry
+# evpn: true; the GlobalRoutingConfig references it (install/fabric/bnk/10-routing-global.yaml).
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-a, namespace: default}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vxlan
+metadata: {name: vni10001, namespace: default}
+spec:
+  vrf: tenant-a
+  vni: 10001
+  mtu: 1450
+  port: 4789
+  localIpSubnet: "10.255.1.0"
+  localIpPrefixlen: 24
+  evpn: true
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-a, namespace: default}
+spec:
+  templateRef: {name: bnk-tenant}
+  vxlanRef: vni10001
+  neighbors:                      # exit leg to the DPUs, VLAN 101 (F5SPKVlan fab-a)
+  - {ip: 10.254.101.1, remoteAs: 65301, families: ["ipv4-unicast"]}
+  - {ip: 10.254.101.2, remoteAs: 65302, families: ["ipv4-unicast"]}
+---
+# tenant-a VIP: legacy F5VirtualServer in VRF tenant-a, advertised by routing (redistribute kernel in the VRF, then
+# EVPN type-5). Backend: the tenant-a-hello demo app (install/fabric/bnk/50-tenant-a-vip.yaml) through a Pool.
+apiVersion: k8s.f5net.com/v1
+kind: Pool
+metadata: {name: tenant-a-hello, namespace: default}
+spec:
+  dynamicMembers: [{serviceName: tenant-a-hello, serviceNamespace: default}]
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5VirtualServer
+metadata: {name: tenant-a-vip, namespace: default}
+spec:
+  destinationAddress: 10.201.100.10
+  destinationPort: 80
+  vrf: tenant-a
+  pool: tenant-a-hello
+  routeAdvertisement: true
+  snat: {type: automap}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-b, namespace: default}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vxlan
+metadata: {name: vni10002, namespace: default}
+spec:
+  vrf: tenant-b
+  vni: 10002
+  mtu: 1450
+  port: 4789
+  localIpSubnet: "10.255.1.0"
+  localIpPrefixlen: 24
+  evpn: false
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-b, namespace: default}
+spec:
+  templateRef: {name: bnk-tenant}
+  vxlanRef: vni10002
+  neighbors:                      # exit leg to the DPUs, VLAN 102 (F5SPKVlan fab-b)
+  - {ip: 10.254.102.1, remoteAs: 65301, families: ["ipv4-unicast"]}
+  - {ip: 10.254.102.2, remoteAs: 65302, families: ["ipv4-unicast"]}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Pool
+metadata: {name: tenant-b-hello, namespace: default}
+spec:
+  dynamicMembers: [{serviceName: tenant-b-hello, serviceNamespace: default}]
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5VirtualServer
+metadata: {name: tenant-b-vip, namespace: default}
+spec:
+  destinationAddress: 10.202.100.10
+  destinationPort: 80
+  vrf: tenant-b
+  pool: tenant-b-hello
+  routeAdvertisement: true
+  snat: {type: automap}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-c, namespace: default}
+spec: {strictIsolation: true}
+---
+# tenant-c behind the DPUs (docs/fabric-evpn.md, step 3, after F5's NICo design): TMM is not its VTEP, so no Vxlan.
+# The RoutingConfig binds the VRF directly (F5 CRD reference: vrf "for north-south BGP with tenant VRF scenarios
+# where VXLAN/EVPN overlays are not required") and peers with the DPU on VLAN 103 (F5SPKVlan fab-c,
+# install/legacy/10-network.yaml). Both DPUs are listed; each TMM reaches only the DPU in front of its worker.
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-c, namespace: default}
+spec:
+  templateRef: {name: bnk-tenant}
+  vrf: tenant-c
+  neighbors:
+  - {ip: 10.254.103.1, remoteAs: 65301, families: ["ipv4-unicast"]}
+  - {ip: 10.254.103.2, remoteAs: 65302, families: ["ipv4-unicast"]}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Pool
+metadata: {name: tenant-c-hello, namespace: default}
+spec:
+  dynamicMembers: [{serviceName: tenant-c-hello, serviceNamespace: default}]
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5VirtualServer
+metadata: {name: tenant-c-vip, namespace: default}
+spec:
+  destinationAddress: 10.203.100.10
+  destinationPort: 80
+  vrf: tenant-c
+  pool: tenant-c-hello
+  routeAdvertisement: true
+  snat: {type: automap}

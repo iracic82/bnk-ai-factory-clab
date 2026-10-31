@@ -1,0 +1,80 @@
+# TMM's legs, legacy network model (the only one that carries VRF routing to the fabric in 2.4.x; the controller
+# registers its Vrf handler with USE_GATEWAY_SETTINGS=false, set in install/30-bnk.sh). TMM interfaces follow the
+# pod's NAD order: 1.1 external-net (macvlan on the worker's eth1, the veth into leaf1), 1.2 internal-net (macvlan on
+# eth0, the kind node network, for the node -> TMM egress tunnels).
+#
+# Differences from EVE: one TMM, so one self IP per leg; the leaf is every tenant's VTEP, so there is no VLAN 100
+# EVPN underlay and no Vxlan CR on TMM; each tenant has a plain VLAN leg (101-103) into its VRF where TMM peers
+# eBGP with leaf1 (172.17.10x.1, AS 65000) and announces the tenant's VIPs and SNAT pool.
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: external, namespace: f5-bnk}
+spec:
+  name: external
+  interfaces: ["1.1"]
+  selfip_v4s: [172.16.10.11]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: internal, namespace: f5-bnk}
+spec:
+  name: internal
+  interfaces: ["1.2"]
+  internal: true
+  selfip_v4s: [172.21.0.250]        # kind docker network 172.21.0.0/16; nodes are .13-.15, docker hands out low addresses
+  prefixlen_v4: 16
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: fab-a, namespace: f5-bnk}
+spec:
+  name: fab-a
+  interfaces: ["1.1"]
+  tag: 101
+  vrf: tenant-a
+  allowed_services: [{protocol: tcp, port: "179"}]     # BGP from the leaf; without it TMM drops the SYNs
+  selfip_v4s: [172.17.101.11]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: fab-b, namespace: f5-bnk}
+spec:
+  name: fab-b
+  interfaces: ["1.1"]
+  tag: 102
+  vrf: tenant-b
+  allowed_services: [{protocol: tcp, port: "179"}]
+  selfip_v4s: [172.17.102.11]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: fab-c, namespace: f5-bnk}
+spec:
+  name: fab-c
+  interfaces: ["1.1"]
+  tag: 103
+  vrf: tenant-c
+  allowed_services: [{protocol: tcp, port: "179"}]
+  selfip_v4s: [172.17.103.11]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+# Shared VIP pool in the default route domain, announced to leaf1 over the external leg: .10-.19 platform
+# services (pool VIP, AI Gateway routes), .20-.29 per-tenant AI Gateway routes
+apiVersion: k8s.f5net.com/v1
+kind: F5BnkGateway
+metadata: {name: f5-bnkgateway, namespace: f5-bnk}
+spec:
+  ingressConfig:
+    defaultListenerNetworks:
+    - name: default_ipv4
+      ipv4BaseCidr: 172.16.100.0/24
+      startAddress: 172.16.100.10
+      endAddress: 172.16.100.29

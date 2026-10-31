@@ -21,13 +21,15 @@ RT_ASN = 65000                 # shared route-target ASN
 TMM_ASN = 65100                # what TMM speaks (GlobalRoutingConfig)
 TMM_GW_ASN = 65000             # what TMM expects its gateway at 172.16.10.1 to be
 R5_ASN = 65500
-# vrf, table, l3vni, leaf handoff subnet (leaf .1, TMM .11/.12), VIP pool TMM announces, border<->r5 /30
+# vrf, table, l3vni, leaf handoff subnet (leaf .1, TMM .11), VIP pool TMM announces, border<->r5 /30
 VRFS = [
     ("external", 1000, 10000, "172.16.10.0/24", "172.16.100.0/24", "172.16.200"),
     ("tenant-a", 1001, 10001, "172.17.101.0/24", "10.201.100.0/24", "172.16.201"),
     ("tenant-b", 1002, 10002, "172.17.102.0/24", "10.202.100.0/24", "172.16.202"),
     ("tenant-c", 1003, 10003, "172.17.103.0/24", "10.203.100.0/24", "172.16.203"),
 ]
+# the tenant SNAT pools TMM also announces in each VRF (manifests/bnk/30-egress.yaml): accepted from TMM, passed to r5
+SNAT = {"tenant-a": "10.201.200.0/24", "tenant-b": "10.202.200.0/24", "tenant-c": "10.203.200.0/24"}
 VLAN = {"external": 200, "tenant-a": 101, "tenant-b": 102, "tenant-c": 103}
 UPLINKS = {"spine": 3, "leaf": 2, "border": 2}
 
@@ -109,8 +111,11 @@ def leaf(name, asn, lo):
     c = underlay(name, asn, lo, UPLINKS["leaf"], vrfs=True) + ["  advertise-all-vni", " exit-address-family", "exit", "!"]
     s = ["#!/bin/sh", "set -e", f"ip addr add {lo}/32 dev lo", "ip link set eth3 up"] + vrf_links(lo)
     for vrf, table, vni, handoff, vips, _ in VRFS:
-        # the TMM-facing prefix list: only the VIP pool is accepted from TMM; TMM gets a default
-        c += [f"ip prefix-list from-tmm-{vrf} seq 10 permit {vips} le 32", "!"]
+        # the TMM-facing prefix list: only the VIP pool (and the tenant's SNAT pool) is accepted from TMM; TMM gets a default
+        c += [f"ip prefix-list from-tmm-{vrf} seq 10 permit {vips} le 32"]
+        if vrf in SNAT:
+            c += [f"ip prefix-list from-tmm-{vrf} seq 20 permit {SNAT[vrf]} le 32"]
+        c += ["!"]
         if vrf == "external":
             dev = "eth3"
         else:
@@ -134,8 +139,10 @@ def border(name, asn, lo):
         dev = f"eth3.{VLAN[vrf]}"
         s += [f"ip link add link eth3 name {dev} type vlan id {VLAN[vrf]}", f"ip link set {dev} master {vrf}",
               f"ip addr add {p2p}.1/30 dev {dev}", f"ip link set {dev} up"]
-        c += [f"ip prefix-list to-r5-{vrf} seq 10 permit {vips} le 32", f"ip prefix-list to-r5-{vrf} seq 20 permit {handoff}",
-              f"ip prefix-list from-r5 seq 10 permit 0.0.0.0/0", f"ip prefix-list from-r5 seq 20 permit 172.16.250.0/24", "!"]
+        c += [f"ip prefix-list to-r5-{vrf} seq 10 permit {vips} le 32", f"ip prefix-list to-r5-{vrf} seq 20 permit {handoff}"]
+        if vrf in SNAT:
+            c += [f"ip prefix-list to-r5-{vrf} seq 30 permit {SNAT[vrf]} le 32"]
+        c += [f"ip prefix-list from-r5 seq 10 permit 0.0.0.0/0", f"ip prefix-list from-r5 seq 20 permit 172.16.250.0/24", "!"]
         c += vrf_bgp(asn, lo, vrf, vni, [
             f" neighbor {p2p}.2 remote-as {R5_ASN}", f" neighbor {p2p}.2 timers 3 9",
             " !", " address-family ipv4 unicast", f"  neighbor {p2p}.2 activate",

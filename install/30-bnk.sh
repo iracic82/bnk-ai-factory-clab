@@ -36,7 +36,7 @@ fi
 # Knobs the installer's host profile and lab environment accept from the caller (profiles/host.env keeps ${VAR:-})
 export BNK_TMM_NODES=bnk-worker BNK_TMM_MANAGE_LABELS=true
 export BNK_STORAGECLASS=standard
-export BNK_NETWORK_ATTACHMENTS="external-net"   # TMM interface 1.1 = macvlan on the worker's eth1 (leaf1 eth3)
+export BNK_NETWORK_ATTACHMENTS="external-net,internal-net"   # TMM 1.1 = macvlan on eth1 (leaf1 eth3), 1.2 = macvlan on eth0 (node net)
 export BNK_TMM_MAPRES=true                      # maps the extra leg onto TMM's data plane
 export BNK_DYNAMIC_ROUTING=true                 # BGP to the fabric
 export BNK_EPP_NAMESPACES="aigw-models"
@@ -46,13 +46,19 @@ export BNK_REQUIRE_LICENSE=true
 step "phases 00-40 (preflight, nodes, Multus, cert-manager, registry, FLO, certificates)"
 for p in 00 05 10 20 30 40; do "$DEPLOY/install.sh" --env lab --profile host --phase "$p"; done
 
-step "external-net NetworkAttachmentDefinition"
+step "NetworkAttachmentDefinitions for TMM's legs (order = TMM interface number)"
 kubectl apply -f - <<'EOF'
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata: {name: external-net, namespace: f5-bnk}
 spec:
   config: '{"cniVersion":"0.3.1","type":"macvlan","master":"eth1","mode":"bridge","ipam":{}}'
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata: {name: internal-net, namespace: f5-bnk}
+spec:
+  config: '{"cniVersion":"0.3.1","type":"macvlan","master":"eth0","mode":"bridge","ipam":{}}'
 EOF
 
 step "phases 50-70 (CNEInstance, licence, verify)"
