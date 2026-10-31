@@ -31,6 +31,11 @@ secrets:
   key: BNK_LICENSE_JWT
 - name: GH_READ_TOKEN
   key: GH_READ_TOKEN
-# Optional. With it, chapter 10 scans through the real CalypsoAI; without it the mock answers.
+# Optional. With them, chapter 10 scans through the real CalypsoAI (project "AI-Instruqt"); without a key the mock
+# answers. CALYPSO_URL is the scan endpoint of the region the project lives in.
 - name: CALYPSO_API_KEY
   key: CALYPSO_API_KEY
+- name: CALYPSO_PROJECT_ID
+  key: CALYPSO_PROJECT_ID
+- name: CALYPSO_URL
+  key: CALYPSO_URL
