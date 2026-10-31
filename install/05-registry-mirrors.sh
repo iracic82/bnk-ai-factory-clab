@@ -32,18 +32,16 @@ for up in "${!MIRRORS[@]}"; do
     # `docker inspect` would show. The file is removed from disk once the container has read it (the mount
     # keeps working), and finalise-image.sh removes the container itself, so the baked image holds no copy.
     cfg=$(mktemp -p "${SECRETS_DIR}" mirror-XXXXXX.yml); chmod 600 "$cfg"
+    # block-style YAML: ":5000" inside a flow mapping does not parse, and the registry then prints its usage and exits
     python3 - "$f" "$cfg" "$(remote "$up")" <<'EOF'
-import sys
+import sys, json
 far, cfg, url = sys.argv[1:]
 pw = open(far).read().strip()
-open(cfg, 'w').write(f"""version: 0.1
-storage: {{filesystem: {{rootdirectory: /var/lib/registry}}, delete: {{enabled: true}}}}
-http: {{addr: :5000}}
-proxy:
-  remoteurl: {url}
-  username: _json_key_base64
-  password: {pw!r}
-""")
+open(cfg, 'w').write("version: 0.1\n"
+                     "log:\n  level: warn\n"
+                     "storage:\n  filesystem:\n    rootdirectory: /var/lib/registry\n  delete:\n    enabled: true\n"
+                     "http:\n  addr: :5000\n"
+                     f"proxy:\n  remoteurl: {url}\n  username: _json_key_base64\n  password: {json.dumps(pw)}\n")
 EOF
     mounts+=(-v "$cfg:/etc/docker/registry/config.yml:ro"); env=()
   fi
