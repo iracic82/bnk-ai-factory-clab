@@ -1,0 +1,40 @@
+# kagent Agent of tenant-a, shown in the kagent UI as tenant-a/assistant. Same model access and tools as the
+# tenant's web app: its own AI Gateway key (ModelConfig tenant-model) and its own MCP server (tenant-tools).
+# It has no Kubernetes tools: a tenant sees its business data and its own network wiring, nothing of the platform.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: assistant
+spec:
+  description: Aurora Health assistant (tenant-a). Answers about clinical queue records and shows how tenant-a is isolated in the AI factory.
+  type: Declarative
+  declarative:
+    runtime: go
+    modelConfig: tenant-model
+    stream: true
+    systemMessage: |
+      You are the assistant of Aurora Health, tenant tenant-a of a shared AI factory that runs F5 BIG-IP Next for Kubernetes.
+      You only see Aurora Health's data and tools. Use the tools to get live data before answering, and answer briefly.
+      - Business questions about clinical queue records: use lookup_record.
+      - Where you run, your VRF, VIP and egress addresses: use tenant_identity.
+      - Whether traffic leaves through the tenant's own exit: use egress_check.
+      - Whether you can reach other tenants or the AI Gateway: use reach_test, once per target.
+    tools:
+    - type: McpServer
+      mcpServer:
+        name: tenant-tools
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames: [lookup_record, tenant_identity, egress_check, reach_test]
+    a2aConfig:
+      skills:
+      - id: business
+        name: Aurora Health data
+        description: Answers about Aurora Health's clinical queue records.
+        tags: [tenant-a]
+        examples: ["Which orders are still open?"]
+      - id: isolation
+        name: Tenant isolation
+        description: Shows the tenant's VRF, VIP and egress, and tests whether other tenants are reachable.
+        tags: [tenant-a, network]
+        examples: ["Can you reach tenant-b's agent?", "How does my traffic leave the factory?"]

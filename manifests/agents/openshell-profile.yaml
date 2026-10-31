@@ -1,0 +1,25 @@
+# OpenShell provider profile for the Polaris AI Gateway. A sandbox created with this provider never sees the virtual
+# key: the supervisor adds it to requests bound for this endpoint only, and every other outbound connection is
+# refused by the sandbox's network policy. The endpoint is the tenant's own AI Gateway route; install/50-agents.sh
+# imports one copy per tenant with the host filled in.
+id: f5-aigw-__TENANT__
+display_name: F5 AI Gateway (__DISPLAY__)
+description: Polaris AI Gateway tenant __TENANT__, OpenAI-compatible, route __TENANT__-ai on __HOST__
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: AI Gateway virtual key of __TENANT__
+    env_vars: [AIGW_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_key]
+endpoints:
+  - host: __HOST__
+    port: 80
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/bin/python3*, /usr/local/bin/python3*]

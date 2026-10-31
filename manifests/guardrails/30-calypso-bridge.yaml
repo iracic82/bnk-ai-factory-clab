@@ -31,12 +31,22 @@ data:
         def do_GET(self):
             self._send({"ok": True, "upstream": UPSTREAM}) if self.path == "/healthz" else self._send({"error": "not found"}, 404)
         def do_POST(self):
-            n = int(self.headers.get("Content-Length", "0"))
+            # fail closed on anything odd: no or oversized body, bad JSON, no "input" string. Only {"input": str} is
+            # forwarded (plus the project id from this pod's config, never from the caller).
             try:
-                body = json.loads(self.rfile.read(n) or b"{}")
+                n = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                return self._send({"outcome": "flagged", "reason": "no Content-Length"})
+            if n <= 0 or n > 1048576:
+                return self._send({"outcome": "flagged", "reason": "body size"})
+            try:
+                got = json.loads(self.rfile.read(n))
             except ValueError:
                 return self._send({"outcome": "flagged", "reason": "bad json"})
-            if PROJECT and "project_id" not in body:
+            if not isinstance(got, dict) or not isinstance(got.get("input"), str):
+                return self._send({"outcome": "flagged", "reason": "expected {\"input\": str}"})
+            body = {"input": got["input"]}
+            if PROJECT:
                 body["project_id"] = PROJECT
             req = urllib.request.Request(UPSTREAM, data=json.dumps(body).encode(), method="POST",
                                          headers={"Content-Type": "application/json", "Authorization": f"Bearer {TOKEN}"})
@@ -95,3 +105,17 @@ apiVersion: v1
 kind: Service
 metadata: {name: calypso-bridge, namespace: guardrails}
 spec: {selector: {app: calypso-bridge}, ports: [{port: 8080, targetPort: 8080}]}
+---
+# Only TMM may ask the bridge (the iRule's sideband arrives from TMM's internal self IP or the TMM pod); nothing else
+# in the cluster can use it as a free scanner with the project's token.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: bridge-from-tmm-only, namespace: guardrails}
+spec:
+  podSelector: {matchLabels: {app: calypso-bridge}}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
+    - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
+    ports: [{port: 8080, protocol: TCP}]

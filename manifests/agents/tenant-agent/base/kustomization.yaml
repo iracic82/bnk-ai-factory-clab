@@ -1,0 +1,14 @@
+# Tenant agent base: one tenant's agentic app (agent + MCP sidecar), published by the tenant's own BNK Gateway and
+# L4Route, ingress isolation, and the kagent objects that put the same tools into the kagent UI. Not applied on its own:
+# ../tenants/tenant-<x> sets the namespace, TENANT and VIP, and adds the tenant's kagent Agent.
+# Argo CD: argocd/apps/52-tenant-agents.yaml.
+# Secret aigw-key (AI Gateway virtual key, principal tenant-<x>) stays out of git: install/tenant-agents-setup.sh.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [k8s/deployment.yaml, k8s/service.yaml, k8s/gateway.yaml, k8s/networkpolicy.yaml, k8s/kagent.yaml]
+configMapGenerator:
+- name: tenant-agent-src
+  files: [src/agent.py, src/mcp_server.py]
+labels:
+- pairs: {app.kubernetes.io/name: tenant-agent}
+  includeSelectors: true

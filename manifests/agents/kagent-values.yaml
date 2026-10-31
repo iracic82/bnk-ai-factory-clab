@@ -1,0 +1,43 @@
+# kagent 0.10.4. Models come from the Polaris AI Gateway (tenant "lab", route lab-ai on 172.16.100.13), not a public
+# API; the key is the tenant's virtual key (install/50-agents.sh puts it in Secret kagent/kagent-openai).
+providers:
+  default: openAI
+  openAI:
+    provider: OpenAI
+    model: qwen2.5-1.5b                     # the smallest model that still calls tools correctly on CPU
+    apiKeySecretRef: kagent-openai
+    apiKeySecretKey: OPENAI_API_KEY
+    config:
+      baseUrl: http://172.16.100.13/v1
+# Only the lab's own agents
+k8s-agent: {enabled: false}
+kgateway-agent: {enabled: false}
+istio-agent: {enabled: false}
+promql-agent: {enabled: false}
+observability-agent: {enabled: false}
+argo-rollouts-agent: {enabled: false}
+helm-agent: {enabled: false}
+cilium-policy-agent: {enabled: false}
+cilium-manager-agent: {enabled: false}
+cilium-debug-agent: {enabled: false}
+grafana-mcp: {enabled: false}
+kagent-tools:
+  enabled: true
+  tools:
+    loglevel: info
+    enabledTools: [k8s]
+    args: ["--read-only"]                   # the tool server refuses write operations
+  rbac:
+    readOnly: true                          # get/list/watch; no Secrets
+    allowSecrets: false
+    additionalRules:
+    - apiGroups: [gateway.networking.k8s.io, gateway.networking.x-k8s.io, gateway.k8s.f5.com, k8s.f5net.com, k8s.f5.com,
+                  inference.k8s.f5.com, inference.networking.k8s.io, inference.networking.x-k8s.io, nvidia.com,
+                  kagent.dev, cert-manager.io, k8s.cni.cncf.io, scheduling.run.ai, agents.x-k8s.io]
+      resources: ["*"]
+      verbs: [get, list, watch]
+controller:
+  a2aClientTimeout: "300s"                  # CPU models are slow
+  a2aBaseUrl: http://172.16.100.14          # agent cards advertise the BNK VIP of the agents gateway
+  substrate: {enabled: true}                # Agent Substrate v0.0.11 (install/50-agents.sh), the release this kagent accepts
+substrateWorkerPool: {create: true}

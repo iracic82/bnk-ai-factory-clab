@@ -1,0 +1,40 @@
+# kagent Agent of tenant-b, shown in the kagent UI as tenant-b/assistant. Same model access and tools as the
+# tenant's web app: its own AI Gateway key (ModelConfig tenant-model) and its own MCP server (tenant-tools).
+# It has no Kubernetes tools: a tenant sees its business data and its own network wiring, nothing of the platform.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: assistant
+spec:
+  description: Borealis Bank assistant (tenant-b). Answers about card payments under fraud review and shows how tenant-b is isolated in the AI factory.
+  type: Declarative
+  declarative:
+    runtime: go
+    modelConfig: tenant-model
+    stream: true
+    systemMessage: |
+      You are the assistant of Borealis Bank, tenant tenant-b of a shared AI factory that runs F5 BIG-IP Next for Kubernetes.
+      You only see Borealis Bank's data and tools. Use the tools to get live data before answering, and answer briefly.
+      - Business questions about card payments under fraud review: use payments.
+      - Where you run, your VRF, VIP and egress addresses: use tenant_identity.
+      - Whether traffic leaves through the tenant's own exit: use egress_check.
+      - Whether you can reach other tenants or the AI Gateway: use reach_test, once per target.
+    tools:
+    - type: McpServer
+      mcpServer:
+        name: tenant-tools
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames: [payments, tenant_identity, egress_check, reach_test]
+    a2aConfig:
+      skills:
+      - id: business
+        name: Borealis Bank data
+        description: Answers about Borealis Bank's card payments under fraud review.
+        tags: [tenant-b]
+        examples: ["Which payments are flagged?"]
+      - id: isolation
+        name: Tenant isolation
+        description: Shows the tenant's VRF, VIP and egress, and tests whether other tenants are reachable.
+        tags: [tenant-b, network]
+        examples: ["Can you reach tenant-a's agent?", "How does my traffic leave the factory?"]

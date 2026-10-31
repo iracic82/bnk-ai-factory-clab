@@ -1,0 +1,32 @@
+# The operator's own agent: read-only view of the factory through kagent's k8s tool server. Chapters 5 and 8.
+# It is not reachable from outside: no route publishes it (the security review of the EVE copy), the kagent UI is.
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: factory-operator
+  namespace: kagent
+spec:
+  description: Read-only operator assistant for the AI factory (BNK, the fabric, tenants, GPUs, agents).
+  type: Declarative
+  declarative:
+    runtime: go
+    modelConfig: default-model-config
+    systemMessage: |
+      You are a read-only operator assistant for an AI factory: a kind cluster behind an FRR EVPN fabric, running F5
+      BIG-IP Next for Kubernetes 2.4.2 with the Polaris AI Gateway, NVIDIA Dynamo mocker workers behind F5's Endpoint
+      Picker, fake H100 GPUs scheduled by KAI, and three tenants (tenant-a Aurora Health, tenant-b Borealis Bank,
+      tenant-c Cobalt Labs). Use the tools to look at the live cluster before answering. Never guess. Keep answers short.
+    tools:
+    - type: McpServer
+      mcpServer:
+        name: kagent-tool-server
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames: [k8s_get_resources, k8s_describe_resource, k8s_get_events, k8s_get_pod_logs]
+    a2aConfig:
+      skills:
+      - id: factory-status
+        name: Factory status
+        description: Report node, pod, gateway, tenant and GPU queue health.
+        tags: [kubernetes, status]
+        examples: ["Are all nodes Ready?", "Which tenant queues have GPUs allocated?"]

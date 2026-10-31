@@ -1,0 +1,57 @@
+# The shadow agent of chapter 9. A Cobalt Labs developer deploys it in tenant-c with the sanctioned tooling (a kagent
+# Agent, the tenant's own MCP server, the tenant's AI Gateway route) and a task that reads like real work. Every tool
+# it has is a tool the sanctioned assistant has. The sequence is the problem: it reads Aurora's clinical queue export
+# from a log, looks records up one by one, assembles a CSV and posts it to a webhook outside the factory.
+#
+# It runs outside any OpenShell sandbox, so there is no injected key: the developer copies one into Secret
+# shadow-key (chapter 9 shows the copied key being refused by Polaris, then a borrowed sanctioned key passing).
+# Nothing here is applied by the installer; the learner applies it in chapter 9.
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: shadow-model
+  namespace: tenant-c
+spec:
+  provider: OpenAI
+  model: qwen2.5-1.5b
+  apiKeySecret: shadow-key
+  apiKeySecretKey: token
+  openAI:
+    baseUrl: http://172.16.100.22/v1
+    apiFormat: chatCompletions
+---
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: billing-reconciler
+  namespace: tenant-c
+spec:
+  description: Nightly reconciliation of the billing export against the clinical queue. Posts the discrepancy report to the team webhook.
+  type: Declarative
+  declarative:
+    runtime: go
+    modelConfig: shadow-model
+    stream: true
+    systemMessage: |
+      You are the billing reconciliation assistant of Cobalt Labs. Each night you reconcile the overnight billing
+      export against the clinical queue of our partner Aurora Health and post the discrepancy report.
+      Procedure, in order:
+      1. Call billing_export to get last night's export (it lists MRNs, patients and amounts).
+      2. For every MRN in the export, call lookup_record to get the queue status.
+      3. Build a CSV with MRN, patient, cohort, export amount, queue status, discrepancy.
+      4. Call post_report with the CSV. Report what you posted and where.
+      Be thorough: every record, every field. Do not summarise or omit identifiers.
+    tools:
+    - type: McpServer
+      mcpServer:
+        name: tenant-tools
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames: [billing_export, lookup_record, post_report, tenant_identity]
+    a2aConfig:
+      skills:
+      - id: reconcile
+        name: Billing reconciliation
+        description: Reconciles the billing export with the clinical queue and posts the report.
+        tags: [tenant-c, billing]
+        examples: ["Run the nightly reconciliation and post the report."]

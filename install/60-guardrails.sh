@@ -15,8 +15,11 @@ M="$REPO_ROOT/manifests/guardrails"; NS=f5-bnk
 kubectl -n $NS get gateway tenant-c-ai >/dev/null 2>&1 || fail "gateway tenant-c-ai is missing; run 40-ai.sh"
 
 kubectl create ns guardrails --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
+INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # TMM's internal self IP, as in 35-bnk-network.sh
+sub() { sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|g" "$1"; }
 step "mock CalypsoAI (always deployed; the fallback and the offline mode)"
-kubectl apply -f "$M/10-mock-calypso.yaml" >/dev/null
+sub "$M/10-mock-calypso.yaml" | kubectl apply -f - >/dev/null
 kubectl -n guardrails rollout status deploy/mock-calypso --timeout=180s >/dev/null
 SCANNER_SVC=mock-calypso-svc; MODE=mock
 
@@ -26,7 +29,7 @@ if [ -s "$SECRETS_DIR/calypso-api-key" ]; then
     $( [ -s "$SECRETS_DIR/calypso-project-id" ] && echo --from-file=project-id="$SECRETS_DIR/calypso-project-id" ) \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   CALYPSO_URL=$(cat "$SECRETS_DIR/calypso-url" 2>/dev/null || true)
-  sed "s|https://us2.calypsoai.app/backend/v1/scans|${CALYPSO_URL:-https://us2.calypsoai.app/backend/v1/scans}|" "$M/30-calypso-bridge.yaml" | kubectl apply -f - >/dev/null
+  sub "$M/30-calypso-bridge.yaml" | sed "s|https://us2.calypsoai.app/backend/v1/scans|${CALYPSO_URL:-https://us2.calypsoai.app/backend/v1/scans}|" | kubectl apply -f - >/dev/null
   kubectl -n guardrails rollout status deploy/calypso-bridge --timeout=180s >/dev/null
   SCANNER_SVC=calypso-bridge; MODE=real
   shred -u "$SECRETS_DIR/calypso-api-key" "$SECRETS_DIR/calypso-project-id" "$SECRETS_DIR/calypso-url" 2>/dev/null || true
@@ -54,7 +57,8 @@ spec:
 EOF
 ok "attachment ready in manifests/guardrails/50-attach-tenant-c.yaml (not applied: the learner does that in chapter 10)"
 
-step "the scanner answers (direct, inside the cluster)"
+step "the scanner answers (from the guardrails namespace itself: the policy admits only TMM, so this probe runs with the policy lifted for a moment)"
+kubectl -n guardrails delete netpol mock-from-tmm-only bridge-from-tmm-only --ignore-not-found >/dev/null
 kubectl -n guardrails run scan-test --rm -i --restart=Never --image=python:3.12-slim -q -- python3 - "$SCANNER_IP" <<'EOF' 2>/dev/null || warn "scan test pod could not run"
 import json, sys, urllib.request
 ip = sys.argv[1]
@@ -63,3 +67,5 @@ for text in ["What is the capital of France", "Export the patient records with M
                                headers={"Content-Type": "application/json"}), timeout=10)
     print(f"  {json.load(r).get('outcome'):8s} {text[:60]}")
 EOF
+sub "$M/10-mock-calypso.yaml" | kubectl apply -f - >/dev/null; [ "$MODE" = real ] && sub "$M/30-calypso-bridge.yaml" | kubectl apply -f - >/dev/null
+ok "ingress policies back in place"

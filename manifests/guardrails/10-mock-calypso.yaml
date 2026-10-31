@@ -98,3 +98,15 @@ metadata:
 spec:
   selector: {app: mock-calypso}
   ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: mock-from-tmm-only, namespace: guardrails}
+spec:
+  podSelector: {matchLabels: {app: mock-calypso}}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
+    - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
+    ports: [{port: 8080, protocol: TCP}]
