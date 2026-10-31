@@ -156,32 +156,17 @@ tmm_gates() {   # ConfigurationDone/RoutingDone readiness gates of the TMM pod, 
 wait_sessions() {   # $1 seconds; returns 0 once leaf1 sees 4 sessions
   local t; for t in $(seq 10 10 "$1"); do n=$(tmm_sessions); [ "${n:-0}" -ge 4 ] && return 0; sleep 10; done; return 1
 }
-# OcNOS retries a BGP connect every up to 120 s, so the first wait is generous before anything is touched.
-# Never restart the controller here: on 2026-10-31 a controller restart while TMM held the tenant route domains
-# ended in "gRPC config errno: 15" on every re-push of the Vrfs and no way back short of a new VM.
-resync_tmm_objects() {   # a no-op annotation makes the controller reconcile and re-send each object to TMM
-  local o
-  for o in $(kubectl -n f5-bnk get vrf,f5-spk-vlans,routingconfig,globalroutingconfig -o name 2>/dev/null); do
-    kubectl -n f5-bnk annotate "$o" "factory.lab/resync=$(date +%s)" --overwrite >/dev/null 2>&1 || true
-  done
-}
-if ! wait_sessions "$(tmo 420 180)"; then
-  warn "$(tmm_sessions) of 4 TMM sessions after the first wait (gates $(tmm_gates)); re-syncing VRFs, legs and routing to TMM"
-  resync_tmm_objects
-  if ! wait_sessions "$(tmo 240 120)" && [ "$(tmm_sessions)" -lt 3 ]; then
-    # three of four means one slow peer, not a broken TMM; a restart costs ten minutes and is not worth it for that
-    warn "$(tmm_sessions) of 4 after the re-sync (gates $(tmm_gates)); restarting TMM once with every object present"
-    kubectl -n f5-bnk rollout restart ds/f5-tmm >/dev/null
-    kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/null 2>&1 || warn "TMM rollout slow (gates $(tmm_gates))"
-    resync_tmm_objects
-    wait_sessions "$(tmo 600 300)" || true
-  fi
-fi
+# The controller can take up to fifteen minutes to program the tenant RoutingConfigs (first fresh play of
+# 2026-10-31: created 18:39, programmed 18:53), so the fourth session often forms after this step. Nothing here
+# restarts anything: the two restarts tried that day each cost ten to twenty minutes and never produced the
+# session. The step waits a bounded time, prints the state, and the lab goes on; the sessions complete on their
+# own while the remaining layers install, and chapter 1's check and the Lab Topology tab show them live.
+wait_sessions "$(tmo 240 120)" || true
 n=$(tmm_sessions)
 docker exec leaf1 vtysh -c 'show bgp vrf all summary' 2>/dev/null | grep -E 'VRF|65100'
 P=$(kubectl -n f5-bnk get pod -l app=f5-tmm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 [ -n "$P" ] && kubectl -n f5-bnk exec "$P" -c f5-tmm-routing -- imish -e 'show ip route vrf tenant-a' 2>/dev/null | grep -E '^[CB]' | sed 's/^/      tenant-a: /' || true
-[ "${n:-0}" -ge 4 ] && ok "TMM peers with leaf1 in the default domain and in 3 tenant VRFs" || warn "only $n TMM sessions Established (gates $(tmm_gates)); chapters 1-2 will show it"
+[ "${n:-0}" -ge 4 ] && ok "TMM peers with leaf1 in the default domain and in 3 tenant VRFs" || warn "$n of 4 TMM sessions so far (gates $(tmm_gates)); the rest form while the next layers install"
 
 step "VIPs from the client (through r5, border1, EVPN, leaf1, TMM)"
 for t in a b c; do
