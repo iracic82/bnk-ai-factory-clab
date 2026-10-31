@@ -14,7 +14,7 @@ mkdir -p "$SECRETS_DIR"; [ -s "$SECRETS_DIR/grafana-admin" ] || { umask 077; tr 
 kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n monitoring create secret generic grafana-admin --from-literal=admin-user=admin --from-literal=admin-password="$(cat "$SECRETS_DIR/grafana-admin")" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-helm upgrade --install kps prometheus-community/kube-prometheus-stack --version "$KPS" -n monitoring --wait --timeout 15m -f - >/dev/null <<'EOF'
+helm upgrade --install kps prometheus-community/kube-prometheus-stack --version "$KPS" -n monitoring --wait --timeout "$(tmo 15m 6m)" -f - >/dev/null <<'EOF'
 alertmanager: {enabled: false}
 grafana:
   admin: {existingSecret: grafana-admin, userKey: admin-user, passwordKey: admin-password}

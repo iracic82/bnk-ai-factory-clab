@@ -9,12 +9,17 @@
 #
 #   FAR_PULL_B64="$(cat cne_pull_64.json)" BNK_LICENSE_JWT="$(cat license.jwt)" GH_READ_TOKEN=... bash bake-image.sh
 #
+# BAKE_FAST=1 caps every long wait (BNK Available, Polaris Reconciled, mocker Ready, ...): the image needs the image
+# pulls, not the Ready states, and the harvest step caches whatever any pod references. About half the time. Leave it
+# unset when the bake should also be the full test of the lab.
+#
 # Run it from a copy outside the clone (finalise deletes the clone).
 set -euo pipefail
 exec > >(tee -a /var/log/bake-image.log) 2>&1
 fail() { echo; echo "FAILED: $*" >&2; exit 1; }
 step() { echo; echo "### $(date -u +%H:%M:%S) $*"; }
 for s in FAR_PULL_B64 BNK_LICENSE_JWT GH_READ_TOKEN; do [ -n "${!s:-}" ] || fail "$s is not set"; done
+[ "${BAKE_FAST:-0}" = 1 ] && export LAB_FAST=1 && echo "BAKE_FAST: long waits capped; the harvest step does the caching"
 
 KIND_VERSION=v0.30.0
 CLAB_VERSION=0.75.0

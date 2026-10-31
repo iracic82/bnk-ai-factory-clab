@@ -12,6 +12,11 @@ export FRR_IMAGE="quay.io/frrouting/frr:10.6.2"
 export NR_HUGEPAGES=2048            # 4 GiB of 2 Mi pages: TMM asks for 2 Gi, kubelet keeps the rest in reserve
 SECRETS_DIR="${SECRETS_DIR:-$HOME/bnk-secrets}"
 
+# LAB_FAST=1 (set by the bake with BAKE_FAST=1) caps every long wait: the image needs the pulls, not the Ready
+# states, and the harvest step caches whatever any pod references. A normal run keeps the full waits.
+# usage: tmo <normal> <fast>   -> prints the one in force
+tmo() { if [ "${LAB_FAST:-0}" = 1 ]; then echo "$2"; else echo "$1"; fi; }
+
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 ok()   { printf '   \033[32mok\033[0m  %s\n' "$*"; }
 warn() { printf '   \033[33m!!\033[0m  %s\n' "$*"; }

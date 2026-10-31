@@ -29,19 +29,19 @@ done
 
 step "NVIDIA Dynamo platform $DYNAMO + NATS"
 helm upgrade --install dynamo-platform "https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-platform-$DYNAMO.tgz" \
-  -n dynamo-system --create-namespace --set global.nats.install=true --wait --timeout 15m >/dev/null
+  -n dynamo-system --create-namespace --set global.nats.install=true --wait --timeout "$(tmo 15m 5m)" >/dev/null
 kubectl -n dynamo-system rollout status statefulset/dynamo-platform-nats --timeout=300s >/dev/null
 kubectl apply -f "$M/11-nats-policy.yaml" >/dev/null
 kubectl -n aigw-models create secret generic hf-token-secret --from-literal=HF_TOKEN= --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 step "Mocker workers (DynamoGraphDeployment)"
 kubectl apply -f "$M/10-dynamo-mocker.yaml" >/dev/null
-kubectl -n aigw-models wait dynamographdeployment/mocker --for=condition=Ready --timeout=1200s >/dev/null && ok "mocker Ready" || warn "mocker not Ready yet (continuing)"
+kubectl -n aigw-models wait dynamographdeployment/mocker --for=condition=Ready --timeout="$(tmo 1200s 300s)" >/dev/null && ok "mocker Ready" || warn "mocker not Ready yet (continuing)"
 
 step "model pool behind its own VIP with the F5 Endpoint Picker"
 kubectl apply -f "$M/20-pool-vip.yaml" >/dev/null
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # same rule as install/35-bnk-network.sh
 sed "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|g" "$M/50-netpol.yaml" | kubectl apply -f - >/dev/null
-kubectl -n aigw-models rollout status deploy/model-pool-epp --timeout=600s >/dev/null && ok "picker running" || warn "picker not up yet"
+kubectl -n aigw-models rollout status deploy/model-pool-epp --timeout="$(tmo 600s 180s)" >/dev/null && ok "picker running" || warn "picker not up yet"
 
 step "ollama on the VM for the agents' model (qwen2.5:1.5b)"
 # A container on the VM, bound to the kind gateway address and loopback only: pods reach it over the node network,
@@ -61,12 +61,12 @@ ok "ollama at $KIND_GW:11434 with $(docker exec lab-ollama ollama list | tail -n
 
 step "Polaris AI Gateway: Reconciled, console and management API on the host"
 r=""
-for i in $(seq 1 90); do
+for i in $(seq 1 "$(tmo 90 18)"); do
   r=$(kubectl -n $NS get aigateways.k8s.f5.com -o jsonpath='{.items[0].status.conditions[?(@.type=="Reconciled")].status}' 2>/dev/null || true)
   [ "$r" = True ] && break; sleep 20
 done
-[ "$r" = True ] || fail "AIGateway not Reconciled after 30 minutes: kubectl -n $NS get aigateways.k8s.f5.com -o yaml"
-kubectl -n $NS wait --for=condition=Ready pod/f5-aigateway-clickhouse-0 --timeout=600s >/dev/null || warn "ClickHouse not Ready"
+[ "$r" = True ] || fail "AIGateway not Reconciled after $(( $(tmo 90 18) / 3 )) minutes: kubectl -n $NS get aigateways.k8s.f5.com -o yaml"
+kubectl -n $NS wait --for=condition=Ready pod/f5-aigateway-clickhouse-0 --timeout="$(tmo 600s 180s)" >/dev/null || warn "ClickHouse not Ready"
 # the controller checks ClickHouse once at start and may have lost that race (seen on 2.4.1): one restart after ClickHouse is up
 kubectl -n $NS rollout restart deploy/f5-cne-controller >/dev/null 2>&1 || true
 kubectl -n $NS rollout status deploy/f5-cne-controller --timeout=300s >/dev/null 2>&1 || true

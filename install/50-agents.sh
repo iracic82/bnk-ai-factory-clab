@@ -23,7 +23,7 @@ kubectl -n kagent create secret generic kagent-openai --from-literal=OPENAI_API_
 helm upgrade --install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-crds --version $KAGENT -n kagent --wait >/dev/null
 # Substrate is switched on in the values, but its CRDs come later; install kagent with the pool creation off first
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" \
-  --set controller.substrate.enabled=false --set substrateWorkerPool.create=false --wait --timeout 15m >/dev/null
+  --set controller.substrate.enabled=false --set substrateWorkerPool.create=false --wait --timeout "$(tmo 15m 6m)" >/dev/null
 kubectl apply -f "$M/platform-agent.yaml" >/dev/null
 expose_service kagent-ui kagent kagent-ui 30808 8080
 ok "kagent up; operator agent factory-operator; UI on :30808"
@@ -65,7 +65,7 @@ for t in a b c; do
   openshell sandbox list 2>/dev/null | grep -q "^$ns-agent\b" || \
     openshell sandbox create --name "$ns-agent" --provider "f5-aigw-$ns" --env "OPENAI_BASE_URL=http://$host/v1" --no-tty -- sleep infinity >/dev/null 2>&1 &
 done
-for _ in $(seq 1 60); do [ "$(openshell sandbox list 2>/dev/null | grep -c Ready)" -ge 3 ] && break; sleep 5; done
+for _ in $(seq 1 "$(tmo 60 12)"); do [ "$(openshell sandbox list 2>/dev/null | grep -c Ready)" -ge 3 ] && break; sleep 5; done
 openshell sandbox list 2>/dev/null || warn "openshell sandbox list failed"
 
 step "Agent Substrate $SUBSTRATE"
@@ -79,9 +79,9 @@ S="$REPO_ROOT/.cache/substrate-$SUBSTRATE"; mkdir -p "$S"
 [ -f "$S/hack/install-ate.sh" ] || curl -sSfL "https://github.com/kagent-dev/substrate/archive/refs/tags/v$SUBSTRATE.tar.gz" | tar -xz -C "$S" --strip-components=1
 ( cd "$S" && [ -d .git ] || git init -q . ; for f in --create-podcertificate-controller-cas --create-actor-id-ca-pool-secret --create-jwt-authority-pool-secret --create-valkey-ca-certs-secret; do
     bash hack/install-ate.sh "$f" 2>&1 | grep -iE "created|error" | tail -1; done )
-kubectl -n ate-system rollout status deploy --timeout=600s >/dev/null 2>&1 || warn "substrate pods not all up yet"
+kubectl -n ate-system rollout status deploy --timeout="$(tmo 600s 180s)" >/dev/null 2>&1 || warn "substrate pods not all up yet"
 # now kagent may own a WorkerPool
-helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" --wait --timeout 15m >/dev/null
+helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" --wait --timeout "$(tmo 15m 6m)" >/dev/null
 kubectl -n kagent get workerpools.ate.dev 2>/dev/null || warn "no WorkerPool yet"
 ok "Substrate installed; kagent substrate integration on"
 

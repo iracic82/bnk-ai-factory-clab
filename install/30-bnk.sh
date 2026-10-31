@@ -40,7 +40,7 @@ export BNK_NETWORK_ATTACHMENTS="external-net,internal-net"   # TMM 1.1 = macvlan
 export BNK_TMM_MAPRES=true                      # maps the extra leg onto TMM's data plane
 export BNK_DYNAMIC_ROUTING=true                 # BGP to the fabric
 export BNK_EPP_NAMESPACES="aigw-models"
-export BNK_WAIT_TIMEOUT="${BNK_WAIT_TIMEOUT:-1800}"
+export BNK_WAIT_TIMEOUT="${BNK_WAIT_TIMEOUT:-$(tmo 1800 600)}"
 export BNK_REQUIRE_LICENSE=true
 
 step "phases 00-40 (preflight, nodes, Multus, cert-manager, registry, FLO, certificates)"
