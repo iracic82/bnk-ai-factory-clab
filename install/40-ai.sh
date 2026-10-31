@@ -39,7 +39,8 @@ kubectl -n aigw-models wait dynamographdeployment/mocker --for=condition=Ready -
 
 step "model pool behind its own VIP with the F5 Endpoint Picker"
 kubectl apply -f "$M/20-pool-vip.yaml" >/dev/null
-sed "s|__KIND_SUBNET__|$KIND_SUBNET|g" "$M/50-netpol.yaml" | kubectl apply -f - >/dev/null
+INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # same rule as install/35-bnk-network.sh
+sed "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|g" "$M/50-netpol.yaml" | kubectl apply -f - >/dev/null
 kubectl -n aigw-models rollout status deploy/model-pool-epp --timeout=600s >/dev/null && ok "picker running" || warn "picker not up yet"
 
 step "ollama on the VM for the agents' model (qwen2.5:1.5b)"

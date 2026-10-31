@@ -12,7 +12,12 @@ expose_service() {
   ip=$(kubectl -n "$ns" get svc "$svc" -o jsonpath='{.spec.clusterIP}') || return 1
   [ -n "$sport" ] || sport=$(kubectl -n "$ns" get svc "$svc" -o jsonpath='{.spec.ports[0].port}')
   [ -n "$ip" ] && [ -n "$sport" ] || { warn "Service $ns/$svc has no ClusterIP or port"; return 1; }
-  bind=127.0.0.1; [ "${LAB_PUBLIC:-0}" = 1 ] && bind=0.0.0.0
+  # the VM's own address, never 0.0.0.0: the docker bridges stay out of it. LAB_BIND_ADDR overrides the guess.
+  bind=127.0.0.1
+  if [ "${LAB_PUBLIC:-0}" = 1 ]; then
+    bind="${LAB_BIND_ADDR:-$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)}"
+    [ -n "$bind" ] || { warn "cannot find the VM address; binding loopback"; bind=127.0.0.1; }
+  fi
   # the kind node network is only reachable from the host through docker; the ClusterIP is routed via the node
   # (kube-proxy), so the route to the Service CIDR goes through the control-plane container's address
   local node_ip; node_ip=$(docker inspect bnk-control-plane -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null | head -1)
