@@ -43,8 +43,10 @@ kind version; containerlab version | grep -i version; helm version --short; kube
 step "the lab, once, through the mirrors"
 umask 077; mkdir -p "$SECRETS_DIR"
 printf '%s' "$FAR_PULL_B64" > "$SECRETS_DIR/cne_pull_64.json"; printf '%s' "$BNK_LICENSE_JWT" > "$SECRETS_DIR/license.jwt"; umask 022
-git clone -q --depth 1 "https://x-access-token:${GH_READ_TOKEN}@github.com/iracic82/bnk-ai-factory-clab.git" "$LAB_ROOT"
+if [ -d "$LAB_ROOT/.git" ]; then git -C "$LAB_ROOT" pull -q "https://x-access-token:${GH_READ_TOKEN}@github.com/iracic82/bnk-ai-factory-clab.git" main
+else git clone -q --depth 1 "https://x-access-token:${GH_READ_TOKEN}@github.com/iracic82/bnk-ai-factory-clab.git" "$LAB_ROOT"; fi
 git -C "$LAB_ROOT" remote set-url origin https://github.com/iracic82/bnk-ai-factory-clab.git
+echo "lab at $(git -C "$LAB_ROOT" rev-parse --short HEAD)"
 export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig"
 cd "$LAB_ROOT"
 bash install/00-host-prep.sh

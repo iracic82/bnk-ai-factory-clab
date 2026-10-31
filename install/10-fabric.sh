@@ -16,7 +16,7 @@ python3 "$REPO_ROOT/fabric/gen.py"
 step "containerlab deploy ($CLAB_TOPO)"
 cd "$REPO_ROOT/clab"
 LOG="$REPO_ROOT/clab/deploy.log"
-if docker ps --format '{{.Names}}' | grep -qx bnk-control-plane; then
+if docker ps -a --format '{{.Names}}' | grep -qxE 'bnk-control-plane|spine1|leaf1|r5'; then
   containerlab deploy -t "$CLAB_TOPO" --reconfigure >"$LOG" 2>&1 &
 else
   containerlab deploy -t "$CLAB_TOPO" >"$LOG" 2>&1 &

@@ -69,6 +69,10 @@ for _ in $(seq 1 "$(tmo 60 12)"); do [ "$(openshell sandbox list 2>/dev/null | g
 openshell sandbox list 2>/dev/null || warn "openshell sandbox list failed"
 
 step "Agent Substrate $SUBSTRATE"
+if ! kubectl api-resources 2>/dev/null | grep -q '^podcertificaterequests'; then
+  warn "Substrate needs the PodCertificateRequest API (Kubernetes 1.34+); this cluster is $(kubectl version -o json 2>/dev/null | jq -r .serverVersion.gitVersion). Skipped; the sanctioned agents run as plain kagent Agents in their OpenShell sandboxes."
+  kubectl get agents.kagent.dev -A; exit 0
+fi
 if ! command -v go >/dev/null || ! go version | grep -q "go$GO"; then
   curl -sSfL "https://go.dev/dl/go$GO.linux-amd64.tar.gz" | sudo tar -xz -C /usr/local && export PATH=/usr/local/go/bin:$PATH
 fi
