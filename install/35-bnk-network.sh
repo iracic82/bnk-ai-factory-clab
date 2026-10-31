@@ -69,6 +69,24 @@ docker exec leaf1 ip -br addr show eth3 2>/dev/null | grep -q ' 172.16.10.1/24' 
   || fail "leaf1 eth3 has no 172.16.10.1/24: the fabric is not configured. Run: FABRIC_CONFIG_ONLY=1 bash install/10-fabric.sh"
 ok "leaf1 eth3 172.16.10.1/24"
 
+step "TMM db key arp.verifyreturnroute=disable (tmm-init ConfigMap)"
+# TMM's internal leg sits on the node subnet. A node ARPs for its local TMM pod (eth0, pod IP) from its node
+# address; with the BIG-IP default arp.verifyreturnroute=enable TMM drops that request, because its return route to
+# the sender leaves on another VLAN (internal). When the node's ARP entry ages out, the controller loses its gRPC
+# channels to TMM. No CNEInstance field carries TMM db keys, hence the ConfigMap, which TMM re-reads every second.
+# Verified 2026-10-31: the key is present in the running EVE cluster's tmm-init and docs/fabric-evpn.md there
+# lists it as a once-per-cluster step (ref/home_k8s/fabric/bnk/20-tmm-arp-fix.sh). Same layout here.
+cur=$(kubectl -n f5-bnk get cm tmm-init -o jsonpath='{.data.user_conf\.tcl}' 2>/dev/null || true)
+if [ -z "$cur" ]; then warn "no tmm-init ConfigMap with user_conf.tcl; the ARP key is not set"
+elif grep -q 'arp.verifyreturnroute disable' <<<"$cur"; then ok "tmm-init already carries the key"
+else
+  python3 - "$cur" <<'EOF' | kubectl -n f5-bnk patch cm tmm-init --type merge --patch-file /dev/stdin >/dev/null
+import json, sys
+print(json.dumps({"data": {"user_conf.tcl": "\n\t\tbigdb arp.verifyreturnroute disable\n" + sys.argv[1]}}))
+EOF
+  ok "tmm-init: arp.verifyreturnroute disable added (TMM picks it up within a minute)"
+fi
+
 step "routes to the shared VIP pool through TMM's internal leg (nodes and the VM)"
 # Published VIPs (172.16.100.0/24: pool VIP, AI Gateway routes, agents gateway) are announced to the fabric, which
 # the client behind r5 uses. Pods and the VM have no leg on the fabric; they reach the same VIPs through TMM's
