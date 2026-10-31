@@ -9,6 +9,28 @@ source "$(dirname "$0")/lib/common.sh"
 M="$REPO_ROOT/manifests"
 kubectl -n f5-bnk get cneinstance f5-bnk-instance >/dev/null || fail "no CNEInstance; run 30-bnk.sh"
 
+# Every F5 CR goes through the f5-validation webhook. The webhook pod restarts with the rest of the stack whenever
+# the CNEInstance changes (30-bnk.sh patches it last thing), and the API server then answers "connection refused"
+# for every F5 object until the pod listens again. So: wait for a ready endpoint, and retry the apply itself.
+wait_webhook() {
+  for _ in $(seq 1 60); do
+    [ -n "$(kubectl -n f5-bnk get endpoints f5-validation-svc -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)" ] && return 0
+    sleep 5
+  done
+  warn "f5-validation-svc has no ready endpoint after 5 min"
+}
+apply_f5() {          # kubectl apply -f "$1" (or - for stdin held in $2), retried while the webhook is unreachable
+  local f="$1" body="${2:-}" out
+  wait_webhook
+  for i in $(seq 1 12); do
+    if [ -n "$body" ]; then out=$(printf '%s' "$body" | kubectl apply -f - 2>&1); else out=$(kubectl apply -f "$f" 2>&1); fi
+    echo "$out" | grep -v 'failed calling webhook' || true
+    echo "$out" | grep -q 'failed calling webhook' || return 0
+    [ "$i" -lt 12 ] && sleep 10
+  done
+  fail "the F5 validation webhook kept refusing $f"
+}
+
 apply_immutable() {   # $1 file: delete + recreate the routing CRs in it if the content changed
   local f="$1" h; h=$(sha256sum "$f" | cut -c1-16)
   local cur; cur=$(kubectl -n f5-bnk get routingtemplates.k8s.f5net.com,globalroutingconfigs.k8s.f5net.com,routingconfigs.k8s.f5net.com \
@@ -17,7 +39,7 @@ apply_immutable() {   # $1 file: delete + recreate the routing CRs in it if the 
     warn "routing CRs changed; deleting the old ones (immutable upstream)"
     kubectl -n f5-bnk delete routingconfigs.k8s.f5net.com,globalroutingconfigs.k8s.f5net.com,routingtemplates.k8s.f5net.com --all --wait >/dev/null
   fi
-  kubectl apply -f "$f" >/dev/null
+  apply_f5 "$f" >/dev/null
   for k in routingtemplates.k8s.f5net.com globalroutingconfigs.k8s.f5net.com routingconfigs.k8s.f5net.com; do
     kubectl -n f5-bnk annotate "$k" --all "factory.lab/hash=$h" --overwrite >/dev/null 2>&1 || true
   done
@@ -34,15 +56,17 @@ step "TMM legs and VIP pool"
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
 [ -n "$KIND_SUBNET" ] || fail "cannot read the kind network subnet"
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"; INTERNAL_PLEN="${KIND_SUBNET#*/}"
-sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|" -e "s|__INTERNAL_PLEN__|$INTERNAL_PLEN|" "$M/bnk/10-network.yaml" | kubectl apply -f -
+apply_f5 "$M/bnk/10-network.yaml" "$(sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|" -e "s|__INTERNAL_PLEN__|$INTERNAL_PLEN|" "$M/bnk/10-network.yaml")"
 ok "internal self IP $INTERNAL_SELFIP/$INTERNAL_PLEN on the kind network $KIND_SUBNET"
 step "TMM back with routing"
-kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || kubectl -n f5-bnk wait --for=condition=Ready pod -l app=f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || warn "TMM not Ready yet"
+kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/null 2>&1 || kubectl -n f5-bnk wait --for=condition=Ready pod -l app=f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || {
+  warn "TMM not Ready yet:"; kubectl -n f5-bnk get pods -l app=f5-tmm -o wide | sed 's/^/      /'
+  kubectl -n f5-bnk get pods -l app=f5-tmm -o jsonpath='{range .items[*].status.initContainerStatuses[*]}{.name}={.state}{"\n"}{end}{range .items[*].status.containerStatuses[*]}{.name}={.state}{"\n"}{end}' | sed 's/^/      /'; }
 step "tenant VRFs, routing, first VIPs"
-kubectl apply -f "$M/bnk/40-tenants.yaml"
+apply_f5 "$M/bnk/40-tenants.yaml"
 apply_immutable "$M/bnk/40-tenants.yaml"
 step "tenant egress"
-kubectl apply -f "$M/bnk/30-egress.yaml"
+apply_f5 "$M/bnk/30-egress.yaml"
 
 step "BGP from TMM, as leaf1 sees it"
 for i in $(seq 1 60); do

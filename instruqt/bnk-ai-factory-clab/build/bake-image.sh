@@ -49,14 +49,18 @@ git -C "$LAB_ROOT" remote set-url origin https://github.com/iracic82/bnk-ai-fact
 echo "lab at $(git -C "$LAB_ROOT" rev-parse --short HEAD)"
 export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig"
 cd "$LAB_ROOT"
-bash install/00-host-prep.sh
-bash install/05-registry-mirrors.sh
-bash install/10-fabric.sh
-bash install/20-cluster.sh
+# BAKE_FROM=35 resumes a bake that stopped at step 35: every step with a lower number is skipped (the lab is still up)
+FROM="${BAKE_FROM:-00}"
+run() { if [ "${1%%-*}" \< "$FROM" ]; then echo "   skip install/$1 (BAKE_FROM=$FROM)"; else bash "install/$1.sh"; fi; }
+run 00-host-prep
+run 05-registry-mirrors
+run 10-fabric
+run 20-cluster
 # BNK's first reconcile pulls ~4 GB per node; with BAKE_FAST the installer's wait is capped at 10 minutes and a cold
 # pull can outlast it. The pods keep coming up regardless, so a second (third) pass simply finds them Available.
-for attempt in 1 2 3; do bash install/30-bnk.sh && break; echo "install/30-bnk.sh attempt $attempt did not finish; pods keep starting, retrying"; sleep 60; done
-bash install/35-bnk-network.sh
+if [ "30" \< "$FROM" ]; then echo "   skip install/30-bnk (BAKE_FROM=$FROM)"
+else for attempt in 1 2 3; do bash install/30-bnk.sh && break; echo "install/30-bnk.sh attempt $attempt did not finish; pods keep starting, retrying"; sleep 60; done; fi
+run 35-bnk-network
 # the layers above BNK may still be settling on a first run; a failure there is reported, not fatal, so the harvest
 # and finalise still happen and the log says exactly which step to look at
 for s in 40-ai 45-observability 50-agents 60-guardrails; do
