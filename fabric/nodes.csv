@@ -1,0 +1,7 @@
+name,role,asn,loopback
+spine1,spine,65200,10.255.0.1
+spine2,spine,65200,10.255.0.2
+leaf1,leaf,65201,10.255.0.11
+leaf2,leaf,65202,10.255.0.12
+border1,border,65209,10.255.0.21
+r5,exit,65500,10.255.0.99

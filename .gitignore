@@ -1,0 +1,7 @@
+clab/kubeconfig
+clab/clab-bnk-factory/
+clab/.bnk-factory.clab.yml.bak
+fabric/nodes/
+*.log
+.idea/
+__pycache__/

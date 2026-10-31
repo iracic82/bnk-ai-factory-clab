@@ -1,0 +1,19 @@
+# kind cluster for BNK. Same shape as bnk-deploy's own CI (ci/kind-multi.yaml): Calico instead of kindnet,
+# because FLO's preflight has to recognise the CNI, and the pod CIDR bnk-deploy's lab environment expects.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: bnk
+networking:
+  disableDefaultCNI: true
+  podSubnet: "192.168.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
+nodes:
+  - role: control-plane
+    # Published on the VM so Instruqt can expose them: Polaris console, Grafana, Prometheus, kagent UI
+    extraPortMappings:
+      - {containerPort: 30443, hostPort: 30443}
+      - {containerPort: 30300, hostPort: 30300}
+      - {containerPort: 30909, hostPort: 30909}
+      - {containerPort: 30808, hostPort: 30808}
+  - role: worker        # bnk-worker: TMM lives here (app=f5-tmm), eth1 to leaf1
+  - role: worker        # bnk-worker2: sims, agents, fake GPUs, eth1 to leaf2

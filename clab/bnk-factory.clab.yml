@@ -1,0 +1,91 @@
+# The whole factory in one containerlab file: the FRR fabric, the exit router, a client, and the kind cluster.
+# containerlab creates the kind cluster (k8s-kind) and then wires the kind node containers (ext-container) to the
+# leaves with veth links, which is what gives TMM a real eth1 on a real fabric segment.
+#
+# Node configs come from fabric/gen.py -> fabric/nodes/<name>/. Run install/10-fabric.sh, not clab directly.
+name: bnk-factory
+prefix: ""                      # container names are the node names, so "leaf1" is leaf1
+
+mgmt:
+  network: bnk-factory-mgmt
+  ipv4-subnet: 172.20.20.0/24
+
+topology:
+  defaults:
+    env:
+      CLAB_LAB: bnk-factory
+  kinds:
+    linux:
+      image: frrouting/frr:10.2.1
+      sysctls:
+        net.ipv4.ip_forward: 1
+        net.ipv6.conf.all.forwarding: 1
+        net.ipv4.tcp_l3mdev_accept: 1     # BGP sessions inside VRFs
+        net.ipv4.udp_l3mdev_accept: 1
+        net.ipv6.conf.all.disable_ipv6: 0  # eBGP unnumbered rides IPv6 link-local
+  nodes:
+    # --- fabric -------------------------------------------------------------------------------------------
+    spine1:
+      kind: linux
+      binds: [../fabric/nodes/spine1/daemons:/etc/frr/daemons, ../fabric/nodes/spine1/frr.conf:/etc/frr/frr.conf, ../fabric/nodes/spine1/setup.sh:/setup.sh]
+      exec: ["sh /setup.sh"]
+    spine2:
+      kind: linux
+      binds: [../fabric/nodes/spine2/daemons:/etc/frr/daemons, ../fabric/nodes/spine2/frr.conf:/etc/frr/frr.conf, ../fabric/nodes/spine2/setup.sh:/setup.sh]
+      exec: ["sh /setup.sh"]
+    leaf1:
+      kind: linux
+      binds: [../fabric/nodes/leaf1/daemons:/etc/frr/daemons, ../fabric/nodes/leaf1/frr.conf:/etc/frr/frr.conf, ../fabric/nodes/leaf1/setup.sh:/setup.sh]
+      exec: ["sh /setup.sh"]
+    leaf2:
+      kind: linux
+      binds: [../fabric/nodes/leaf2/daemons:/etc/frr/daemons, ../fabric/nodes/leaf2/frr.conf:/etc/frr/frr.conf, ../fabric/nodes/leaf2/setup.sh:/setup.sh]
+      exec: ["sh /setup.sh"]
+    border1:
+      kind: linux
+      binds: [../fabric/nodes/border1/daemons:/etc/frr/daemons, ../fabric/nodes/border1/frr.conf:/etc/frr/frr.conf, ../fabric/nodes/border1/setup.sh:/setup.sh]
+      exec: ["sh /setup.sh"]
+    # --- the exit and a client, as in EVE: R5 hands each tenant a default and takes only its SNAT pool back ----
+    r5:
+      kind: linux
+      binds: [../fabric/nodes/r5/daemons:/etc/frr/daemons, ../fabric/nodes/r5/frr.conf:/etc/frr/frr.conf, ../fabric/nodes/r5/setup.sh:/setup.sh]
+      exec: ["sh /setup.sh"]
+    client:
+      kind: linux
+      image: nicolaka/netshoot:v0.14
+      exec:
+        - ip addr add 172.16.250.10/24 dev eth1
+        - ip route replace 172.16.0.0/16 via 172.16.250.1
+        - ip route replace 10.0.0.0/8 via 172.16.250.1
+    # --- the kind cluster -------------------------------------------------------------------------------------
+    bnk:
+      kind: k8s-kind
+      image: kindest/node:v1.30.13
+      startup-config: kind-config.yaml
+      kubeconfig: ./kubeconfig
+      wait: 5m
+    # kind names its containers <cluster>-control-plane, <cluster>-worker, <cluster>-worker2. The ext-container
+    # nodes have to carry those exact names so containerlab can attach veths to them.
+    bnk-control-plane:
+      kind: ext-container
+    bnk-worker:
+      kind: ext-container
+      exec: ["ip link set eth1 up", "ip link set eth1 mtu 1500"]
+    bnk-worker2:
+      kind: ext-container
+      exec: ["ip link set eth1 up", "ip link set eth1 mtu 1500"]
+
+  links:
+    # underlay: every leaf and the border to both spines
+    - endpoints: ["spine1:eth1", "leaf1:eth1"]
+    - endpoints: ["spine1:eth2", "leaf2:eth1"]
+    - endpoints: ["spine1:eth3", "border1:eth1"]
+    - endpoints: ["spine2:eth1", "leaf1:eth2"]
+    - endpoints: ["spine2:eth2", "leaf2:eth2"]
+    - endpoints: ["spine2:eth3", "border1:eth2"]
+    # handoff: leaf eth3 to a worker's eth1 (BNK external VLAN, untagged = VRF external, 101-103 = tenants)
+    - endpoints: ["leaf1:eth3", "bnk-worker:eth1"]
+    - endpoints: ["leaf2:eth3", "bnk-worker2:eth1"]
+    # exit
+    - endpoints: ["border1:eth3", "r5:eth1"]
+    - endpoints: ["r5:eth2", "client:eth1"]
