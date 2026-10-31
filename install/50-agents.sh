@@ -13,6 +13,8 @@ need helm; need jq
 M="$REPO_ROOT/manifests/agents"; NS=f5-bnk
 KAGENT=0.10.4; SUBSTRATE=0.0.11; OPENSHELL=0.1.5; SANDBOX=v1.0.7; GO=1.24.9
 [ -s "$SECRETS_DIR/aigw/lab.key" ] || fail "no AI Gateway key for tenant lab; run 40-ai.sh"
+KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
+INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # TMM's internal self IP (35-bnk-network.sh)
 KIND_GW=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Gateway}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+$' | head -1)
 
 step "kagent $KAGENT"
@@ -31,7 +33,7 @@ for t in a b c; do
   ns=tenant-$t
   [ -s "$SECRETS_DIR/aigw/$ns.key" ] || { warn "no AI Gateway key for $ns, skipping"; continue; }
   kubectl -n "$ns" create secret generic aigw-key --from-literal=token="$(tr -d ' \n\r' < "$SECRETS_DIR/aigw/$ns.key")" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-  kubectl apply -k "$M/tenant-agent/tenants/$ns" >/dev/null
+  kubectl kustomize "$M/tenant-agent/tenants/$ns" | sed "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|g" | kubectl apply -f - >/dev/null
   kubectl -n "$ns" rollout status deploy/agent --timeout=300s >/dev/null && ok "$ns agent running" || warn "$ns agent not up yet"
 done
 

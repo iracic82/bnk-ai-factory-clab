@@ -50,7 +50,7 @@ bash install/30-bnk.sh
 bash install/35-bnk-network.sh
 # the layers above BNK may still be settling on a first run; a failure there is reported, not fatal, so the harvest
 # and finalise still happen and the log says exactly which step to look at
-for s in 40-ai 50-agents 60-guardrails; do
+for s in 40-ai 45-observability 50-agents 60-guardrails; do
   [ -x "install/$s.sh" ] || continue
   bash "install/$s.sh" || echo "WARNING: install/$s.sh failed, see above; the bake continues"
 done

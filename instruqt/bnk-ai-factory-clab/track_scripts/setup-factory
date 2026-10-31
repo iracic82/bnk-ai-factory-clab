@@ -52,7 +52,7 @@ bash install/35-bnk-network.sh
 # if chapter 10 is to use the real service; 60-guardrails.sh reads it and shreds it too.
 shred -u "$SECRETS_DIR/cne_pull_64.json" "$SECRETS_DIR/license.jwt" 2>/dev/null || true
 unset FAR_PULL_B64 BNK_LICENSE_JWT
-for s in 40-ai 50-agents 60-guardrails; do
+for s in 40-ai 45-observability 50-agents 60-guardrails; do
   [ -x "install/$s.sh" ] && { step "$s"; bash "install/$s.sh"; }
 done
 

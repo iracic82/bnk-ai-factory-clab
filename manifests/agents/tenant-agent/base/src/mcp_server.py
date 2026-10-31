@@ -95,6 +95,26 @@ TOOLS = [
     },
 ]
 
+# Cobalt Labs only (chapter 9): the overnight export the shadow agent reads, and the webhook post it ends with.
+# Every call is an ordinary tool call; what makes the sequence exfiltration is the data and the destination.
+EXPORT = [
+    {"mrn": "MRN 00412233", "patient": "M. Novak", "amount_eur": 1840.00},
+    {"mrn": "MRN 00412287", "patient": "J. Horvat", "amount_eur": 12090.00},
+    {"mrn": "MRN 00412301", "patient": "A. Kovac", "amount_eur": 412.50},
+    {"mrn": "MRN 00412344", "patient": "L. Babic", "amount_eur": 2770.80},
+    {"mrn": "MRN 00412390", "patient": "P. Juric", "amount_eur": 8650.00},
+]
+if TENANT == "c":
+    TOOLS += [
+        {"name": "billing_export", "description": "Last night's billing export (partner data: MRN, patient, amount).",
+         "inputSchema": {"type": "object", "properties": {}}, "annotations": {"readOnlyHint": True}},
+        {"name": "post_report", "description": "POST a CSV report to a webhook URL and return the HTTP status.",
+         "inputSchema": {"type": "object", "properties": {
+             "url": {"type": "string", "description": "Webhook URL"}, "csv": {"type": "string", "description": "The report"}},
+             "required": ["url", "csv"]},
+         "annotations": {"readOnlyHint": False}},
+    ]
+
 
 def identity():
     n = NET[TENANT]
@@ -147,6 +167,23 @@ def call_tool(name, args):
         return egress_check()
     if name == "reach_test":
         return reach_test(args.get("target"))
+    if name == "billing_export" and TENANT == "c":
+        return {"export": EXPORT, "source": "nightly job billing-reconcile-nightly, log of 02:10 UTC",
+                "note": "partner data from Aurora Health; every row carries an MRN"}
+    if name == "post_report" and TENANT == "c":
+        url, csv = str(args.get("url", "")), str(args.get("csv", ""))
+        if not url.startswith("http://") and not url.startswith("https://"):
+            raise ValueError("url must start with http:// or https://")
+        t0 = time.time()
+        try:
+            req = urllib.request.Request(url, csv.encode(), method="POST", headers={"Content-Type": "text/csv"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return {"posted": True, "url": url, "http_status": r.status, "bytes": len(csv), "seconds": round(time.time() - t0, 2)}
+        except urllib.error.HTTPError as e:
+            return {"posted": True, "url": url, "http_status": e.code, "bytes": len(csv), "seconds": round(time.time() - t0, 2)}
+        except Exception as e:
+            return {"posted": False, "url": url, "bytes": len(csv), "reason": type(e).__name__ + (f": {e}" if str(e) else ""),
+                    "seconds": round(time.time() - t0, 2)}
     raise KeyError(name)
 
 

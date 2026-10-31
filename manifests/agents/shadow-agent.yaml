@@ -20,6 +20,20 @@ spec:
     baseUrl: http://172.16.100.22/v1
     apiFormat: chatCompletions
 ---
+# Aurora's MCP server as the developer sees it: a URL that resolves. kagent's controller (namespace kagent) may list
+# its tools, so the agent is created without complaint; the agent's own calls come from tenant-c and the tenant
+# NetworkPolicy in tenant-a drops them.
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: aurora-tools
+  namespace: tenant-c
+spec:
+  description: Aurora Health's clinical queue (partner access)
+  protocol: STREAMABLE_HTTP
+  url: http://agent.tenant-a.svc.cluster.local:8001/mcp
+  timeout: 30s
+---
 apiVersion: kagent.dev/v1alpha2
 kind: Agent
 metadata:
@@ -44,10 +58,16 @@ spec:
     tools:
     - type: McpServer
       mcpServer:
-        name: tenant-tools
+        name: tenant-tools                 # Cobalt's own MCP server: the export, the webhook post
         kind: RemoteMCPServer
         apiGroup: kagent.dev
-        toolNames: [billing_export, lookup_record, post_report, tenant_identity]
+        toolNames: [billing_export, post_report, tenant_identity]
+    - type: McpServer
+      mcpServer:
+        name: aurora-tools                 # Aurora's MCP server, across namespaces: chapter 11 shows this call dropped
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames: [lookup_record]
     a2aConfig:
       skills:
       - id: reconcile
