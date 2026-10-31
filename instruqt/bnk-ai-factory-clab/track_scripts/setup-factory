@@ -6,13 +6,12 @@
 #
 # Secrets arrive as team secrets in the environment (config.yml). None lives in the repository.
 set -euo pipefail
-# Re-run under a pipe to tee so every line reaches both Instruqt's log and the file, including the last ones
-# before a failure (a background process substitution loses those when the script exits).
-if [ -z "${SETUP_FACTORY_TEE:-}" ]; then
-  export SETUP_FACTORY_TEE=1
-  bash "$0" "$@" 2>&1 | tee -a /var/log/setup-factory.log
-  exit "${PIPESTATUS[0]}"
-fi
+# Log to Instruqt and to a file. A pipe into tee would wait for every helper the script leaves running (socat,
+# ollama, the topology service) to close the pipe, and Instruqt then never sees the script finish (play of
+# 2026-10-31 20:13 sat on "loading" after READY). Process substitution does not block the exit; the trap gives
+# tee a moment to drain so the last lines before an exit still reach the log.
+exec > >(tee -a /var/log/setup-factory.log) 2>&1
+trap 'sleep 2' EXIT
 # Lifecycle scripts get a minimal environment; the tooling lives in /usr/local/bin and the lab expects root's HOME.
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/root/.local/bin"
 export HOME="${HOME:-/root}"
