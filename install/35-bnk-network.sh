@@ -140,18 +140,40 @@ step "tenant egress"
 apply_f5 "$M/bnk/30-egress.yaml"
 
 step "BGP from TMM, as leaf1 sees it"
-for i in $(seq 1 60); do
-  n=$(docker exec leaf1 vtysh -c 'show bgp vrf all summary json' 2>/dev/null | python3 -c "
+# TMM initiates all four sessions (leaf1 listens passively on its ranges). Count Established peers in AS 65100.
+tmm_sessions() {
+  docker exec leaf1 vtysh -c 'show bgp vrf all summary json' 2>/dev/null | python3 -c "
 import json,sys; d=json.load(sys.stdin); n=0
 for vrf,fam in d.items():
     for af,v in fam.items():
         for p,s in (v.get('peers') or {}).items():
             if s.get('state')=='Established' and str(s.get('remoteAs'))=='65100': n+=1
-print(n)" 2>/dev/null || echo 0)
-  [ "${n:-0}" -ge 4 ] && break; sleep 10
-done
-docker exec leaf1 vtysh -c 'show bgp vrf all summary' | grep -E 'VRF|65100'
-[ "${n:-0}" -ge 4 ] && ok "TMM peers with leaf1 in the default domain and in 3 tenant VRFs" || warn "only $n TMM sessions Established"
+print(n)" 2>/dev/null || echo 0
+}
+tmm_gates() {   # ConfigurationDone/RoutingDone readiness gates of the TMM pod, set by the controller's pod manager
+  kubectl -n f5-bnk get pod -l app=f5-tmm -o jsonpath='{.items[0].status.conditions[?(@.type=="ConfigurationDone")].status}/{.items[0].status.conditions[?(@.type=="RoutingDone")].status}' 2>/dev/null
+}
+wait_sessions() {   # $1 seconds; returns 0 once leaf1 sees 4 sessions
+  local t; for t in $(seq 10 10 "$1"); do n=$(tmm_sessions); [ "${n:-0}" -ge 4 ] && return 0; sleep 10; done; return 1
+}
+# OcNOS retries a BGP connect every up to 120 s, so the first wait is generous before anything is restarted.
+if ! wait_sessions "$(tmo 300 180)"; then
+  warn "$(tmm_sessions) of 4 TMM sessions after the first wait (gates $(tmm_gates)); restarting the controller so it replays TMM's configuration"
+  # First fresh play (2026-10-31): the controller sat in a reconcile loop and never set TMM's readiness gates.
+  kubectl -n f5-bnk rollout restart deploy/f5-cne-controller >/dev/null
+  kubectl -n f5-bnk rollout status deploy/f5-cne-controller --timeout=300s >/dev/null 2>&1 || warn "controller rollout slow"
+  if ! wait_sessions "$(tmo 300 180)"; then
+    warn "$(tmm_sessions) of 4 after the controller restart (gates $(tmm_gates)); restarting TMM with every object present"
+    kubectl -n f5-bnk rollout restart ds/f5-tmm >/dev/null
+    kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/null 2>&1 || warn "TMM rollout slow (gates $(tmm_gates))"
+    wait_sessions "$(tmo 600 300)" || true
+  fi
+fi
+n=$(tmm_sessions)
+docker exec leaf1 vtysh -c 'show bgp vrf all summary' 2>/dev/null | grep -E 'VRF|65100'
+P=$(kubectl -n f5-bnk get pod -l app=f5-tmm -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+[ -n "$P" ] && kubectl -n f5-bnk exec "$P" -c f5-tmm-routing -- imish -e 'show ip route vrf tenant-a' 2>/dev/null | grep -E '^[CB]' | sed 's/^/      tenant-a: /' || true
+[ "${n:-0}" -ge 4 ] && ok "TMM peers with leaf1 in the default domain and in 3 tenant VRFs" || warn "only $n TMM sessions Established (gates $(tmm_gates)); chapters 1-2 will show it"
 
 step "VIPs from the client (through r5, border1, EVPN, leaf1, TMM)"
 for t in a b c; do
