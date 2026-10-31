@@ -29,13 +29,20 @@ spec:
         return
       }
       if { [HTTP::method] ne "GET" && [HTTP::method] ne "HEAD" } {
-        if { ![HTTP::header exists "Content-Length"] } {
-          HTTP::respond 411 content {{"guardrail":"blocked","reason":"the request body must carry a Content-Length"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
+        # exactly one Content-Length, plain decimal digits only (no sign, no spaces), leading zeros normalised: the
+        # scanner and the model server must agree on how many bytes the body has
+        if { [HTTP::header count "Content-Length"] != 1 } {
+          HTTP::respond 411 content {{"guardrail":"blocked","reason":"the request body must carry exactly one Content-Length"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
           return
         }
         set gr_clen [HTTP::header value "Content-Length"]
-        if { ![string is integer -strict $gr_clen] || $gr_clen > 1048576 } {
-          HTTP::respond 413 content {{"guardrail":"blocked","reason":"request body missing or larger than 1 MiB"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
+        if { ![regexp {^[0-9]{1,7}$} $gr_clen] } {
+          HTTP::respond 400 content {{"guardrail":"blocked","reason":"Content-Length is not a plain decimal number"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
+          return
+        }
+        scan $gr_clen %d gr_clen
+        if { $gr_clen > 1048576 } {
+          HTTP::respond 413 content {{"guardrail":"blocked","reason":"request body larger than 1 MiB"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
           return
         }
         if { $gr_clen > 0 } { HTTP::collect $gr_clen }
@@ -45,7 +52,7 @@ spec:
     when HTTP_REQUEST_DATA {
       set body [HTTP::payload]
       set verdict "pass"
-      if { [string length $body] < $gr_clen } {
+      if { [string length $body] != $gr_clen } {
         set verdict "error"
       } elseif { [string first {\u} $body] >= 0 } {
         set verdict "error"
