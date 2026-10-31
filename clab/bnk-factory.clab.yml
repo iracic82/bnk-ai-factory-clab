@@ -63,8 +63,8 @@ topology:
       kind: k8s-kind
       image: kindest/node:v1.30.13
       startup-config: kind-config.yaml
-      kubeconfig: ./kubeconfig
-      wait: 5m
+      # containerlab 0.75 has no per-node kubeconfig field; kind writes to $KUBECONFIG, which install/lib/common.sh
+      # points at clab/kubeconfig, so the learner's ~/.kube/config is never touched
     # kind names its containers <cluster>-control-plane, <cluster>-worker, <cluster>-worker2. The ext-container
     # nodes have to carry those exact names so containerlab can attach veths to them.
     bnk-control-plane:

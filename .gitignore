@@ -5,3 +5,4 @@ fabric/nodes/
 *.log
 .idea/
 __pycache__/
+.cache/
