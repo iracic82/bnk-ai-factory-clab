@@ -1,21 +1,32 @@
 slug: bnk-ai-factory-clab
 id: megnpib5bsgz
-title: AI Factory on One VM - BNK, tenants, agents and the shadow agent
-teaser: BIG-IP Next for Kubernetes on kind behind a real EVPN fabric. Three tenants,
-  NVIDIA simulators, kagent agents on OpenShell and Agent Substrate, CalypsoAI guardrails
-  through BNK iRules.
+title: The AI Factory and the Agent Nobody Approved
+teaser: Run a complete AI factory on one machine, BIG-IP Next for Kubernetes on a
+  real EVPN fabric with three tenants, simulated H100s and agents in sandboxes. Then
+  catch the one agent that was never signed off.
 description: |-
-  **One VM, a whole AI factory.**
+  **Three tenants share an AI factory. One of them is about to leak a hospital's records, and nobody wrote a
+  single malicious line of code.**
 
-  containerlab runs a spine/leaf/border fabric (FRR, BGP EVPN), an exit router and a client, and wires a
-  three node kind cluster into the leaves. BNK 2.4.2 runs on that cluster in host mode with TMM peering
-  with the fabric, the Polaris AI Gateway in front of NVIDIA Dynamo mocker workers, fake H100s scheduled by
-  KAI, and kagent agents running on Agent Substrate inside OpenShell sandboxes.
+  You get the whole factory on one VM: a spine/leaf fabric speaking BGP EVPN, BIG-IP Next for Kubernetes
+  peering with it from inside a Kubernetes cluster, an AI gateway in front of NVIDIA model workers, H100s that
+  exist only on paper but schedule like the real thing, and agents that run in sandboxes with nothing but a
+  key they never get to see.
 
-  Then a developer at one tenant deploys an agent nobody approved. It uses only permitted tools, on a task
-  that reads like real work, and the sequence is exfiltration. You watch identity, content inspection and
-  reachability each fail to stop it alone, and stop it together: Polaris, a CalypsoAI verdict carried by a
-  BNK iRule, OpenShell's network policy and BNK egress in the tenant VRF.
+  Aurora Health, Borealis Bank and Cobalt Labs each get their own VRF, their own egress, their own models and
+  their own assistant. You build and read all of it, chapter by chapter, with the routers' tables and the data
+  plane's logs in front of you.
+
+  Then a developer at Cobalt Labs deploys an agent of their own. It only uses tools the sanctioned assistant has.
+  Its task reads like ordinary night-shift work. And step by step it assembles Aurora's patient queue and posts it
+  to a webhook outside the factory.
+
+  Identity does not stop it. A content scan on its own does not stop it. Reachability on its own does not either.
+  You watch each layer fail alone, then watch them hold together: the AI gateway's keys, a CalypsoAI verdict
+  carried inline by a BNK iRule, OpenShell's network policy around the sandbox, and BNK's egress in the tenant's
+  VRF, where the packet is dropped before it reaches a router.
+
+  Thirteen chapters, about three and a half hours, every command ready to run.
 icon: ./assets/icon.png
 tags:
 - nvidia
@@ -38,5 +49,5 @@ lab_config:
   feedback_tab_enabled: false
   loadingMessages: true
   hideStopButton: false
-checksum: "13817819272792303492"
+checksum: "8602800577240892629"
 enhanced_loading: false
