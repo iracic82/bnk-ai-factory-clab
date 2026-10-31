@@ -78,7 +78,7 @@ containerlab inspect -t $LAB_ROOT/clab/bnk-factory.clab.yml 2>/dev/null | grep -
 docker ps --format '{{.Names}}\t{{.Image}}' | sort | column -t
 ```
 
-Seven FRR routers and a client from the topology file, three kind nodes the cluster made, seven registry mirrors
+Six FRR routers and a client from the topology file, three kind nodes the cluster made, seven registry mirrors
 that fed the build, and ollama. Open the **Lab Topology** tab now and keep it open: it reads these same sources
 every few seconds and colours what is up.
 
@@ -175,8 +175,8 @@ docker exec leaf1 ip -br addr show | grep -E '^eth3'
 kubectl -n f5-bnk get f5-spk-vlans -o custom-columns='VLAN:.metadata.name,IF:.spec.interfaces,TAG:.spec.tag,SELFIP:.spec.selfip_v4s'
 ```
 
-leaf1 has learned TMM's MAC on that port, and it peers with TMM four times: once in the default domain and once
-inside each tenant VRF. TMM speaks AS 65100; the leaf answers as 65000 because that is what TMM's configuration
+leaf1 has learned TMM's MAC on that port, and it peers with TMM four times: once in VRF `external` on the untagged
+leg and once inside each tenant VRF on its VLAN. TMM speaks AS 65100; the leaf answers as 65000 because that is what TMM's configuration
 expects its gateway to be:
 
 ```bash,run
@@ -204,7 +204,7 @@ address pool):
 ```bash,run
 kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{.spec.manifestVersion}{"  "}{range .status.conditions[*]}{.type}={.status} {end}{"\n"}'
 kubectl -n f5-bnk get pods -o wide --no-headers | awk '{printf "%-44s %-8s %-10s %s\n", $1, $2, $3, $7}'
-kubectl -n f5-bnk get vrfs,routingconfigs,globalroutingconfigs,f5bnkgateways
+kubectl -n f5-bnk get vrfs,routingconfigs,globalroutingconfigs,f5-bnkgateways
 ```
 
 `2.4.2`, `Available=True`, every pod Running. The `F5BnkGateway` is the pool of addresses every published service in

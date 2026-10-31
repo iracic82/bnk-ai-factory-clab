@@ -109,7 +109,8 @@ def vrf_links(lo):               # kernel side of symmetric IRB, shared by leave
 
 def leaf(name, asn, lo):
     c = underlay(name, asn, lo, UPLINKS["leaf"], vrfs=True) + ["  advertise-all-vni", " exit-address-family", "exit", "!"]
-    s = ["#!/bin/sh", "set -e", f"ip addr add {lo}/32 dev lo", "ip link set eth3 up"] + vrf_links(lo)
+    s = ["#!/bin/sh", "set -e", "touch /etc/frr/vtysh.conf",   # without it every vtysh call prints two config warnings
+         f"ip addr add {lo}/32 dev lo", "ip link set eth3 up"] + vrf_links(lo)
     for vrf, table, vni, handoff, vips, _ in VRFS:
         # the TMM-facing prefix list: only the VIP pool (and the tenant's SNAT pool) is accepted from TMM; TMM gets a default
         c += [f"ip prefix-list from-tmm-{vrf} seq 10 permit {vips} le 32"]
@@ -138,7 +139,8 @@ def leaf(name, asn, lo):
 
 def border(name, asn, lo):
     c = underlay(name, asn, lo, UPLINKS["border"], vrfs=True) + ["  advertise-all-vni", " exit-address-family", "exit", "!"]
-    s = ["#!/bin/sh", "set -e", f"ip addr add {lo}/32 dev lo", "ip link set eth3 up"] + vrf_links(lo)
+    s = ["#!/bin/sh", "set -e", "touch /etc/frr/vtysh.conf",   # without it every vtysh call prints two config warnings
+         f"ip addr add {lo}/32 dev lo", "ip link set eth3 up"] + vrf_links(lo)
     for vrf, table, vni, handoff, vips, p2p in VRFS:
         dev = f"eth3.{VLAN[vrf]}"
         s += [f"ip link add link eth3 name {dev} type vlan id {VLAN[vrf]}", f"ip link set {dev} master {vrf}",
@@ -157,7 +159,7 @@ def border(name, asn, lo):
 
 def spine(name, asn, lo):
     c = underlay(name, asn, lo, UPLINKS["spine"]) + [" exit-address-family", "exit", "!"]
-    return c, ["#!/bin/sh", "set -e", f"ip addr add {lo}/32 dev lo"]
+    return c, ["#!/bin/sh", "set -e", "touch /etc/frr/vtysh.conf", f"ip addr add {lo}/32 dev lo"]
 
 
 def r5(name, asn, lo):
@@ -165,7 +167,7 @@ def r5(name, asn, lo):
     # behind eth2. Tenant VIP pools do not overlap, so they coexist here.
     c = ["frr defaults datacenter", f"hostname {name}", "service integrated-vtysh-config", "!",
          f"router bgp {asn}", f" bgp router-id {lo}", " no bgp ebgp-requires-policy", " bgp bestpath as-path multipath-relax"]
-    s = ["#!/bin/sh", "set -e", f"ip addr add {lo}/32 dev lo", "ip link set eth1 up",
+    s = ["#!/bin/sh", "set -e", "touch /etc/frr/vtysh.conf", f"ip addr add {lo}/32 dev lo", "ip link set eth1 up",
          "ip addr add 172.16.250.1/24 dev eth2", "ip link set eth2 up"]
     nb = []
     for vrf, table, vni, handoff, vips, p2p in VRFS:
