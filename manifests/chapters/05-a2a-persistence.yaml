@@ -1,0 +1,18 @@
+# Chapter 5: the A2A persistence profile on the agents gateway (kagent/agents-gw, 172.16.100.14), where the tenant
+# assistants answer message/send. Same pattern as the MCP one: profile and NetPolicy in the Gateway's namespace.
+apiVersion: k8s.f5net.com/v1
+kind: F5BigPersistenceProfile
+metadata: {name: agents-a2a-sessions, namespace: kagent}
+spec:
+  persistenceType: AGENT2AGENT
+  a2aEncryptionPassphrase:
+    secretRef: {name: a2a-passphrase, passphraseField: primary-passphrase}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: NetPolicy
+metadata: {name: agents-a2a-sessions, namespace: kagent}
+spec:
+  extensionRefs:
+  - {group: k8s.f5net.com, kind: F5BigPersistenceProfile, name: agents-a2a-sessions}
+  targetRefs:
+  - {group: gateway.networking.k8s.io, kind: Gateway, name: agents-gw, sectionName: http}

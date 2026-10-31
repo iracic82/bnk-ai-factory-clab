@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+kubectl -n ate-system get deploy ate-api-server >/dev/null 2>&1 || fail-message "Agent Substrate is not installed in ate-system; the platform step 50 did not finish on this VM (see /var/log/setup-factory.log)."
+kubectl -n kagent get workerpools.ate.dev kagent-default >/dev/null 2>&1 || fail-message "WorkerPool kagent/kagent-default does not exist; kagent's substrate integration is off."
+kubectl -n kagent get sandboxagent concierge >/dev/null 2>&1 || fail-message "SandboxAgent kagent/concierge does not exist yet (apply manifests/chapters/07-concierge-sandboxagent.yaml)."
+[ "$(kubectl -n kagent get actortemplates.ate.dev --no-headers 2>/dev/null | grep -c concierge)" -ge 1 ] \
+  || fail-message "no ActorTemplate for concierge yet; kagent generates it from the SandboxAgent, give it a minute and check the SandboxAgent's conditions."
+exit 0

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig LAB_ROOT=/root/lab
+kubectl apply -f $LAB_ROOT/manifests/guardrails/50-attach-tenant-c.yaml >/dev/null
+sleep 10
+exit 0

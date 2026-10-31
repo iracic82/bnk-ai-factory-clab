@@ -9,6 +9,10 @@ teaser: BNK does not only pick a node; its Endpoint Picker chooses the model wor
 notes:
 - type: text
   contents: |-
+    **Northlight Compute, week two, day four.** Borealis asks why two identical requests cost different amounts of
+    time. The answer lives one layer below the gateway: the picker that chooses a worker per request from the
+    workers' own cache state and load. Northlight shows them the decision being made.
+
     The Gateway API Inference Extension puts an **Endpoint Picker** between the gateway and the model pool. F5's
     picker (`F5EPP`) runs with the engine set to `dynamo`: it subscribes to the workers' KV-cache events on NATS,
     scrapes their `vllm:*` metrics, and scores every candidate on prefix-cache hits, prefill load, queue depth and
@@ -37,7 +41,7 @@ tabs:
   type: service
   hostname: factory
   port: 30300
-- id: topology
+- id: 4r1ciir4kaic
   title: Lab Topology
   type: service
   hostname: factory
@@ -47,6 +51,8 @@ difficulty: intermediate
 timelimit: 1200
 enhanced_loading: false
 ---
+
+![04-the-picker](../assets/04-the-picker.svg)
 
 ## The pool and its picker
 

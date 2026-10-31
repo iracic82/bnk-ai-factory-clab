@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -uo pipefail
+[ -s /root/incident-timeline.md ] || fail-message "/root/incident-timeline.md does not exist yet; write the timeline at the end of the chapter."
+grep -q 'X-Guardrail' /root/incident-timeline.md || fail-message "the timeline does not mention the guardrail verdict (X-Guardrail)."
+exit 0

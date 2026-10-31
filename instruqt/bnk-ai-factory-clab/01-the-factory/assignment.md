@@ -9,6 +9,11 @@ teaser: A spine/leaf/border EVPN fabric, an exit router, a client and a three no
 notes:
 - type: text
   contents: |-
+    **Northlight Compute, week one.** Northlight is a neocloud: it runs one AI factory and rents slices of it to
+    enterprises that will never build their own. Three customers signed this quarter, Aurora Health, Borealis
+    Bank and Cobalt Labs, and they share the fabric, the cluster and the GPUs. You are Northlight's platform
+    team. Before a single tenant lands, walk the factory from the outside in.
+
     Everything in this lab runs on this one VM. containerlab built an FRR fabric (two spines, two leaves, a
     border router), an exit router `r5`, a client, and a kind cluster with three nodes. The kind workers have a
     real second interface cabled into the leaves, and F5 BIG-IP Next for Kubernetes (TMM) sits on that interface
@@ -32,7 +37,7 @@ tabs:
   type: service
   hostname: factory
   port: 30443
-- id: topology
+- id: tukml4zna03x
   title: Lab Topology
   type: service
   hostname: factory
@@ -42,6 +47,8 @@ difficulty: basic
 timelimit: 900
 enhanced_loading: false
 ---
+
+![01-the-factory](../assets/01-the-factory.svg)
 
 ## The fabric
 

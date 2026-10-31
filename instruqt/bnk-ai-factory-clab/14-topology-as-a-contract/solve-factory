@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+i=0; for p in $(kubectl -n aigw-models get pods -o name | grep decode); do
+  kubectl -n aigw-models label $p topology.kubernetes.io/rack=rack-$((i%2+1)) factory.lab/rail=rail-$((i%2+1)) --overwrite >/dev/null; i=$((i+1)); done
+exit 0

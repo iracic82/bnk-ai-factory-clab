@@ -1,0 +1,25 @@
+# Chapter 6: an iRule on Aurora's MCP gateway, attached through the NetPolicy that already carries the persistence
+# profile (one NetPolicy per listener; extensionRefs may list both kinds). The iRule answers one path itself and
+# stamps every other request with the tenant, so the backend can see which gateway delivered it.
+apiVersion: k8s.f5net.com/v1
+kind: F5BigCneIrule
+metadata: {name: tenant-stamp, namespace: tenant-a}
+spec:
+  iRule: |
+    when HTTP_REQUEST {
+      if { [HTTP::path] eq "/factory/whoami" } {
+        HTTP::respond 200 content {{"tenant":"tenant-a","gateway":"tenant-mcp","answered_by":"TMM, before any pod"}} "Content-Type" "application/json" "X-Factory-Tenant" "tenant-a"
+        return
+      }
+      HTTP::header insert "X-Factory-Tenant" "tenant-a"
+    }
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: NetPolicy
+metadata: {name: tenant-mcp-sessions, namespace: tenant-a}
+spec:
+  extensionRefs:
+  - {group: k8s.f5net.com, kind: F5BigPersistenceProfile, name: tenant-mcp-sessions}
+  - {group: k8s.f5net.com, kind: F5BigCneIrule, name: tenant-stamp}
+  targetRefs:
+  - {group: gateway.networking.k8s.io, kind: Gateway, name: tenant-mcp, sectionName: http}

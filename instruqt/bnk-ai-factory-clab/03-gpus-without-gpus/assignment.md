@@ -9,6 +9,10 @@ teaser: NVIDIA's own simulators give the cluster eight H100s it does not have an
 notes:
 - type: text
   contents: |-
+    **Northlight Compute, week two.** The customers bought GPU hours. The lab has no GPUs. NVIDIA's simulators
+    make the cluster believe it has eight H100s and make the scheduler fight over them exactly as it would in
+    the real hall, quota by quota, tenant by tenant.
+
     Two NVIDIA pieces make the GPU side real enough to schedule and measure:
 
     - the **fake GPU operator** (from Run:ai) advertises `nvidia.com/gpu` on the workers with the labels a real GPU
@@ -41,7 +45,7 @@ tabs:
   type: service
   hostname: factory
   port: 30909
-- id: topology
+- id: zgqdiyx3kqa1
   title: Lab Topology
   type: service
   hostname: factory
@@ -51,6 +55,8 @@ difficulty: basic
 timelimit: 1200
 enhanced_loading: false
 ---
+
+![03-gpus-without-gpus](../assets/03-gpus-without-gpus.svg)
 
 ## The GPUs the cluster thinks it has
 

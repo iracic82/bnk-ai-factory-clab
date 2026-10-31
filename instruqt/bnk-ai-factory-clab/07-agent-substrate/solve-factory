@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig LAB_ROOT=/root/lab
+kubectl apply -f $LAB_ROOT/manifests/chapters/07-concierge-sandboxagent.yaml >/dev/null
+for _ in $(seq 1 36); do [ "$(kubectl -n kagent get actortemplates.ate.dev --no-headers 2>/dev/null | grep -c concierge)" -ge 1 ] && exit 0; sleep 5; done
+exit 0

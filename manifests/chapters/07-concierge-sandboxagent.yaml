@@ -1,0 +1,23 @@
+# Chapter 7: a kagent SandboxAgent that runs as a Substrate actor on the WorkerPool the kagent chart installed
+# (kagent/kagent-default). Same declarative shape as the Agent objects of the tenants; the substrate block is what
+# puts it on a worker instead of in a Deployment. It uses the lab tenant's model through the factory-operator's
+# ModelConfig and has no tools: a front desk that explains what the factory offers.
+apiVersion: kagent.dev/v1alpha2
+kind: SandboxAgent
+metadata:
+  name: concierge
+  namespace: kagent
+spec:
+  type: Declarative
+  description: Northlight Compute's front desk. Explains what the AI factory offers a tenant, on an Agent Substrate worker.
+  declarative:
+    runtime: go
+    modelConfig: default-model-config
+    stream: true
+    systemMessage: |
+      You are the front desk of Northlight Compute, a neocloud that runs a shared AI factory on F5 BIG-IP Next for
+      Kubernetes. Tenants get their own VRF on the fabric, their own egress addresses, their own AI Gateway tenant
+      with virtual keys, their own GPU queue, and assistants that run in sandboxes. Answer in two or three sentences.
+  substrate:
+    workerPoolRef:
+      name: kagent-default

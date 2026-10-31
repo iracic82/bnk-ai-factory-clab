@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig LAB_ROOT=/root/lab
+openshell sandbox exec --name tenant-c-agent -- sh -c 'curl -s -m 8 -o /dev/null -X POST http://172.16.250.10:8080/report -d status=ok' >/dev/null 2>&1 || true
+kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml >/dev/null
+kubectl -n tenant-c delete agent billing-reconciler --ignore-not-found >/dev/null 2>&1
+kubectl -n tenant-c delete secret shadow-key --ignore-not-found >/dev/null 2>&1
+exit 0

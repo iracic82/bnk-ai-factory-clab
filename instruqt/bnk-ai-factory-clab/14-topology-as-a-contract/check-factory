@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+n=$(kubectl -n aigw-models get pods -l topology.kubernetes.io/rack --no-headers 2>/dev/null | grep -c decode)
+[ "$n" -ge 2 ] || fail-message "fewer than two mocker decode pods carry the topology.kubernetes.io/rack label; label them."
+exit 0

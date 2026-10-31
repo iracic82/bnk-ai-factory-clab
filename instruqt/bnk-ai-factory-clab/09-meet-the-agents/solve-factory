@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Nothing to create in this chapter: it reads and calls what the platform built. The check verifies the agents and
+# the key boundary, both of which exist from track start.
+exit 0

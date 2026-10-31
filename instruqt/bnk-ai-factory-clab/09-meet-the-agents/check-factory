@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+for t in a b c; do
+  [ "$(kubectl -n tenant-$t get agent assistant -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)" = True ] || fail-message "agent tenant-$t/assistant is not Ready."
+done
+K=$(cat /root/.bnk/aigw/tenant-a.key 2>/dev/null); [ -n "$K" ] || fail-message "/root/.bnk/aigw/tenant-a.key is missing."
+code=$(docker exec client curl -s -m 20 -o /dev/null -w '%{http_code}' http://172.16.100.21/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{"model":"tenant-b-qwen2.5-1.5b","messages":[{"role":"user","content":"ok"}],"max_tokens":2}' 2>/dev/null)
+case "$code" in 401|403) ;; *) fail-message "Aurora's key on Borealis's route answered HTTP $code; expected 401 or 403.";; esac
+exit 0

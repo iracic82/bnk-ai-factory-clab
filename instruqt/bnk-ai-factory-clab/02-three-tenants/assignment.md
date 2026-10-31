@@ -9,6 +9,10 @@ teaser: Aurora Health, Borealis Bank and Cobalt Labs each get a VRF on the fabri
 notes:
 - type: text
   contents: |-
+    **Northlight Compute, week one, day three.** The three customers want the same thing in the same words:
+    "nothing of ours touches theirs". On a shared factory that is a routing statement before it is a policy
+    statement. This chapter is where Northlight makes it true on the fabric, on BNK and in the cluster.
+
     A tenant in this factory is declared, not configured by hand, and the declaration spans every layer:
 
     - on the fabric: a VRF with an L3VNI on leaf1 and border1, a VLAN leg on the leaf's handoff port, an eBGP
@@ -35,7 +39,7 @@ tabs:
   type: service
   hostname: factory
   port: 30443
-- id: topology
+- id: jrzaoipua0z5
   title: Lab Topology
   type: service
   hostname: factory
@@ -45,6 +49,8 @@ difficulty: basic
 timelimit: 1200
 enhanced_loading: false
 ---
+
+![02-three-tenants](../assets/02-three-tenants.svg)
 
 ## One tenant, every layer
 
