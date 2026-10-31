@@ -75,7 +75,8 @@ document is that NetPolicy with two `extensionRefs`:
 ```bash,run
 sed -n '/kind: NetPolicy/,$p' $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml
-sleep 8
+sleep 5; kubectl -n f5-bnk annotate netpolicy tenant-mcp-sessions factory.lab/resync=$(date +%s) --overwrite >/dev/null
+for i in $(seq 1 12); do s=$(kubectl -n f5-bnk get f5-big-cne-irules tenant-stamp -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null); [ "$s" = True ] && break; sleep 5; done
 kubectl -n f5-bnk get f5-big-cne-irules tenant-stamp -o custom-columns='NAME:.metadata.name,READY:.status.conditions[-1].status,MESSAGE:.status.conditions[-1].message'
 kubectl -n f5-bnk get netpolicy tenant-mcp-sessions -o jsonpath='{range .spec.extensionRefs[*]}{.kind}/{.name}{"\n"}{end}'
 ```
