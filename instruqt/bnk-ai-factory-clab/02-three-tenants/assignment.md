@@ -10,19 +10,14 @@ notes:
 - type: text
   contents: |-
     **Northlight Compute, week one, day three.** The three customers want the same thing in the same words:
-    "nothing of ours touches theirs". On a shared factory that is a routing statement before it is a policy
-    statement. This chapter is where Northlight makes it true on the fabric, on BNK and in the cluster.
+    "nothing of ours touches theirs". Aurora's network team asks it in one line, Borealis in forty with a diagram
+    attached, Cobalt does not ask and assumes. On a shared factory that is a routing statement before it is a
+    policy statement, and Mira's answer is the same for all three: a tenant.
 
-    A tenant in this factory is declared, not configured by hand, and the declaration spans every layer:
-
-    - on the fabric: a VRF with an L3VNI on leaf1 and border1, a VLAN leg on the leaf's handoff port, an eBGP
-      session to TMM inside the VRF, and a VRF-lite link to r5
-    - on BNK: a `Vrf` (route domain), an `F5SPKVlan` leg, a `RoutingConfig` that renders the VRF's BGP into OcNOS,
-      `F5VirtualServer`s in the VRF, and an `F5SPKEgress` with the tenant's own SNAT pool
-    - on Kubernetes: the namespace, a NetworkPolicy, and the tenant's own AI Gateway tenant with its own virtual key
-
-    The point of this chapter is that nothing a tenant has can be reached by another tenant, and that the fabric
-    treats each one as its own routing domain all the way to r5.
+    A tenant here is one declaration that becomes a routing domain on every layer, from the switches to the data
+    plane to the AI gateway, with its own addresses and its own key. This chapter reads one tenant through all of
+    it, proves the walls between them, and then publishes a new service for Borealis so you see the whole chain
+    move without anyone touching a switch.
 tabs:
 - id: 56dfgew0utlc
   title: Terminal

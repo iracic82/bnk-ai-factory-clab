@@ -20,11 +20,6 @@ notes:
     Mira Voss runs Northlight's platform team. The factory was built last week and nobody has walked it end to
     end. That is what she does on Monday, and what you do in this chapter: outside in, from the client that
     stands in for the internet to the pod that answers it, reading each hop's own tables, not a diagram.
-
-    Everything is on this one VM. containerlab runs an FRR fabric (two spines, two leaves, a border router), the
-    exit router r5 and a client, and wires a three node kind cluster into the leaves with real veths. F5 BIG-IP
-    Next for Kubernetes (BNK) runs on the cluster; its data plane, TMM, has a leg on the fabric and speaks BGP to
-    leaf1 like any other router would.
 tabs:
 - id: vug5lxsr4kxz
   title: Terminal
