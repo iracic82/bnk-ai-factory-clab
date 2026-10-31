@@ -32,7 +32,9 @@ if [ -d "$LAB_ROOT/.git" ]; then git -C "$LAB_ROOT" fetch -q origin "$LAB_REF" &
 else git clone -q --depth 1 --branch "$LAB_REF" "https://x-access-token:${GH_READ_TOKEN}@${LAB_REPO}" "$LAB_ROOT"; fi
 git -C "$LAB_ROOT" remote set-url origin "https://${LAB_REPO}"     # the token stays out of .git/config
 unset GH_READ_TOKEN
-export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig"
+# LAB_PUBLIC=1: the UIs (Polaris, Grafana, Prometheus, kagent) bind the VM's address, which is what the Instruqt
+# tabs on ports 30443/30300/30909/30808 connect to; the sandbox network is private to the learner
+export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig" LAB_PUBLIC=1
 cd "$LAB_ROOT"
 
 step "host (hugepages, limits; already baked, this re-asserts after boot)"
@@ -52,8 +54,12 @@ bash install/35-bnk-network.sh
 # if chapter 10 is to use the real service; 60-guardrails.sh reads it and shreds it too.
 shred -u "$SECRETS_DIR/cne_pull_64.json" "$SECRETS_DIR/license.jwt" 2>/dev/null || true
 unset FAR_PULL_B64 BNK_LICENSE_JWT
+# The layers above BNK: a failure here is reported in /var/log/setup-factory.log and the chapter that needs the
+# layer says so in its check, but it does not take the whole start down with it.
 for s in 40-ai 45-observability 50-agents 60-guardrails; do
-  [ -x "install/$s.sh" ] && { step "$s"; bash "install/$s.sh"; }
+  [ -x "install/$s.sh" ] || continue
+  step "$s"
+  bash "install/$s.sh" || echo "WARNING: install/$s.sh failed; see above. The lab starts without that layer."
 done
 
 step "learner shell"
