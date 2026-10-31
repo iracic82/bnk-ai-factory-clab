@@ -24,15 +24,33 @@ step "mirrors on $BIND_IP"
 for up in "${!MIRRORS[@]}"; do
   port=${MIRRORS[$up]}; name="mirror-${up//./-}"
   env=(-e REGISTRY_PROXY_REMOTEURL="$(remote "$up")" -e REGISTRY_STORAGE_DELETE_ENABLED=true)
+  mounts=(-v "$MIRROR_DIR/$up:/var/lib/registry")
+  cfg=""
   if [ "$up" = repo.f5.com ]; then
     f="${FAR_PULL_JSON:-$SECRETS_DIR/cne_pull_64.json}"; [ -r "$f" ] || fail "FAR_PULL_JSON $f not readable (needed for the repo.f5.com mirror)"
-    # the credential goes in through the environment of this one container, never onto disk in the image
-    env+=(-e REGISTRY_PROXY_USERNAME=_json_key_base64 -e REGISTRY_PROXY_PASSWORD="$(tr -d '\n\r ' < "$f")")
+    # The credential reaches the container as a mounted config file, not as an environment variable that
+    # `docker inspect` would show. The file is removed from disk once the container has read it (the mount
+    # keeps working), and finalise-image.sh removes the container itself, so the baked image holds no copy.
+    cfg=$(mktemp -p "${SECRETS_DIR}" mirror-XXXXXX.yml); chmod 600 "$cfg"
+    python3 - "$f" "$cfg" "$(remote "$up")" <<'EOF'
+import sys
+far, cfg, url = sys.argv[1:]
+pw = open(far).read().strip()
+open(cfg, 'w').write(f"""version: 0.1
+storage: {{filesystem: {{rootdirectory: /var/lib/registry}}, delete: {{enabled: true}}}}
+http: {{addr: :5000}}
+proxy:
+  remoteurl: {url}
+  username: _json_key_base64
+  password: {pw!r}
+""")
+EOF
+    mounts+=(-v "$cfg:/etc/docker/registry/config.yml:ro"); env=()
   fi
   docker rm -f "$name" >/dev/null 2>&1 || true
   docker run -d --name "$name" --restart unless-stopped \
-    -p "$BIND_IP:$port:5000" -p "127.0.0.1:$port:5000" \
-    -v "$MIRROR_DIR/$up:/var/lib/registry" "${env[@]}" registry:2.8.3 >/dev/null
+    -p "$BIND_IP:$port:5000" -p "127.0.0.1:$port:5000" "${mounts[@]}" "${env[@]}" registry:2.8.3 >/dev/null
+  [ -n "$cfg" ] && { sleep 1; shred -u "$cfg" 2>/dev/null || rm -f "$cfg"; }
   ok "$up -> $BIND_IP:$port"
 done
 sleep 2

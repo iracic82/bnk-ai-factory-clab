@@ -15,7 +15,9 @@ echo "  repo.f5.com repositories cached: $f5, mirror size: $size"
 step "tearing down the lab, keeping the mirrors"
 [ -f "$LAB_ROOT/clab/bnk-factory.clab.yml" ] && (cd "$LAB_ROOT/clab" && containerlab destroy -t bnk-factory.clab.yml --cleanup >/dev/null 2>&1 || true)
 kind delete cluster --name bnk >/dev/null 2>&1 || true
-docker ps -aq --filter name='^mirror-' | xargs -r docker stop >/dev/null      # containers are recreated at track start
+# the mirror containers go (the repo.f5.com one carries the FAR credential in its mounted config); the cache under
+# /var/lib/bnk-mirrors stays, and 05-registry-mirrors.sh recreates the containers at track start
+docker ps -aq --filter name='^mirror-' | xargs -r docker rm -f >/dev/null
 docker system prune -af --volumes >/dev/null 2>&1 || true
 step "secrets and clone"
 shred -u "$SECRETS_DIR"/* 2>/dev/null; rm -rf "$SECRETS_DIR" "$LAB_ROOT" /root/.kube /root/.config/helm/registry /root/.docker

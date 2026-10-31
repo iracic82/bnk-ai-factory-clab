@@ -50,7 +50,7 @@ The three controls, each shown first on its own (and insufficient), then togethe
 | 2 | Three tenants | apply one tenant end to end: namespace, Vrf/Vxlan/RoutingConfig, F5SPKVlan leg, Gateway, EgressGateway, AI Gateway tenant + virtual key; curl its VIP from the client | isolation at every layer, declared as CRDs |
 | 3 | GPUs without GPUs | fake GPU operator (`nvidia-smi` inside a pod), Dynamo mocker workers, KAI queues; a job per tenant; watch quota and borrowing | scheduling is a tenant boundary too |
 | 4 | The picker | F5EPP in front of the mocker, prefix-cache and prefill-load scorers, `disaggregated` mode, InferenceObjective priority | BNK picks pods, and can shed the suspect ones |
-| 5 | iRules on BNK | write and attach an `F5BigCneIrule` through a `NetPolicy`: first a header stamp, then a per-tenant token budget, then the guardrail sideband; read TMM's log | the data plane is programmable at request level |
+| 5 | MCP, A2A and iRules on BNK | attach an `F5BigPersistenceProfile` (`MODEL_CONTEXT_PROTOCOL`) to the tenant MCP route and watch sessions stick while the MCP server scales to 3; same with `AGENT2AGENT` on the agents' A2A route; put a `F5BigAccessJwtConfig` in front and call with and without a valid token; then an `F5BigCneIrule` through the same `NetPolicy`: a header stamp, a per-tenant token budget, the guardrail sideband | BNK is protocol-aware for agents, and programmable where the CRDs stop |
 | 6 | Agent Substrate | WorkerPool, ActorTemplate, a `SandboxAgent`; Substrate's router in, Substrate's egress out; what it adds over plain pods | agents get a scheduler and an egress path of their own |
 | 7 | OpenShell | the sanctioned agents run in OpenShell sandboxes: provider profile (key injected only toward the AI Gateway), network policy with an allow-list, the advisor flagging a policy change that would add a new host | the runtime enforces what the agent may touch, in the kernel |
 | 8 | Meet the agents | each tenant's kagent agent, its tools, its model, its key; ask Aurora's agent for a queue summary; watch the trace in Polaris | agents are tenants' workloads |
@@ -66,13 +66,15 @@ loop. About 3.5 hours; 13 is a bonus.
 
 ## What is real in each product, checked 2026-10-31
 
-- **BNK 2.4.2** is what the lab installs (critical release; its release notes list PHP CVE fixes only, no
-  feature change from 2.4.1). Neither the 2.4.1 nor the 2.4.2 notes, nor the AI how-to index, describe MCP or
-  A2A as BNK features. BNK's AI section is Intelligent AI Load Balancing (F5BigAnalyzer), the F5 Endpoint Picker
-  (InferencePool, InferenceObjective, InferenceModelRewrite) and semantic caching. A2A is an experimental feature
-  of BIG-IP v21.1, a different product. So in this lab MCP and A2A traffic are carried by BNK the way they really
-  are today: as HTTP through Gateway API routes, with iRules and the firewall ACL doing the per-request work.
-  If an Early Access A2A/MCP feature arrives for 2.4.x, chapter 5 is where it slots in.
+- **BNK 2.4.2** is what the lab installs (critical release; PHP CVE fixes on top of 2.4.1, no feature change).
+  The agentic features arrived in **2.4.0** ("MCP and A2A persistence profiles with OIDC and JWT validation"):
+  `F5BigPersistenceProfile` with `persistenceType: MODEL_CONTEXT_PROTOCOL` or `AGENT2AGENT` (each with an
+  encryption passphrase from a Secret), attached to a Gateway listener through `NetPolicy` next to
+  `F5BigCneIrule`; and identity validation at ingress through the Access CRDs (`F5BigAccessJwtConfig` with
+  issuer, audience, JWKS URI and allowed algorithms; `F5BigAccessOauthProvider`; `F5BigAccessAccessPolicy`).
+  OAuth flows are "planned for a later release". All of these CRDs are present on the 2.4.1 EVE cluster, so
+  chapter 5 uses them: MCP persistence for the tenant MCP server, A2A persistence for the agents' A2A endpoint,
+  JWT validation in front of both, and iRules for what the CRDs do not express.
 - **CalypsoAI** is reached the way the lb POC reaches it: `POST /backend/v1/scans`, bearer token, verdict in
   `result.outcome` (`cleared`, `flagged`, `redacted`). With `CALYPSO_API_KEY` set the sideband goes to
   `us2.calypsoai.app` through a TLS egress bridge (F5VirtualServer + Pool + ServerSSL). Without it the lab runs

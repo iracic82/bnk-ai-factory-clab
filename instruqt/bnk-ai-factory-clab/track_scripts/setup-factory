@@ -29,6 +29,7 @@ step "lab repository"
 if [ -d "$LAB_ROOT/.git" ]; then git -C "$LAB_ROOT" fetch -q origin "$LAB_REF" && git -C "$LAB_ROOT" checkout -q FETCH_HEAD
 else git clone -q --depth 1 --branch "$LAB_REF" "https://x-access-token:${GH_READ_TOKEN}@${LAB_REPO}" "$LAB_ROOT"; fi
 git -C "$LAB_ROOT" remote set-url origin "https://${LAB_REPO}"     # the token stays out of .git/config
+unset GH_READ_TOKEN
 export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig"
 cd "$LAB_ROOT"
 
@@ -42,6 +43,11 @@ step "cluster"
 bash install/20-cluster.sh
 step "BNK"
 bash install/30-bnk.sh
+# The learner is root on this VM. The FAR credential and the licence token have done their work (images sit in
+# the mirrors' cache, the licence is a License CR), so they leave the disk here. The CalypsoAI key stays only
+# if chapter 10 is to use the real service; 60-guardrails.sh reads it and shreds it too.
+shred -u "$SECRETS_DIR/cne_pull_64.json" "$SECRETS_DIR/license.jwt" 2>/dev/null || true
+unset FAR_PULL_B64 BNK_LICENSE_JWT
 for s in 40-ai 50-agents 60-guardrails; do
   [ -x "install/$s.sh" ] && { step "$s"; bash "install/$s.sh"; }
 done
