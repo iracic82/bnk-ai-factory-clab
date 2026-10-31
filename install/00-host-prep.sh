@@ -44,11 +44,19 @@ modules_extra_from_launchpad() {
   pub=$(curl -fsS -m 60 "$api?ws.op=getPublishedBinaries&binary_name=$pkg&exact_match=true&distro_arch_series=https://api.launchpad.net/devel/ubuntu/noble/amd64" \
         | python3 -c 'import json,sys; e=json.load(sys.stdin)["entries"]; print(e[0]["self_link"] if e else "")')
   [ -n "$pub" ] || return 1
-  url=$(curl -fsS -m 60 "$pub?ws.op=binaryFileUrls" | python3 -c 'import json,sys; u=json.load(sys.stdin); print(u[0] if u else "")')
-  [ -n "$url" ] || return 1
+  # the API gives the file's sha256 with the URL; https only, Launchpad hosts only, and the hash checked before dpkg
+  local meta; meta=$(curl -fsS --proto '=https' -m 60 "$pub?ws.op=binaryFileUrls&include_meta=true" \
+        | python3 -c 'import json,sys; u=json.load(sys.stdin); print(u[0]["url"], u[0]["sha256"]) if u else None')
+  url=${meta%% *}; local sha=${meta##* }
+  case "$url" in https://launchpad.net/*|https://launchpadlibrarian.net/*) ;; *) warn "unexpected package URL $url"; return 1 ;; esac
+  [ ${#sha} -eq 64 ] || return 1
   deb=$(mktemp -d)/$pkg.deb
   echo "      $pkg is not in the archive any more; fetching Ubuntu's build from Launchpad"
-  curl -fsSL -m 600 -o "$deb" "$url" && sudo dpkg -i "$deb" >/dev/null && rm -f "$deb"
+  curl -fsSL --proto '=https' --proto-redir '=https' -m 600 -o "$deb" "$url" || return 1
+  echo "$sha  $deb" | sha256sum -c - >/dev/null || { rm -f "$deb"; fail "$pkg: sha256 mismatch against Launchpad's record"; }
+  # the package depends on wireless-regdb, which the cloud image lacks: dpkg unpacks and stops, apt -f finishes it
+  sudo dpkg -i "$deb" >/dev/null 2>&1 || sudo apt-get install -y -qq -f >/dev/null
+  rm -f "$deb"; sudo depmod -a
 }
 for m in vrf vxlan 8021q bridge; do
   if ! sudo modprobe "$m" 2>/dev/null; then
