@@ -1,8 +1,9 @@
-# Ingress isolation for the whole tenant namespace: pods of other tenants (and every other namespace) can't connect.
-# Allowed in: the tenant's own pods; kagent (the UI talks to the tenant's kagent Agent, the controller reads the MCP
-# tools); and TMM's internal self IPs 10.10.12.41-43 (F5SPKVlan internal), which is where the tenant Gateway's
-# traffic comes from (SNAT automap), on the web port only. Kubelet probes come from the pod's own node, which Calico
-# always allows. Egress is the BNK side: F5SPKEgress steers the namespace's outbound traffic into the tenant VRF.
+# Ingress isolation for the whole tenant namespace: pods of other tenants, and every other namespace, cannot connect.
+# Allowed in: the tenant's own pods; kagent's controller and UI, on the MCP and web ports only (they list the tenant's
+# tools and talk to its Agent); and TMM, which fronts the tenant's published VIP, on the web port only (TMM's
+# internal self IP is filled in by install/50-agents.sh). Kubelet probes come from the pod's own node, which Calico
+# always allows. Egress is BNK's side: F5SPKEgress steers the namespace's outbound traffic into the tenant VRF, where
+# the firewall ACL decides.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -12,9 +13,11 @@ spec:
   policyTypes: [Ingress]
   ingress:
   - from: [{podSelector: {}}]
-  - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kagent}}}]
   - from:
-    - {ipBlock: {cidr: 10.10.12.41/32}}
-    - {ipBlock: {cidr: 10.10.12.42/32}}
-    - {ipBlock: {cidr: 10.10.12.43/32}}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kagent}}
+      podSelector: {matchExpressions: [{key: app.kubernetes.io/name, operator: In, values: [kagent, kagent-controller, kagent-ui]}]}
+    ports: [{protocol: TCP, port: 8001}, {protocol: TCP, port: 8080}]
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
+    - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
     ports: [{protocol: TCP, port: 8080}]
