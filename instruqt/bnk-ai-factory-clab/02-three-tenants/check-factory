@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+kubectl -n f5-bnk get f5virtualserver tenant-b-reports >/dev/null 2>&1 || fail-message "F5VirtualServer tenant-b-reports (10.202.100.11, VRF tenant-b) does not exist yet."
+docker exec r5 vtysh -c 'show ip route 10.202.100.11' 2>/dev/null | grep -q '10.202.100.11/32' || fail-message "r5 has no route to 10.202.100.11 yet; give BGP a few seconds and check leaf1's VRF tenant-b table."
+code=$(docker exec client curl -s -m 5 -o /dev/null -w '%{http_code}' http://10.202.100.11/ 2>/dev/null)
+[ "$code" = 200 ] || fail-message "the client got HTTP '$code' from 10.202.100.11; expected 200."
+exit 0

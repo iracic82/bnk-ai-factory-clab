@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+kubectl apply -f - <<'EOF'
+apiVersion: k8s.f5net.com/v1
+kind: F5VirtualServer
+metadata: {name: tenant-b-reports, namespace: f5-bnk}
+spec:
+  destinationAddress: 10.202.100.11
+  destinationPort: 80
+  vrf: tenant-b
+  pool: tenant-b-hello
+  routeAdvertisement: true
+  snat: {type: automap}
+EOF
+for _ in $(seq 1 30); do docker exec client curl -s -m 3 -o /dev/null -w '%{http_code}' http://10.202.100.11/ 2>/dev/null | grep -q 200 && exit 0; sleep 3; done
+exit 0
