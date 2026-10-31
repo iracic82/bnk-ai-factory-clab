@@ -105,10 +105,11 @@ aigw_tenant() {   # name display vip
   # both in {data:...}. Both shapes are read, and a create that yields nothing prints the API's answer.
   local SCOPE PKEYS TEAM r; SCOPE=$(printf '%s\n' "${MODELS[@]}" | jq -R . | jq -sc .); PKEYS=$(printf '%s\n' "${REF[@]}" | jq -R . | jq -sc .)
   jq -n --arg i "$T-org" --arg n "$D" --argjson s "$SCOPE" '{id:$i,name:$n,modelScope:$s}' | j "$TA/governance/orgs" --data-binary @- >/dev/null
-  team_id() { j "$TA/governance/teams" | jq -r --arg n "$D apps" --arg o "$T-org" '(.data // .items)[]? | select((.name==$n or .displayName==$n) and .orgId==$o) | .id' | head -1; }
+  # 2.4.2 rejects whitespace in a team name ("team name must not contain whitespace"): slug name, display name apart
+  team_id() { j "$TA/governance/teams" | jq -r --arg n "$T-apps" --arg o "$T-org" '(.data // .items)[]? | select(.name==$n and .orgId==$o) | .id' | head -1; }
   TEAM=$(team_id)
   if [ -z "$TEAM" ]; then
-    r=$(jq -n --arg n "$D apps" --arg o "$T-org" --argjson s "$SCOPE" '{name:$n,orgId:$o,modelScope:$s}' | j "$TA/governance/teams" --data-binary @-)
+    r=$(jq -n --arg n "$T-apps" --arg d "$D apps" --arg o "$T-org" --argjson s "$SCOPE" '{name:$n,displayName:$d,orgId:$o,modelScope:$s}' | j "$TA/governance/teams" --data-binary @-)
     TEAM=$(echo "$r" | jq -r '.data.id // .id // empty'); [ -n "$TEAM" ] || TEAM=$(team_id)
     [ -n "$TEAM" ] || warn "$T: team not created: $(echo "$r" | head -c 300)"
   fi
