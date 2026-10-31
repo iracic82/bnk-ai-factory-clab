@@ -1,7 +1,9 @@
 slug: bnk-ai-factory-clab
+id: megnpib5bsgz
 title: AI Factory on One VM - BNK, tenants, agents and the shadow agent
-teaser: BIG-IP Next for Kubernetes on kind behind a real EVPN fabric. Three tenants, NVIDIA simulators,
-  kagent agents on OpenShell and Agent Substrate, CalypsoAI guardrails through BNK iRules.
+teaser: BIG-IP Next for Kubernetes on kind behind a real EVPN fabric. Three tenants,
+  NVIDIA simulators, kagent agents on OpenShell and Agent Substrate, CalypsoAI guardrails
+  through BNK iRules.
 description: |-
   **One VM, a whole AI factory.**
 
@@ -16,18 +18,16 @@ description: |-
   BNK iRule, OpenShell's network policy and BNK egress in the tenant VRF.
 icon: ./assets/icon.png
 tags:
-- bnk
-- f5
 - nvidia
+- bnk
 - kubernetes
-- ai
 - agents
+- f5
+- ai
 - containerlab
 owner: f5
 developers:
 - iracic@infoblox.com
-private: true
-published: false
 show_timer: true
 skipping_enabled: true
 idle_timeout: 3600
@@ -38,3 +38,5 @@ lab_config:
   feedback_tab_enabled: false
   loadingMessages: true
   hideStopButton: false
+checksum: "13817819272792303492"
+enhanced_loading: false

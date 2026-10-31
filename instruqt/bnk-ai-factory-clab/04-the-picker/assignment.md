@@ -1,10 +1,11 @@
 ---
 slug: the-picker
-id: ""
+id: ovove5gkzpwy
 type: challenge
 title: 4. The picker
-teaser: BNK does not only pick a node; its Endpoint Picker chooses the model worker per request, from the workers'
-  own KV-cache events and load. Send the same prompt twice and watch the second one land where the cache is.
+teaser: BNK does not only pick a node; its Endpoint Picker chooses the model worker
+  per request, from the workers' own KV-cache events and load. Send the same prompt
+  twice and watch the second one land where the cache is.
 notes:
 - type: text
   contents: |-
@@ -16,16 +17,26 @@ notes:
     This is the layer the llm-d project calls "topology must reach the router". BNK's picker is cache- and
     load-aware; it does not yet score by network topology (rack, rail), which is what chapter 13 is about.
 tabs:
-- id: terminal
+- id: megyxgnorev5
   title: Terminal
   type: terminal
   hostname: factory
   cmd: /bin/bash -l
-- id: prometheus
+- id: vuwchtju0cez
+  title: Terminal 2
+  type: terminal
+  hostname: factory
+  cmd: /bin/bash -l
+- id: vcwo6kuwrxk3
   title: Prometheus
   type: service
   hostname: factory
   port: 30909
+- id: ghsz302wuuku
+  title: Grafana
+  type: service
+  hostname: factory
+  port: 30300
 difficulty: intermediate
 timelimit: 1200
 enhanced_loading: false

@@ -1,10 +1,11 @@
 ---
 slug: gpus-without-gpus
-id: ""
+id: 8dv8o9oetqmn
 type: challenge
 title: 3. GPUs without GPUs
-teaser: NVIDIA's own simulators give the cluster eight H100s it does not have and two model workers that behave like
-  vLLM. KAI shares the GPUs between the tenants by quota. Submit work for each tenant and watch who gets what.
+teaser: NVIDIA's own simulators give the cluster eight H100s it does not have and
+  two model workers that behave like vLLM. KAI shares the GPUs between the tenants
+  by quota. Submit work for each tenant and watch who gets what.
 notes:
 - type: text
   contents: |-
@@ -20,16 +21,26 @@ notes:
     the eight GPUs through a parent queue and gives each tenant a quota it is guaranteed, with borrowing allowed
     while others are idle.
 tabs:
-- id: terminal
+- id: 5auxikf1bnng
   title: Terminal
   type: terminal
   hostname: factory
   cmd: /bin/bash -l
-- id: grafana
+- id: gzmkrcdfttym
+  title: Terminal 2
+  type: terminal
+  hostname: factory
+  cmd: /bin/bash -l
+- id: 39op6gnznijm
   title: Grafana
   type: service
   hostname: factory
   port: 30300
+- id: dumetxe5n2de
+  title: Prometheus
+  type: service
+  hostname: factory
+  port: 30909
 difficulty: basic
 timelimit: 1200
 enhanced_loading: false

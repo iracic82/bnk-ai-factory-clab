@@ -22,9 +22,10 @@ done
 umask 077; mkdir -p "$SECRETS_DIR"
 printf '%s' "$FAR_PULL_B64" > "$SECRETS_DIR/cne_pull_64.json"
 printf '%s' "$BNK_LICENSE_JWT" > "$SECRETS_DIR/license.jwt"
-[ -n "${CALYPSO_API_KEY:-}" ] && printf '%s' "$CALYPSO_API_KEY" > "$SECRETS_DIR/calypso-api-key"
-[ -n "${CALYPSO_PROJECT_ID:-}" ] && printf '%s' "$CALYPSO_PROJECT_ID" > "$SECRETS_DIR/calypso-project-id"
-[ -n "${CALYPSO_URL:-}" ] && printf '%s' "$CALYPSO_URL" > "$SECRETS_DIR/calypso-url"
+[ -n "${AI_CALYPSO_API:-}" ] && printf '%s' "$AI_CALYPSO_API" > "$SECRETS_DIR/calypso-api-key"
+[ -n "${AI_CALYPSO_PROJECT:-}" ] && printf '%s' "$AI_CALYPSO_PROJECT" > "$SECRETS_DIR/calypso-project-id"
+[ -n "${AI_CALYPSO_URL:-}" ] && printf '%s' "$AI_CALYPSO_URL" > "$SECRETS_DIR/calypso-url"
+unset AI_CALYPSO_API AI_CALYPSO_PROJECT
 umask 022
 
 step "lab repository"

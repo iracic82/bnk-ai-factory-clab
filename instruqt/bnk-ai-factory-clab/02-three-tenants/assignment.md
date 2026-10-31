@@ -1,11 +1,11 @@
 ---
 slug: three-tenants
-id: ""
+id: cumn408iqlez
 type: challenge
 title: 2. Three tenants
-teaser: Aurora Health, Borealis Bank and Cobalt Labs each get a VRF on the fabric, a VLAN leg into TMM, their own VIPs,
-  their own egress addresses and their own AI Gateway tenant. Read one tenant end to end, then publish a new service
-  for another and watch the fabric carry it.
+teaser: Aurora Health, Borealis Bank and Cobalt Labs each get a VRF on the fabric,
+  a VLAN leg into TMM, their own VIPs, egress addresses and AI Gateway tenant. Read
+  one tenant end to end, then publish a service for another.
 notes:
 - type: text
   contents: |-
@@ -20,12 +20,17 @@ notes:
     The point of this chapter is that nothing a tenant has can be reached by another tenant, and that the fabric
     treats each one as its own routing domain all the way to r5.
 tabs:
-- id: terminal
+- id: 56dfgew0utlc
   title: Terminal
   type: terminal
   hostname: factory
   cmd: /bin/bash -l
-- id: polaris
+- id: ueeqodf9ccom
+  title: Terminal 2
+  type: terminal
+  hostname: factory
+  cmd: /bin/bash -l
+- id: 2jmhjqjai5rv
   title: Polaris
   type: service
   hostname: factory

@@ -1,10 +1,11 @@
 ---
 slug: the-factory
-id: ""
+id: 0opjtgxzor87
 type: challenge
 title: 1. One VM, a whole factory
-teaser: A spine/leaf/border EVPN fabric, an exit router, a client and a three node Kubernetes cluster with BNK on it,
-  all on the machine you are logged into. Walk it before you change anything.
+teaser: A spine/leaf/border EVPN fabric, an exit router, a client and a three node
+  Kubernetes cluster with BNK on it, all on the machine you are logged into. Walk
+  it before you change anything.
 notes:
 - type: text
   contents: |-
@@ -16,12 +17,17 @@ notes:
     In this first chapter you look at each piece from the outside in: the fabric's routes, the cluster's nodes,
     TMM's session, and a request from the client that crosses all of it.
 tabs:
-- id: terminal
+- id: vug5lxsr4kxz
   title: Terminal
   type: terminal
   hostname: factory
   cmd: /bin/bash -l
-- id: polaris
+- id: ymd9odlmnb7g
+  title: Terminal 2
+  type: terminal
+  hostname: factory
+  cmd: /bin/bash -l
+- id: ylrgyhyyfvvx
   title: Polaris
   type: service
   hostname: factory
