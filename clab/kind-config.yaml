@@ -7,6 +7,15 @@ networking:
   disableDefaultCNI: true
   podSubnet: "192.168.0.0/16"
   serviceSubnet: "10.96.0.0/12"
+# Agent Substrate v0.0.11 needs the beta certificate APIs (ClusterTrustBundle, PodCertificateRequest) on the API server,
+# the controller manager and every kubelet. On kubeadm the EVE lab patched static pod manifests after the fact
+# (Home_k8s install/ai4/00-feature-gates.sh); kind takes them at cluster creation.
+featureGates:
+  ClusterTrustBundle: true
+  ClusterTrustBundleProjection: true
+  PodCertificateRequest: true
+runtimeConfig:
+  "certificates.k8s.io/v1beta1": "true"
 nodes:
   - role: control-plane
     # No port mappings here: the UIs (Polaris console, Grafana, Prometheus, kagent) are published by socat units on

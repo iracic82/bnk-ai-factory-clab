@@ -32,5 +32,5 @@ if grep -rIl -e '-----BEGIN' -e '"private_key"' /root /etc/docker /var/lib/docke
 echo
 echo "================================================================"
 echo " READY TO SAVE   mirrors: $size   disk: $(df -h / | tail -1 | awk '{print $3" of "$2}')"
-echo " Stop the VM and save it as f5/bnk-clab."
+echo " Stop the VM and save it as f5/aibnk."
 echo "================================================================"

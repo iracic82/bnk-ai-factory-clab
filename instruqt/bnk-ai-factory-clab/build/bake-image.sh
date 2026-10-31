@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bakes the custom VM image the track boots from. Run once on an Instruqt custom-image VM (Ubuntu 24.04, 32 vCPU,
-# 100 GB disk), then run finalise-image.sh, stop the VM and save it from the Instruqt UI as f5/bnk-clab.
+# 100 GB disk), then run finalise-image.sh, stop the VM and save it from the Instruqt UI as f5/aibnk.
 #
 # What it bakes: the tooling (docker, kind, containerlab, kubectl, helm), the kernel settings, and the registry
 # mirrors with every image the lab pulls. The way to fill the mirrors without maintaining a list is to run the

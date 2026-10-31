@@ -10,7 +10,7 @@ version: "3"
 # image the lab needs, so track start is containerlab + kind + applying manifests, not downloading.
 virtualmachines:
 - name: factory
-  image: f5/bnk-clab
+  image: f5/aibnk
   machine_type: n2-standard-32
   shell: /bin/bash
   ports:

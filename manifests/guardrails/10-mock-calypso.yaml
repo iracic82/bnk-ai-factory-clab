@@ -13,9 +13,20 @@ data:
     import json
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    # A prompt that contains any of these is flagged. Kept short and obvious for a demo.
-    BLOCK = ["hack", "password", "credit card", "social security", "bomb", "exploit",
-             "malware", "ransomware", "sql injection", "ddos", "steal", "weapon"]
+    # Stands in for CalypsoAI's scanners with the shapes the story needs: patient identifiers (MRN, national ID,
+    # payment card), the exfiltration verbs the shadow agent uses, and a few classic abuse words. Same wire format
+    # as the real service: POST /backend/v1/scans, verdict in "outcome" ("flagged" or "pass").
+    import re
+    PATTERNS = [
+        r"\bMRN[-\s:]?\d{6,}\b",                      # medical record numbers
+        r"\b\d{3}-\d{2}-\d{4}\b",                     # national ID / SSN shape
+        r"\b(?:\d[ -]?){13,16}\b",                      # payment card shape
+        r"\b(?:patient|clinical)\s+(?:record|export|identifier)s?\b",
+        r"\b(?:post|send|upload|forward)\b.{0,60}\b(?:webhook|hooks\.|external|outside)\b",
+        r"\b(?:exfil|exfiltrat)\w*\b",
+    ]
+    BLOCK = ["password", "credit card", "social security", "malware", "ransomware", "sql injection", "ddos"]
+    RX = [re.compile(p, re.I | re.S) for p in PATTERNS]
 
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -30,8 +41,9 @@ data:
 
         def do_POST(self):
             n = int(self.headers.get("Content-Length", "0"))
-            body = self.rfile.read(n).decode("utf-8", "replace").lower()
-            flagged = any(k in body for k in BLOCK)
+            raw = self.rfile.read(n).decode("utf-8", "replace")
+            body = raw.lower()
+            flagged = any(k in body for k in BLOCK) or any(r.search(raw) for r in RX)
             self._send({"outcome": "flagged" if flagged else "pass"})
 
         def do_GET(self):

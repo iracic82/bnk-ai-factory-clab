@@ -55,7 +55,7 @@ One TMM, on `bnk-worker`. Labelling a second node sends the lifecycle operator i
 | `install/50-agents.sh` | kagent 0.10.4 with CPU qwen through the AI Gateway, the per-tenant agents, NVIDIA OpenShell (gateway + Agent Sandbox controller; the sanctioned agents run in sandboxes, the key is injected only toward the AI Gateway), Agent Substrate v0.0.11 (the release kagent 0.10.4 accepts), and the shadow agent for the story |
 | `install/60-guardrails.sh` | CalypsoAI: the iRule sideband on the tenant Gateway, real service when a key is present, the mock otherwise |
 | `docs/storyline.md` | the lab's story and the chapter plan |
-| `instruqt/bnk-ai-factory-clab/` | the track: `config.yml` (one n2-standard-32 VM, image `f5/bnk-clab`, team secrets), `track.yml`, `track_scripts/setup-factory` (runs `install/*` in order), `build/bake-image.sh` + `finalise-image.sh` (the custom image), `SIZING.md` |
+| `instruqt/bnk-ai-factory-clab/` | the track: `config.yml` (one n2-standard-32 VM, image `f5/aibnk`, team secrets), `track.yml`, `track_scripts/setup-factory` (runs `install/*` in order), `build/bake-image.sh` + `finalise-image.sh` (the custom image), `SIZING.md` |
 
 Secrets never live here. Locally they come from `~/bnk-secrets`; on Instruqt from team secrets
 (`FAR_PULL_B64`, `BNK_LICENSE_JWT`, `GH_READ_TOKEN`, optionally `CALYPSO_API_KEY`).
