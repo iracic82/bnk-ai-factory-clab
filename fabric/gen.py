@@ -126,6 +126,10 @@ def leaf(name, asn, lo):
             f" neighbor tmm peer-group", f" neighbor tmm remote-as {TMM_ASN}",
             f" neighbor tmm local-as {TMM_GW_ASN} no-prepend replace-as", f" neighbor tmm timers 3 9",
             f" bgp listen range {handoff} peer-group tmm",
+            # leaf1 also dials TMM's self IP (.11) in every VRF. The EVE lab's fabric opened the tenant sessions
+            # towards TMM (hence TCP 179 in the legs' allowed_services); with the leaf passive, the sessions
+            # depend on TMM dialing out of a VRF, which it did not do on the first fresh plays (2026-10-31).
+            *( [f" neighbor {gw(handoff, 11).split('/')[0]} peer-group tmm"] if name == "leaf1" else [] ),
             " !", " address-family ipv4 unicast", "  neighbor tmm activate", "  neighbor tmm default-originate",
             f"  neighbor tmm prefix-list from-tmm-{vrf} in", "  neighbor tmm soft-reconfiguration inbound",
             " exit-address-family"])
