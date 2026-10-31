@@ -6,7 +6,16 @@
 #
 # Secrets arrive as team secrets in the environment (config.yml). None lives in the repository.
 set -euo pipefail
-exec > >(tee -a /var/log/setup-factory.log) 2>&1
+# Re-run under a pipe to tee so every line reaches both Instruqt's log and the file, including the last ones
+# before a failure (a background process substitution loses those when the script exits).
+if [ -z "${SETUP_FACTORY_TEE:-}" ]; then
+  export SETUP_FACTORY_TEE=1
+  bash "$0" "$@" 2>&1 | tee -a /var/log/setup-factory.log
+  exit "${PIPESTATUS[0]}"
+fi
+# Lifecycle scripts get a minimal environment; the tooling lives in /usr/local/bin and the lab expects root's HOME.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin:/root/.local/bin"
+export HOME="${HOME:-/root}"
 fail() { echo; echo "FAILED: $*" >&2; exit 1; }
 step() { echo; echo "### $(date -u +%H:%M:%S) $*"; }
 
@@ -49,6 +58,9 @@ echo "lab at $(git -C "$LAB_ROOT" rev-parse --short HEAD), $(git -C "$LAB_ROOT" 
 export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig" LAB_PUBLIC=1
 cd "$LAB_ROOT"
 
+step "environment"
+echo "user=$(id -un) HOME=$HOME shell=$BASH_VERSION"
+for t in bash git docker kind containerlab kubectl helm python3 jq sudo curl; do printf '  %-12s %s\n' "$t" "$(command -v "$t" || echo MISSING)"; done
 step "host (hugepages, limits; already baked, this re-asserts after boot)"
 bash install/00-host-prep.sh
 step "registry mirrors"
