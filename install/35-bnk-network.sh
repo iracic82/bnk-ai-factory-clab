@@ -65,6 +65,27 @@ INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"; INTERNAL_PLEN
 apply_f5 "$M/bnk/10-network.yaml" "$(sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|" -e "s|__INTERNAL_PLEN__|$INTERNAL_PLEN|" "$M/bnk/10-network.yaml")"
 ok "internal self IP $INTERNAL_SELFIP/$INTERNAL_PLEN on the kind network $KIND_SUBNET"
 
+step "GatewayClass f5-gateway-class (every Gateway here names it; nothing else creates it)"
+# The EVE lab creates it by hand (install/bnk/phase-c.yaml there) with controllerName f5.com/default-f5-cne-controller,
+# "default" being its BNK namespace. Without it every Gateway stays "Waiting for controller" (bake of 2026-10-31).
+GW_CTRL="f5.com/f5-bnk-f5-cne-controller"
+kubectl apply -f - <<EOF >/dev/null
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata: {name: f5-gateway-class}
+spec:
+  controllerName: $GW_CTRL
+  description: F5 BIG-IP Next for Kubernetes
+EOF
+acc=""
+for _ in $(seq 1 24); do acc=$(kubectl get gatewayclass f5-gateway-class -o jsonpath='{.status.conditions[?(@.type=="Accepted")].status}' 2>/dev/null); [ "$acc" = True ] && break; sleep 5; done
+if [ "$acc" != True ]; then
+  warn "GatewayClass not Accepted with controllerName $GW_CTRL; names the controller logs:"
+  kubectl -n f5-bnk logs deploy/f5-cne-controller -c f5-cne-controller --tail=5000 2>/dev/null | grep -oE 'f5\.com/[A-Za-z0-9-]+' | sort | uniq -c | sort -rn | head -3 | sed 's/^/      /'
+  fail "fix GW_CTRL in install/35-bnk-network.sh to the name above"
+fi
+ok "GatewayClass f5-gateway-class Accepted by $GW_CTRL"
+
 step "the fabric side of the handoff (leaf1 eth3 must carry 172.16.10.1 before TMM can peer)"
 docker exec leaf1 ip -br addr show eth3 2>/dev/null | grep -q ' 172.16.10.1/24' \
   || fail "leaf1 eth3 has no 172.16.10.1/24: the fabric is not configured. Run: FABRIC_CONFIG_ONLY=1 bash install/10-fabric.sh"
