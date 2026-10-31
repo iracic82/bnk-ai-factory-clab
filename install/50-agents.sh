@@ -47,6 +47,10 @@ kubectl -n agent-sandbox-system rollout status deploy --timeout=300s >/dev/null
 # (bake of 2026-10-31). oci://ghcr.io/nvidia/openshell/helm-chart 0.1.5 has appVersion 0.1.5; the EVE lab used the
 # same chart (pulled as charts/helm-chart there).
 kubectl create ns openshell --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+# a release whose first install failed in a hook cannot be upgraded ("has no deployed releases"); start it over
+case "$(helm -n openshell status openshell -o json 2>/dev/null | jq -r .info.status)" in
+  failed|pending-install|pending-upgrade) helm -n openshell uninstall openshell --wait >/dev/null 2>&1 || true ;;
+esac
 helm upgrade --install openshell oci://ghcr.io/nvidia/openshell/helm-chart --version "$OPENSHELL" -n openshell --wait --timeout 10m >/dev/null
 kubectl -n openshell rollout status statefulset/openshell --timeout=300s >/dev/null 2>&1 || kubectl -n openshell rollout status deploy --timeout=300s >/dev/null
 if ! command -v openshell >/dev/null; then
