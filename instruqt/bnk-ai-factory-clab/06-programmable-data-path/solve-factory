@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig LAB_ROOT=/root/lab
-kubectl -n tenant-a get gateway tenant-mcp >/dev/null 2>&1 || bash /root/lab/instruqt/bnk-ai-factory-clab/05-sessions-that-stick/solve-factory
+kubectl -n f5-bnk get gateway tenant-mcp >/dev/null 2>&1 || bash /root/lab/instruqt/bnk-ai-factory-clab/05-sessions-that-stick/solve-factory
 kubectl apply -f $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml >/dev/null
 for _ in $(seq 1 30); do docker exec client curl -s -m 5 -i http://172.16.100.23/factory/whoami 2>/dev/null | grep -q 'X-Factory-Tenant' && exit 0; sleep 4; done
 exit 0

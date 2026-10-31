@@ -205,7 +205,7 @@ const FLOWS = [
  { id:"mcp", label:"MCP and A2A sessions stick", color:C.agent, status:["ch","chapter 5"], steps:[
     {p:"cliTmm", c:C.agent, lit:["n-client","n-ext"], t:"A client starts an MCP session on Aurora's MCP gateway <code>172.16.100.23</code>; the answer carries <code>Mcp-Session-Id</code>."},
     {p:"tmmMcp", c:C.agent, lit:["n-vips","n-ta"], t:"The listener has an <code>F5BigPersistenceProfile</code> of type <code>MODEL_CONTEXT_PROTOCOL</code>, attached through a <code>NetPolicy</code>. TMM reads the session id from the protocol and keeps every follow-up on the pod that created it, with three replicas behind the route."},
-    {p:"tmmA2a", c:C.agent, lit:["n-kagent"], t:"The agents gateway <code>172.16.100.14</code> carries the <code>AGENT2AGENT</code> type for <code>message/send</code> and <code>tasks/get</code>."}],
+    {p:"tmmA2a", c:C.agent, lit:["n-kagent"], t:"The agents gateway <code>172.16.100.14</code> (f5-bnk/agents-gw) carries the <code>AGENT2AGENT</code> type for <code>message/send</code> and <code>tasks/get</code>."}],
    why:"Protocol-aware persistence: no cookie the application has to set, no header rewriting." },
  { id:"sandbox", label:"An agent in an OpenShell sandbox", color:C.agent, status:["ok","chapter 8"], steps:[
     {p:"sbxAi", c:C.agent, lit:["n-openshell","n-ta","n-int"], t:"The sanctioned assistant runs in a sandbox with one provider: Aurora's AI route. The supervisor injects the key on the way out; the sandbox never holds it."},

@@ -179,7 +179,7 @@ def c05():
                   ("F5BigPersistenceProfile", ["type MODEL_CONTEXT_PROTOCOL", "Secret mcp-passphrase"], {"color": GREEN}),
                   ("agent x3", ["before: 6 calls, 2-3 pods", "after: 6 calls, 1 pod"], {"color": GREEN})],
           arrows=[(GREEN, "session"), (GREEN, "attached"), (GREEN, "sticks")])
-    s.row(B, BH, [("the same for A2A · .14", ["type AGENT2AGENT", "message/send, then tasks/get", "NetPolicy on kagent/agents-gw"], {"color": PURPLE}),
+    s.row(B, BH, [("the same for A2A · .14", ["type AGENT2AGENT", "message/send, then tasks/get", "NetPolicy next to it in f5-bnk"], {"color": PURPLE}),
                   ("the attachment shape", ["NetPolicy: targetRef Gateway + listener", "extensionRefs: BNK extensions", "one per listener, same namespace"], {})])
     s.strip(C, CH, "what you measure",
             ["scale deploy/agent to 3 · one initialize, six tools/call with the same id, the pod name from each answer", "uniq -c before the Secret exists and after: TMM read the session id from the protocol, not from a cookie"])

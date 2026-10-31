@@ -3,7 +3,7 @@
 # stamps every other request with the tenant, so the backend can see which gateway delivered it.
 apiVersion: k8s.f5net.com/v1
 kind: F5BigCneIrule
-metadata: {name: tenant-stamp, namespace: tenant-a}
+metadata: {name: tenant-stamp, namespace: f5-bnk}
 spec:
   iRule: |
     when HTTP_REQUEST {
@@ -16,7 +16,7 @@ spec:
 ---
 apiVersion: gateway.k8s.f5.com/v1alpha1
 kind: NetPolicy
-metadata: {name: tenant-mcp-sessions, namespace: tenant-a}
+metadata: {name: tenant-mcp-sessions, namespace: f5-bnk}
 spec:
   extensionRefs:
   - {group: k8s.f5net.com, kind: F5BigPersistenceProfile, name: tenant-mcp-sessions}

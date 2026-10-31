@@ -1,12 +1,13 @@
 # Chapter 5: Aurora's MCP server published on BNK, with an MCP-aware persistence profile on the listener.
 #
-# The Gateway lives in tenant-a next to the backend Service (agent:8001, the MCP sidecar of the tenant's app), the
-# way the tenant's web app is published in chapter 2. The profile is attached through a NetPolicy: NetPolicy, Gateway
-# and profile in the same namespace (F5 docs, NetPolicy). The passphrase Secret is created by the learner (chapter 5)
-# or by solve-factory; it is what TMM encrypts the session cookie with.
+# The Gateway, the profile, its Secret and the NetPolicy live in BNK's namespace: the controller programs F5's
+# extension kinds (F5BigPersistenceProfile, F5BigCneIrule) only there (first full play, 2026-10-31: the same objects
+# in tenant-a never got a status and the NetPolicy reported the profile 'does not exist'). The tenant owns the
+# HTTPRoute in its own namespace, attached across namespaces, the way the pool VIP works. The passphrase Secret is
+# created by the learner (chapter 5) or by solve-factory; it is what TMM encrypts the session cookie with.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
-metadata: {name: tenant-mcp, namespace: tenant-a}
+metadata: {name: tenant-mcp, namespace: f5-bnk}
 spec:
   gatewayClassName: f5-gateway-class
   infrastructure:
@@ -18,21 +19,23 @@ spec:
     port: 80
     protocol: HTTP
     allowedRoutes:
-      namespaces: {from: Same}
+      namespaces:
+        from: Selector
+        selector: {matchLabels: {kubernetes.io/metadata.name: tenant-a}}
       kinds: [{group: gateway.networking.k8s.io, kind: HTTPRoute}]
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata: {name: tenant-mcp, namespace: tenant-a}
 spec:
-  parentRefs: [{name: tenant-mcp, sectionName: http}]
+  parentRefs: [{name: tenant-mcp, namespace: f5-bnk, sectionName: http}]
   rules:
   - matches: [{path: {type: PathPrefix, value: /mcp}}]
     backendRefs: [{name: agent, port: 8001}]
 ---
 apiVersion: k8s.f5net.com/v1
 kind: F5BigPersistenceProfile
-metadata: {name: tenant-mcp-sessions, namespace: tenant-a}
+metadata: {name: tenant-mcp-sessions, namespace: f5-bnk}
 spec:
   persistenceType: MODEL_CONTEXT_PROTOCOL
   mcpEncryptionPassphrase:
@@ -40,7 +43,7 @@ spec:
 ---
 apiVersion: gateway.k8s.f5.com/v1alpha1
 kind: NetPolicy
-metadata: {name: tenant-mcp-sessions, namespace: tenant-a}
+metadata: {name: tenant-mcp-sessions, namespace: f5-bnk}
 spec:
   extensionRefs:
   - {group: k8s.f5net.com, kind: F5BigPersistenceProfile, name: tenant-mcp-sessions}

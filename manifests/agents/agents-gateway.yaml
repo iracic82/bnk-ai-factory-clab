@@ -6,7 +6,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: agents-gw
-  namespace: kagent
+  namespace: f5-bnk        # BNK's namespace: chapter 5 attaches a persistence profile here, and the controller programs those only in its own namespace
 spec:
   gatewayClassName: f5-gateway-class
   infrastructure:
@@ -18,7 +18,9 @@ spec:
     port: 80
     protocol: HTTP
     allowedRoutes:
-      namespaces: {from: Same}
+      namespaces:
+        from: Selector
+        selector: {matchLabels: {kubernetes.io/metadata.name: kagent}}
       kinds: [{group: gateway.networking.k8s.io, kind: HTTPRoute}]
 ---
 apiVersion: gateway.networking.k8s.io/v1
@@ -27,7 +29,7 @@ metadata:
   name: kagent
   namespace: kagent
 spec:
-  parentRefs: [{name: agents-gw, sectionName: http}]
+  parentRefs: [{name: agents-gw, namespace: f5-bnk, sectionName: http}]
   rules:
   # kagent serves every agent under /api/a2a/<namespace>/<agent>/. Only the three tenant agents are published; the
   # operator's agent (kagent/factory-operator, read-only cluster tools) is not reachable from outside. Chapter 5 puts

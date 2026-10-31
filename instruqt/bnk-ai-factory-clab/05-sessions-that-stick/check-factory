@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig
-kubectl -n tenant-a get gateway tenant-mcp >/dev/null 2>&1 || fail-message "Gateway tenant-a/tenant-mcp does not exist yet (apply manifests/chapters/05-mcp-route.yaml)."
-kubectl -n tenant-a get secret mcp-passphrase >/dev/null 2>&1 || fail-message "Secret tenant-a/mcp-passphrase is missing; the persistence profile stays unprogrammed without it."
-[ "$(kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] \
-  || fail-message "F5BigPersistenceProfile tenant-a/tenant-mcp-sessions is not programmed yet; check its conditions."
+kubectl -n f5-bnk get gateway tenant-mcp >/dev/null 2>&1 || fail-message "Gateway f5-bnk/tenant-mcp does not exist yet (apply manifests/chapters/05-mcp-route.yaml)."
+kubectl -n f5-bnk get secret mcp-passphrase >/dev/null 2>&1 || fail-message "Secret f5-bnk/mcp-passphrase is missing; the persistence profile stays unprogrammed without it."
+[ "$(kubectl -n f5-bnk get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] \
+  || fail-message "F5BigPersistenceProfile f5-bnk/tenant-mcp-sessions is not programmed yet; check its conditions."
 [ "$(kubectl -n tenant-a get deploy agent -o jsonpath='{.status.readyReplicas}' 2>/dev/null)" -ge 3 ] 2>/dev/null \
   || fail-message "deploy/agent in tenant-a has fewer than 3 ready replicas; scale it to 3."
-kubectl -n kagent get netpolicy agents-a2a-sessions >/dev/null 2>&1 || fail-message "NetPolicy kagent/agents-a2a-sessions (the AGENT2AGENT profile) is not applied yet."
+kubectl -n f5-bnk get netpolicy agents-a2a-sessions >/dev/null 2>&1 || fail-message "NetPolicy f5-bnk/agents-a2a-sessions (the AGENT2AGENT profile) is not applied yet."
 # six calls on one session must land on one pod
 sid=$(docker exec client curl -s -m 10 -D - -o /dev/null http://172.16.100.23/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
       -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"check","version":"1"}}}' 2>/dev/null | grep -i '^Mcp-Session-Id' | awk '{print $2}' | tr -d '\r')

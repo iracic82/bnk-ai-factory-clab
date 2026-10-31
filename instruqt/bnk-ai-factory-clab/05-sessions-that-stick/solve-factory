@@ -2,11 +2,11 @@
 set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig LAB_ROOT=/root/lab
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-mcp-route.yaml >/dev/null
-kubectl -n tenant-a create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n f5-bnk create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n tenant-a scale deploy/agent --replicas=3 >/dev/null
-kubectl -n kagent create secret generic a2a-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl -n f5-bnk create secret generic a2a-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-a2a-persistence.yaml >/dev/null
-kubectl -n tenant-a wait --for=condition=Programmed gateway/tenant-mcp --timeout=240s >/dev/null 2>&1
+kubectl -n f5-bnk wait --for=condition=Programmed gateway/tenant-mcp --timeout=240s >/dev/null 2>&1
 kubectl -n tenant-a rollout status deploy/agent --timeout=240s >/dev/null 2>&1
-for _ in $(seq 1 30); do [ "$(kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] && break; sleep 5; done
+for _ in $(seq 1 30); do [ "$(kubectl -n f5-bnk get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] && break; sleep 5; done
 exit 0

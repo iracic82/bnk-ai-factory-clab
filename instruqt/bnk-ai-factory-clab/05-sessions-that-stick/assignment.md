@@ -63,15 +63,17 @@ the same idea on the agents gateway.
 
 ## Publish Aurora's MCP server on BNK
 
-The MCP sidecar is reachable inside the cluster only. Give it a BNK Gateway of its own, in Aurora's namespace, on an
-address from the pool, with an HTTPRoute for `/mcp`. The manifest also carries the persistence profile and the
-NetPolicy that attaches it, which stay unprogrammed until a passphrase Secret exists. Read it before you apply it:
+The MCP sidecar is reachable inside the cluster only. Give it a BNK Gateway of its own on an address from the pool.
+The Gateway is published by the platform team in BNK's namespace, with its listener open to routes from Aurora's
+namespace, and Aurora owns the HTTPRoute for `/mcp` in its own namespace, the same shape as the pool VIP. The
+manifest also carries the persistence profile and the NetPolicy that attaches it, next to the Gateway in `f5-bnk`;
+they stay unprogrammed until a passphrase Secret exists there. Read it before you apply it:
 
 ```bash,run
 grep -nE '^kind:|^  name:|destinationAddress|value: 172|type: MODEL|passphrase|targetRef|extensionRef' $LAB_ROOT/manifests/chapters/05-mcp-route.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-mcp-route.yaml 2>&1 | grep -v persistence
-kubectl -n tenant-a wait --for=condition=Programmed gateway/tenant-mcp --timeout=180s
-kubectl -n tenant-a get gateway/tenant-mcp httproute/tenant-mcp
+kubectl -n f5-bnk wait --for=condition=Programmed gateway/tenant-mcp --timeout=180s
+kubectl -n f5-bnk get gateway/tenant-mcp; kubectl -n tenant-a get httproute/tenant-mcp
 ```
 
 `Programmed=True` means TMM has the listener. From the client, behind r5, the route answers an MCP `initialize` with a
@@ -118,18 +120,18 @@ The profile encrypts the session cookie it issues with a passphrase from a Secre
 the profile within seconds, and its condition tells you when:
 
 ```bash,run
-kubectl -n tenant-a create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n f5-bnk create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
 sleep 10
-kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions netpolicy tenant-mcp-sessions
-kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+kubectl -n f5-bnk get f5-big-persistence-profiles/tenant-mcp-sessions netpolicy/tenant-mcp-sessions
+kubectl -n f5-bnk get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
 
 Read the two objects you just made live. The profile is the behaviour. The NetPolicy is the attachment, with the
 Gateway and its listener on one side and the profile on the other:
 
 ```bash,run
-kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
-kubectl -n tenant-a get netpolicy tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
+kubectl -n f5-bnk get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
+kubectl -n f5-bnk get netpolicy tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
 ```
 
 Same measurement, new session:
@@ -155,13 +157,13 @@ for i in 1 2 3; do mcp "$SID2" '{"jsonrpc":"2.0","id":2,"method":"tools/call","p
 
 The tenant assistants answer the Agent2Agent protocol on the agents gateway, `172.16.100.14`, which chapter 9 uses in
 anger. A2A has the same shape of problem: `message/send` creates a task on one pod, and `tasks/get` for that task
-must find the same pod. The profile type is `AGENT2AGENT`, and the attachment is the same NetPolicy shape, this time
-in the `kagent` namespace where that Gateway lives:
+must find the same pod. The profile type is `AGENT2AGENT`, and the attachment is the same NetPolicy shape, next to
+that Gateway in `f5-bnk`:
 
 ```bash,run
-kubectl -n kagent create secret generic a2a-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n f5-bnk create secret generic a2a-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-a2a-persistence.yaml
-sleep 10; kubectl -n kagent get f5-big-persistence-profiles agents-a2a-sessions netpolicy agents-a2a-sessions
+sleep 10; kubectl -n f5-bnk get f5-big-persistence-profiles/agents-a2a-sessions netpolicy/agents-a2a-sessions
 docker exec client curl -s -m 10 http://172.16.100.14/api/a2a/tenant-a/assistant/.well-known/agent-card.json | python3 -m json.tool | head -20
 ```
 
@@ -171,10 +173,11 @@ call in chapters 7, 9 and 10 already goes through it.
 
 ## What Mira writes back to Aurora
 
-- A Gateway per tenant service, in the tenant's namespace, on an address from BNK's pool. The tenant's team can
-  own that object.
-- `NetPolicy` is the attachment: the Gateway listener on one side, a BNK extension on the other, same namespace, one
-  per listener. Chapter 6 adds an iRule to this same NetPolicy, and chapter 11 attaches a guardrail with another.
+- A Gateway per tenant service, published from BNK's namespace on an address from the pool, with the tenant owning
+  the HTTPRoute in its own namespace. BNK's extension objects (profiles, iRules) are programmed only next to the
+  Gateway in `f5-bnk`, which is why the attachment lives there.
+- `NetPolicy` is the attachment: the Gateway listener on one side, a BNK extension on the other, in the Gateway's
+  namespace, one per listener. Chapter 6 adds an iRule to this same NetPolicy, and chapter 11 attaches a guardrail with another.
 - Two persistence types that read the protocol. The Polaris routes do not need them (one request, one answer). MCP
   servers and A2A agents do.
 

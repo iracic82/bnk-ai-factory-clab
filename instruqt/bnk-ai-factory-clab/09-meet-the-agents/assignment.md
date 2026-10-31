@@ -85,11 +85,11 @@ for t in a b c; do kubectl -n tenant-$t get modelconfig tenant-model -o jsonpath
 kubectl -n tenant-a get pods -o wide --no-headers | awk '{printf "%-36s %-10s %s\n", $1, $3, $7}'
 ```
 
-Where the assistants are published: one BNK Gateway in `kagent` on `172.16.100.14` with an HTTPRoute per tenant path,
-and nothing else. That is the surface the client sees:
+Where the assistants are published: one BNK Gateway on `172.16.100.14` in BNK's namespace, with kagent's HTTPRoute
+attached to it and only the tenant paths in it. That is the surface the client sees:
 
 ```bash,run
-kubectl -n kagent get gateway,httproute
+kubectl -n f5-bnk get gateway/agents-gw; kubectl -n kagent get httproute
 kubectl -n kagent get httproute kagent -o jsonpath='{range .spec.rules[*]}{.matches[0].path.value}{"\n"}{end}'
 ```
 
