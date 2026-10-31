@@ -9,6 +9,32 @@
 #   - it has no per-node kubeconfig field and kind writes the context into the user's ~/.kube/config. The context
 #     is exported into clab/kubeconfig and removed from ~/.kube/config again.
 source "$(dirname "$0")/lib/common.sh"
+FRR_NODES="spine1 spine2 leaf1 leaf2 border1 r5"
+
+# The node setup scripts are bind-mounted into the containers and containerlab runs them at deploy, but on the
+# Instruqt VM that exec fired before the veths to the kind nodes existed, so leaf1 configured nothing (bake of
+# 2026-10-31). The scripts are idempotent and wait for their interfaces (fabric/gen.py), and this runs them again
+# once the deploy is complete, then checks the handoff addresses that TMM and r5 depend on.
+# FABRIC_CONFIG_ONLY=1 does just that part on a lab that is already deployed.
+fabric_configure() {
+  step "fabric node configuration (every node's setup.sh again, idempotent)"
+  for n in $FRR_NODES; do docker exec "$n" sh /setup.sh || fail "$n: setup.sh failed"; done
+  local bad=0 chk
+  for chk in "leaf1 eth3 172.16.10.1/24" "leaf1 eth3.101 172.17.101.1/24" "leaf2 eth3 172.16.10.1/24" \
+             "border1 eth3.200 172.16.200.1/30" "r5 eth1.200 172.16.200.2/30" "r5 eth2 172.16.250.1/24"; do
+    set -- $chk
+    if docker exec "$1" ip -br addr show "$2" 2>/dev/null | grep -q " $3"; then ok "$1 $2 $3"
+    else warn "$1 $2 does not carry $3"; bad=1; fi
+  done
+  [ "$bad" = 0 ] || fail "fabric handoffs incomplete; see above"
+}
+if [ "${FABRIC_CONFIG_ONLY:-0}" = 1 ]; then
+  python3 "$REPO_ROOT/fabric/gen.py" >/dev/null
+  fabric_configure
+  step "fabric sessions (leaf1)"
+  docker exec leaf1 vtysh -c 'show bgp summary' | sed -n '1,40p'
+  exit 0
+fi
 
 step "fabric configs"
 python3 "$REPO_ROOT/fabric/gen.py"
@@ -72,6 +98,7 @@ kubectl --kubeconfig "$HOME/.kube/config" config delete-context kind-bnk >/dev/n
 kubectl --kubeconfig "$HOME/.kube/config" config delete-cluster kind-bnk >/dev/null 2>&1 || true
 kubectl --kubeconfig "$HOME/.kube/config" config delete-user kind-bnk >/dev/null 2>&1 || true
 ok "containerlab deploy finished"
+fabric_configure
 
 step "cluster"
 kubectl get nodes -o wide

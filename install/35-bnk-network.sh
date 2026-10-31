@@ -64,6 +64,11 @@ INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"; INTERNAL_PLEN
 apply_f5 "$M/bnk/10-network.yaml" "$(sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|" -e "s|__INTERNAL_PLEN__|$INTERNAL_PLEN|" "$M/bnk/10-network.yaml")"
 ok "internal self IP $INTERNAL_SELFIP/$INTERNAL_PLEN on the kind network $KIND_SUBNET"
 
+step "the fabric side of the handoff (leaf1 eth3 must carry 172.16.10.1 before TMM can peer)"
+docker exec leaf1 ip -br addr show eth3 2>/dev/null | grep -q ' 172.16.10.1/24' \
+  || fail "leaf1 eth3 has no 172.16.10.1/24: the fabric is not configured. Run: FABRIC_CONFIG_ONLY=1 bash install/10-fabric.sh"
+ok "leaf1 eth3 172.16.10.1/24"
+
 step "routes to the shared VIP pool through TMM's internal leg (nodes and the VM)"
 # Published VIPs (172.16.100.0/24: pool VIP, AI Gateway routes, agents gateway) are announced to the fabric, which
 # the client behind r5 uses. Pods and the VM have no leg on the fabric; they reach the same VIPs through TMM's

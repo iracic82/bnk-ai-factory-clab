@@ -181,8 +181,26 @@ for row in csv.DictReader(open(os.path.join(HERE, "nodes.csv"))):
     open(os.path.join(d, "daemons"), "w").write(DAEMONS)
     open(os.path.join(d, "frr.conf"), "w").write("\n".join(conf) + "\nline vty\n")
     p = os.path.join(d, "setup.sh")
-    # setup.sh runs once per container start; the guard makes clab's exec idempotent on a redeploy
-    open(p, "w").write("\n".join(setup[:2] + ["[ -e /run/fabric-setup.done ] && exit 0"] + setup[2:] +
-                                 ["vtysh -b >/dev/null 2>&1 || true", "touch /run/fabric-setup.done"]) + "\n")
+    # setup.sh must be safe to run any number of times and at any moment: containerlab's exec ran on the Instruqt
+    # VM before the veth links existed (leaf1 had no eth3 yet, `set -e` stopped the script at the first line and
+    # the leaf never got its handoff addresses: bake of 2026-10-31), and install/10-fabric.sh runs it again after
+    # the deploy. So every command is idempotent (`ip addr replace`, `ip link add` only if the device is missing)
+    # and the script first waits for the interfaces it configures.
+    import re
+    devs = sorted({m for line in setup for m in re.findall(r"\beth\d\b", line)})
+    body = []
+    for line in setup[2:]:
+        line = re.sub(r"^ip addr add ", "ip addr replace ", line)
+        m = re.match(r"^ip link add link (\S+) name (\S+) (.*)$", line)
+        if m:
+            line = f"la {m.group(2)} link {m.group(1)} {m.group(3)}"
+        else:
+            line = re.sub(r"^ip link add (\S+) ", r"la \1 ", line)
+        body.append(line)
+    head = ["#!/bin/sh", "set -e",
+            "la() { ip link show \"$1\" >/dev/null 2>&1 || ip link add \"$@\"; }   # add a link only if it is missing",
+            "wd() { for d in \"$@\"; do i=0; until ip link show \"$d\" >/dev/null 2>&1; do i=$((i+1)); [ $i -ge 900 ] && { echo \"setup: $d never appeared\" >&2; exit 1; }; sleep 1; done; done; }",
+            f"wd {' '.join(devs)}" if devs else ": no interfaces to wait for"]
+    open(p, "w").write("\n".join(head + body + ["vtysh -b >/dev/null 2>&1 || true"]) + "\n")
     os.chmod(p, os.stat(p).st_mode | stat.S_IEXEC)
     print(row["name"], len(conf), "lines frr.conf,", len(setup), "setup commands")
