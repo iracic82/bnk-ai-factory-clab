@@ -158,13 +158,13 @@ shows the burst.
 
 ## TMM's side of it
 
-The ext-proc conversation is invisible to the client. From TMM's point of view the pool VIP is a virtual server
-whose pool members are chosen per request, and the picker's answer is honoured exactly. Read the virtual server BNK
-built for the route and the pool behind it:
+The ext-proc conversation is invisible to the client. A Gateway API route is programmed into TMM directly, so there
+is no `F5VirtualServer` object to read for it. What there is: the Gateway's listener with the route attached, and
+the InferencePool's status, which says the picker reference resolved and the parent accepted it:
 
 ```bash,run
-kubectl -n f5-bnk get f5-virtualservers,pools -A --no-headers 2>/dev/null | grep -iE 'model-pool|aigw-models' | head -6
-kubectl -n aigw-models get inferencepool model-pool -o jsonpath='{.status}' | python3 -m json.tool | head -20
+kubectl -n f5-bnk get gateway pool-vip -o jsonpath='{.spec.addresses[0].value}: {range .status.listeners[*]}{.name} port={.port} attachedRoutes={.attachedRoutes}{"\n"}{end}'
+kubectl -n aigw-models get inferencepool model-pool -o jsonpath='{range .status.parents[0].conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
 
 ## Disaggregated mode
