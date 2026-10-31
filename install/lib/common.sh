@@ -5,9 +5,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export REPO_ROOT
 export KUBECONFIG="${KUBECONFIG:-$REPO_ROOT/clab/kubeconfig}"
 export CLAB_TOPO="$REPO_ROOT/clab/bnk-factory.clab.yml"
-# Same pins as bnk-deploy/versions.env for K8S_MINOR 1.30, so the installer's preflight sees what its CI sees
-export KIND_NODE_IMAGE="kindest/node:v1.30.13"
-export CALICO_VERSION="v3.29.1"
+# Kubernetes 1.35 (BNK 2.4.x supports it; Agent Substrate needs its PodCertificateRequest API) with the Calico the EVE
+# lab proved on 1.35.9. bnk-deploy is qualified on 1.30 and only warns about the difference. kind v0.32.0 image, by digest.
+export KIND_NODE_IMAGE="kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e940429c2ce42fa3a5619ec2bbc60b949c0ac95"
+export CALICO_VERSION="v3.32.2"
 export FRR_IMAGE="quay.io/frrouting/frr:10.6.2"
 export NR_HUGEPAGES=2048            # 4 GiB of 2 Mi pages: TMM asks for 2 Gi, kubelet keeps the rest in reserve
 SECRETS_DIR="${SECRETS_DIR:-$HOME/bnk-secrets}"

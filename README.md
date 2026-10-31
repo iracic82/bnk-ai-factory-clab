@@ -46,7 +46,7 @@ One TMM, on `bnk-worker`. Labelling a second node sends the lifecycle operator i
 | Path | What |
 |---|---|
 | `clab/bnk-factory.clab.yml` | the containerlab topology: FRR fabric, r5, client, the kind cluster and its node links |
-| `clab/kind-config.yaml` | kind: one control plane, two workers, no default CNI (Calico), pod CIDR 192.168.0.0/16 |
+| `clab/kind-config.yaml` | kind 1.35: one control plane, two workers, no default CNI (Calico 3.32), the feature gates Agent Substrate needs, pod CIDR 192.168.0.0/16 |
 | `fabric/gen.py` | writes `fabric/nodes/<node>/{frr.conf,daemons,setup.sh}` from `fabric/nodes.csv` (ASNs, loopbacks, VRFs, VNIs) |
 | `install/00-host-prep.sh` | hugepages, inotify limits, docker and tool checks. The only step that needs root on the host |
 | `install/05-registry-mirrors.sh` | one pull-through registry per upstream (repo.f5.com with the FAR credential, docker.io, quay.io, ghcr.io, registry.k8s.io, nvcr.io, gcr.io); the baked Instruqt image carries their cache, so track start pulls nothing |
@@ -74,7 +74,7 @@ Copied in, never referenced, so this repo stands alone:
 
 - Fabric design and address plan: `Home_k8s/install/fabric` (ASNs, loopbacks, VRFs, L3VNIs, the exit to R5).
 - BNK install: `iracic82/bnk-deploy`, public, cloned at install time. Its own CI already installs BNK phases
-  00 to 40 on kind 1.30 with Calico (`.github/workflows/e2e-kind.yml`), which is the recipe `20-cluster.sh` follows.
+  00 to 40 on kind 1.30 with Calico (this lab runs 1.35, the installer warns and continues) (`.github/workflows/e2e-kind.yml`), which is the recipe `20-cluster.sh` follows.
 - kagent values and the tenant agent: `Home_k8s/install/ai4`, `Home_k8s/apps/tenant-agent`.
 - Guardrail iRule and the mock Calypso service: `bnk-ai-kv-lab/instruqt/bnk-ai-demos-kv/manifests/41,44`.
 - Real CalypsoAI wire format: `bnk-ai-lb-poc-ref/f5-runtime-security/guardrails_connector`

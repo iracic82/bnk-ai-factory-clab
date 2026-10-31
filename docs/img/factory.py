@@ -36,7 +36,7 @@ text(W / 2, 66, "Instruqt VM n2-standard-32, image f5/aibnk · numbered circles 
 
 # ---- the VM frame
 box(30, 90, W - 60, H - 150, "#fafafa", "#0f172a", 16, 2.5)
-text(50, 116, "VM: docker, containerlab 0.75, kind v1.30.13, registry mirrors (/var/lib/bnk-mirrors), ollama (qwen2.5:1.5b on CPU)", 13.5, "#0f172a", 600)
+text(50, 116, "VM: docker, containerlab 0.75, kind v1.35.5, registry mirrors (/var/lib/bnk-mirrors), ollama (qwen2.5:1.5b on CPU)", 13.5, "#0f172a", 600)
 
 # ---- fabric (left)
 fx, fy = 50, 140

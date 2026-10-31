@@ -62,7 +62,7 @@ topology:
     # --- the kind cluster -------------------------------------------------------------------------------------
     bnk:
       kind: k8s-kind
-      image: kindest/node:v1.30.13
+      image: kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e940429c2ce42fa3a5619ec2bbc60b949c0ac95
       startup-config: kind-config.yaml
       # containerlab 0.75 has no per-node kubeconfig field; kind writes to $KUBECONFIG, which install/lib/common.sh
       # points at clab/kubeconfig, so the learner's ~/.kube/config is never touched

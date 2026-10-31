@@ -1,5 +1,6 @@
 # kind cluster for BNK. Same shape as bnk-deploy's own CI (ci/kind-multi.yaml): Calico instead of kindnet,
 # because FLO's preflight has to recognise the CNI, and the pod CIDR bnk-deploy's lab environment expects.
+# The node image comes from the topology file (clab/bnk-factory.clab.yml), not from here.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: bnk
@@ -7,10 +8,15 @@ networking:
   disableDefaultCNI: true
   podSubnet: "192.168.0.0/16"
   serviceSubnet: "10.96.0.0/12"
-# Agent Substrate v0.0.11 needs the PodCertificateRequest API, which exists from Kubernetes 1.34. BNK's installer pins
-# 1.30 (kindest/node v1.30.13), and asking 1.30 for that feature gate stops the API server from starting (bake of
-# 2026-10-31: kubeadm init timed out). So no gates here; install/50-agents.sh installs Substrate only where the API
-# exists. Moving the cluster to 1.35 (supported by BNK 2.4.x) is the way to get Substrate back.
+# Kubernetes 1.35 (install/lib/common.sh pins the node image). Agent Substrate v0.0.11 needs the certificate APIs below;
+# the EVE lab enabled the same three gates and the v1beta1 API on 1.35.9. On 1.30 the PodCertificateRequest gate does
+# not exist and the API server refuses to start (bake of 2026-10-31), which is why the cluster is 1.35.
+featureGates:
+  ClusterTrustBundle: true
+  ClusterTrustBundleProjection: true
+  PodCertificateRequest: true
+runtimeConfig:
+  "certificates.k8s.io/v1beta1": "true"
 nodes:
   - role: control-plane
     # No port mappings here: the UIs (Polaris console, Grafana, Prometheus, kagent) are published by socat units on

@@ -21,10 +21,10 @@ step() { echo; echo "### $(date -u +%H:%M:%S) $*"; }
 for s in FAR_PULL_B64 BNK_LICENSE_JWT GH_READ_TOKEN; do [ -n "${!s:-}" ] || fail "$s is not set"; done
 [ "${BAKE_FAST:-0}" = 1 ] && export LAB_FAST=1 && echo "BAKE_FAST: long waits capped; the harvest step does the caching"
 
-KIND_VERSION=v0.30.0
+KIND_VERSION=v0.32.0
 CLAB_VERSION=0.75.0
 HELM_VERSION=v3.19.0
-KUBECTL_VERSION=v1.30.13
+KUBECTL_VERSION=v1.35.5
 LAB_ROOT=/root/lab; SECRETS_DIR=/root/.bnk
 
 step "packages"
@@ -71,6 +71,6 @@ step "harvest images through the mirrors"
 echo "  $(wc -l < /tmp/images.txt) distinct images"
 while read -r img; do docker exec bnk-control-plane crictl pull "$img" >/dev/null 2>&1 || echo "  could not pull $img"; done < /tmp/images.txt
 # images docker itself runs (kind nodes, fabric, client, mirrors) live in docker's own cache
-for i in kindest/node:v1.30.13 quay.io/frrouting/frr:10.6.2 nicolaka/netshoot:v0.14 registry:2.8.3; do docker pull -q "$i"; done
+for i in kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e940429c2ce42fa3a5619ec2bbc60b949c0ac95 quay.io/frrouting/frr:10.6.2 nicolaka/netshoot:v0.14 registry:2.8.3; do docker pull -q "$i"; done
 du -sh /var/lib/bnk-mirrors | sed 's/^/  mirror cache: /'
 echo; echo "BAKE DONE. Now: bash $LAB_ROOT/instruqt/bnk-ai-factory-clab/build/finalise-image.sh (from a copy), stop the VM, save it."

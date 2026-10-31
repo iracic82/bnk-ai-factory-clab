@@ -3,7 +3,7 @@
 <text x="1200.0" y="40" font-size="26" font-weight="700" fill="#0f172a" text-anchor="middle">AI factory on one VM: containerlab fabric, kind, BNK 2.4.2, Polaris, NVIDIA simulators, agents, CalypsoAI</text>
 <text x="1200.0" y="66" font-size="14" font-weight="400" fill="#475569" text-anchor="middle">Instruqt VM n2-standard-32, image f5/aibnk · numbered circles = the chapter that looks there (docs/storyline.md)</text>
 <rect x="30" y="90" width="2340" height="1230" rx="16" fill="#fafafa" stroke="#0f172a" stroke-width="2.5"/>
-<text x="50" y="116" font-size="13.5" font-weight="600" fill="#0f172a" text-anchor="start">VM: docker, containerlab 0.75, kind v1.30.13, registry mirrors (/var/lib/bnk-mirrors), ollama (qwen2.5:1.5b on CPU)</text>
+<text x="50" y="116" font-size="13.5" font-weight="600" fill="#0f172a" text-anchor="start">VM: docker, containerlab 0.75, kind v1.35.5, registry mirrors (/var/lib/bnk-mirrors), ollama (qwen2.5:1.5b on CPU)</text>
 <rect x="50" y="140" width="700" height="560" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
 <text x="66" y="166" font-size="15" font-weight="700" fill="#15803d" text-anchor="start">FRR EVPN fabric (quay.io/frrouting/frr:10.6.2), configs from fabric/gen.py</text>
 <rect x="716" y="148" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
