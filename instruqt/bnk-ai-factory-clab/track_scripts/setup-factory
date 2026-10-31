@@ -80,10 +80,15 @@ shred -u "$SECRETS_DIR/cne_pull_64.json" "$SECRETS_DIR/license.jwt" 2>/dev/null 
 unset FAR_PULL_B64 BNK_LICENSE_JWT
 # The layers above BNK: a failure here is reported in /var/log/setup-factory.log and the chapter that needs the
 # layer says so in its check, but it does not take the whole start down with it.
-for s in 40-ai 45-observability 50-agents 60-guardrails; do
-  [ -f "$LAB_ROOT/install/$s.sh" ] || continue
-  step "$s"
-  bash "$LAB_ROOT/install/$s.sh" || echo "WARNING: install/$s.sh failed; see above. The lab starts without that layer."
+# The tolerant layers run two at a time: observability needs nothing from the AI layer, and the agents and the
+# guardrail both need only the AI layer's keys and routes. Each layer logs to its own file so the output stays
+# readable, and is printed under its own header once its pair has finished.
+layer() { bash "$LAB_ROOT/install/$1.sh" >"/var/log/setup-$1.log" 2>&1 || echo "WARNING: install/$1.sh failed; see /var/log/setup-$1.log. The lab starts without that layer." >>"/var/log/setup-$1.log"; }
+for pair in "40-ai 45-observability" "50-agents 60-guardrails"; do
+  pids=""
+  for s in $pair; do [ -f "$LAB_ROOT/install/$s.sh" ] && { layer "$s" & pids="$pids $!"; }; done
+  wait $pids || true
+  for s in $pair; do [ -f "/var/log/setup-$s.log" ] && { step "$s"; cat "/var/log/setup-$s.log"; }; done
 done
 
 step "Lab Topology tab (port 5050 on the VM address)"
