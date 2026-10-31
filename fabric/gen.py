@@ -181,11 +181,12 @@ for row in csv.DictReader(open(os.path.join(HERE, "nodes.csv"))):
     open(os.path.join(d, "daemons"), "w").write(DAEMONS)
     open(os.path.join(d, "frr.conf"), "w").write("\n".join(conf) + "\nline vty\n")
     p = os.path.join(d, "setup.sh")
-    # setup.sh must be safe to run any number of times and at any moment: containerlab's exec ran on the Instruqt
-    # VM before the veth links existed (leaf1 had no eth3 yet, `set -e` stopped the script at the first line and
-    # the leaf never got its handoff addresses: bake of 2026-10-31), and install/10-fabric.sh runs it again after
-    # the deploy. So every command is idempotent (`ip addr replace`, `ip link add` only if the device is missing)
-    # and the script first waits for the interfaces it configures.
+    # setup.sh must be safe to run any number of times and at any moment. On the Instruqt VM the first run died at
+    # 'ip link add external type vrf' ("Unknown device type": the host lacked the vrf module, 00-host-prep.sh loads
+    # it now), `set -e` stopped the script there and leaf1 never got its handoff addresses (bake of 2026-10-31);
+    # install/10-fabric.sh runs the scripts again after the deploy. So every command is idempotent (`ip addr
+    # replace`, `ip link add` only if the device is missing) and the script first waits for the interfaces it
+    # configures, in case containerlab's exec runs before a link exists.
     import re
     devs = sorted({m for line in setup for m in re.findall(r"\beth\d\b", line)})
     body = []

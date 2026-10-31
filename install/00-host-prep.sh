@@ -31,6 +31,20 @@ hp=$(awk '/HugePages_Total/{print $2}' /proc/meminfo)
 [ "$hp" -ge "$NR_HUGEPAGES" ] || fail "asked for $NR_HUGEPAGES hugepages, got $hp (fragmented memory; drop caches or reboot)"
 ok "hugepages $hp x 2 Mi, inotify and aio raised"
 
+step "kernel modules for the fabric (the FRR containers share the host kernel)"
+# VRF, VXLAN, 802.1q and bridge devices are what the leaves and the border build. On the Instruqt VM (Ubuntu 24.04
+# GCP kernel) 'ip link add ... type vrf' answered "Unknown device type" (bake of 2026-10-31): the vrf module ships
+# in linux-modules-extra, which the cloud image does not install. Loaded now, listed for boot, and proven.
+for m in vrf vxlan 8021q bridge; do
+  if ! sudo modprobe "$m" 2>/dev/null; then
+    sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)" >/dev/null 2>&1 || true
+    sudo modprobe "$m" || fail "kernel module $m is not available on this kernel ($(uname -r))"
+  fi
+done
+printf 'vrf\nvxlan\n8021q\nbridge\n' | sudo tee /etc/modules-load.d/bnk-factory.conf >/dev/null
+sudo ip link add bnk-vrf-probe type vrf table 4094 && sudo ip link del bnk-vrf-probe || fail "cannot create a VRF device"
+ok "vrf, vxlan, 8021q, bridge loaded; VRF device creation works"
+
 step "images"
 for i in "$KIND_NODE_IMAGE" "$FRR_IMAGE" nicolaka/netshoot:v0.14; do
   docker image inspect "$i" >/dev/null 2>&1 || docker pull -q "$i"; ok "$i"

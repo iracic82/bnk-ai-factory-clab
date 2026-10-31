@@ -11,10 +11,10 @@
 source "$(dirname "$0")/lib/common.sh"
 FRR_NODES="spine1 spine2 leaf1 leaf2 border1 r5"
 
-# The node setup scripts are bind-mounted into the containers and containerlab runs them at deploy, but on the
-# Instruqt VM that exec fired before the veths to the kind nodes existed, so leaf1 configured nothing (bake of
-# 2026-10-31). The scripts are idempotent and wait for their interfaces (fabric/gen.py), and this runs them again
-# once the deploy is complete, then checks the handoff addresses that TMM and r5 depend on.
+# The node setup scripts are bind-mounted into the containers and containerlab runs them at deploy. On the Instruqt
+# VM that run failed on the first VRF device (host kernel without the vrf module, see 00-host-prep.sh) and leaf1
+# configured nothing (bake of 2026-10-31). The scripts are idempotent and wait for their interfaces (fabric/gen.py);
+# this runs them again once the deploy is complete and checks the handoff addresses that TMM and r5 depend on.
 # FABRIC_CONFIG_ONLY=1 does just that part on a lab that is already deployed.
 fabric_configure() {
   step "fabric node configuration (every node's setup.sh again, idempotent)"
