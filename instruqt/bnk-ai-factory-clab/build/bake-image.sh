@@ -53,7 +53,9 @@ bash install/00-host-prep.sh
 bash install/05-registry-mirrors.sh
 bash install/10-fabric.sh
 bash install/20-cluster.sh
-bash install/30-bnk.sh
+# BNK's first reconcile pulls ~4 GB per node; with BAKE_FAST the installer's wait is capped at 10 minutes and a cold
+# pull can outlast it. The pods keep coming up regardless, so a second (third) pass simply finds them Available.
+for attempt in 1 2 3; do bash install/30-bnk.sh && break; echo "install/30-bnk.sh attempt $attempt did not finish; pods keep starting, retrying"; sleep 60; done
 bash install/35-bnk-network.sh
 # the layers above BNK may still be settling on a first run; a failure there is reported, not fatal, so the harvest
 # and finalise still happen and the log says exactly which step to look at
