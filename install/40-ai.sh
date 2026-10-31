@@ -41,7 +41,10 @@ step "model pool behind its own VIP with the F5 Endpoint Picker"
 kubectl apply -f "$M/20-pool-vip.yaml" >/dev/null
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # same rule as install/35-bnk-network.sh
 sed "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|g" "$M/50-netpol.yaml" | kubectl apply -f - >/dev/null
-kubectl -n aigw-models rollout status deploy/model-pool-epp --timeout="$(tmo 600s 180s)" >/dev/null && ok "picker running" || warn "picker not up yet"
+# the controller creates the picker Deployment from the F5EPP a few minutes after the CR lands (4-5 min on the bake VM)
+for _ in $(seq 1 "$(tmo 120 60)"); do kubectl -n aigw-models get deploy model-pool-epp >/dev/null 2>&1 && break; sleep 5; done
+kubectl -n aigw-models get deploy model-pool-epp >/dev/null 2>&1 || warn "no model-pool-epp Deployment yet (the controller has not acted on the F5EPP)"
+kubectl -n aigw-models rollout status deploy/model-pool-epp --timeout="$(tmo 600s 180s)" >/dev/null 2>&1 && ok "picker running" || warn "picker not up yet"
 
 step "ollama on the VM for the agents' model (qwen2.5:1.5b)"
 # A container on the VM, bound to the kind gateway address and loopback only: pods reach it over the node network,
@@ -98,14 +101,24 @@ aigw_tenant() {   # name display vip
     IFS='|' read -r name prov up <<<"$spec"; MODELS+=("$name")
     jq -n --arg n "$name" --arg p "${REF[$prov]}" --arg u "$up" '{name:$n,deployments:[{providerRef:$p,upstream:$u,dialects:["openai"]}]}' | j "$TA/models" --data-binary @- >/dev/null
   done
-  local SCOPE PKEYS TEAM; SCOPE=$(printf '%s\n' "${MODELS[@]}" | jq -R . | jq -sc .); PKEYS=$(printf '%s\n' "${REF[@]}" | jq -R . | jq -sc .)
+  # 2.4.2's management API lists as {items:[...]} and answers a create with the object itself; 2.4.1 (EVE) wrapped
+  # both in {data:...}. Both shapes are read, and a create that yields nothing prints the API's answer.
+  local SCOPE PKEYS TEAM r; SCOPE=$(printf '%s\n' "${MODELS[@]}" | jq -R . | jq -sc .); PKEYS=$(printf '%s\n' "${REF[@]}" | jq -R . | jq -sc .)
   jq -n --arg i "$T-org" --arg n "$D" --argjson s "$SCOPE" '{id:$i,name:$n,modelScope:$s}' | j "$TA/governance/orgs" --data-binary @- >/dev/null
-  TEAM=$(j "$TA/governance/teams" | jq -r --arg n "$D apps" '(.data // .items)[]? | select(.name==$n) | .id' | head -1)
-  [ -z "$TEAM" ] && TEAM=$(jq -n --arg n "$D apps" --arg o "$T-org" --argjson s "$SCOPE" '{name:$n,orgId:$o,modelScope:$s}' | j "$TA/governance/teams" --data-binary @- | jq -r .data.id)
-  jq -n --arg i "$T-app" --arg t "$TEAM" --argjson s "$SCOPE" '{id:$i,name:$i,kind:"service",teamId:$t,role:"member",active:true,modelScope:$s}' | j "$TA/governance/principals" --data-binary @- >/dev/null
+  team_id() { j "$TA/governance/teams" | jq -r --arg n "$D apps" --arg o "$T-org" '(.data // .items)[]? | select((.name==$n or .displayName==$n) and .orgId==$o) | .id' | head -1; }
+  TEAM=$(team_id)
+  if [ -z "$TEAM" ]; then
+    r=$(jq -n --arg n "$D apps" --arg o "$T-org" --argjson s "$SCOPE" '{name:$n,orgId:$o,modelScope:$s}' | j "$TA/governance/teams" --data-binary @-)
+    TEAM=$(echo "$r" | jq -r '.data.id // .id // empty'); [ -n "$TEAM" ] || TEAM=$(team_id)
+    [ -n "$TEAM" ] || warn "$T: team not created: $(echo "$r" | head -c 300)"
+  fi
+  r=$(jq -n --arg i "$T-app" --arg t "$TEAM" --argjson s "$SCOPE" '{id:$i,name:$i,kind:"service",teamId:$t,role:"member",active:true,modelScope:$s}' | j "$TA/governance/principals" --data-binary @-)
+  echo "$r" | jq -e '(.data.id // .id) != null' >/dev/null 2>&1 || j "$TA/governance/principals" | jq -e --arg i "$T-app" '(.data // .items)[]? | select(.id==$i)' >/dev/null 2>&1 \
+    || warn "$T: principal $T-app not created: $(echo "$r" | head -c 300)"
   if [ ! -s "$SECRETS_DIR/aigw/$T.key" ]; then
-    jq -n --arg n "$T-app-key" --arg p "$T-app" --argjson k "$PKEYS" --argjson s "$SCOPE" '{name:$n,principalId:$p,providerKeys:$k,modelScope:$s}' \
-      | j "$TA/virtual-keys" --data-binary @- | jq -r '.data.token // empty' > "$SECRETS_DIR/aigw/$T.key"; chmod 600 "$SECRETS_DIR/aigw/$T.key"
+    r=$(jq -n --arg n "$T-app-key" --arg p "$T-app" --argjson k "$PKEYS" --argjson s "$SCOPE" '{name:$n,principalId:$p,providerKeys:$k,modelScope:$s}' | j "$TA/virtual-keys" --data-binary @-)
+    echo "$r" | jq -r '.data.token // .token // empty' > "$SECRETS_DIR/aigw/$T.key"; chmod 600 "$SECRETS_DIR/aigw/$T.key"
+    [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "$T: virtual key not created: $(echo "$r" | head -c 300)"
   fi
   [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "no virtual key for $T"
   jq -n --arg n "$T-ai" --arg a "$VIP" '{name:$n,address:$a,gatewayClassName:"f5-gateway-class"}' | j "$TA/routes" --data-binary @- >/dev/null
