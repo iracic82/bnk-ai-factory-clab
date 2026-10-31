@@ -61,6 +61,19 @@ if ! command -v openshell >/dev/null; then
   rm -rf "$T"
 fi
 ok "openshell $(openshell --version 2>/dev/null | head -1)"
+# The CLI talks to the gateway over mTLS with the bundle the chart generated (docs/kubernetes/setup.mdx: copy the
+# openshell-client-tls Secret into the CLI's gateway directory, reach the Service locally, register with --local).
+# The documented port-forward is replaced by the lab's socat unit on loopback; the server certificate's SANs
+# include 127.0.0.1, so verification passes. Without this the CLI answers "No active gateway" (bake of 2026-10-31).
+GWN=factory; GWD="$HOME/.config/openshell/gateways/$GWN/mtls"; mkdir -p "$GWD"; chmod 700 "$GWD"
+for k in ca.crt tls.crt tls.key; do
+  kubectl -n openshell get secret openshell-client-tls -o jsonpath="{.data.${k//./\\.}}" | base64 -d > "$GWD/$k"; chmod 600 "$GWD/$k"
+done
+LAB_PUBLIC=0 expose_service openshell-cli openshell openshell 18090 8080
+openshell gateway list 2>/dev/null | grep -qw "$GWN" || openshell gateway add "https://127.0.0.1:18090" --local --name "$GWN" >/dev/null
+openshell gateway select "$GWN" >/dev/null 2>&1 || true
+openshell status 2>&1 | head -6 | sed 's/^/      /'
+
 # one provider per tenant: the sandbox gets the key only toward that tenant's route
 declare -A DISPLAY=( [a]="Aurora Health" [b]="Borealis Bank" [c]="Cobalt Labs" )
 for t in a b c; do
@@ -77,7 +90,8 @@ for _ in $(seq 1 "$(tmo 60 12)"); do [ "$(openshell sandbox list 2>/dev/null | g
 openshell sandbox list 2>/dev/null || warn "openshell sandbox list failed"
 
 step "Agent Substrate $SUBSTRATE"
-if ! kubectl api-resources 2>/dev/null | grep -q '^podcertificaterequests'; then
+# the API, not api-resources' table (its NAME column is not the first thing on a line when a group is wide)
+if ! kubectl get --raw /apis/certificates.k8s.io/v1beta1 2>/dev/null | grep -q '"podcertificaterequests"'; then
   warn "Substrate needs the PodCertificateRequest API (Kubernetes 1.34+); this cluster is $(kubectl version -o json 2>/dev/null | jq -r .serverVersion.gitVersion). Skipped; the sanctioned agents run as plain kagent Agents in their OpenShell sandboxes."
   kubectl get agents.kagent.dev -A; exit 0
 fi
