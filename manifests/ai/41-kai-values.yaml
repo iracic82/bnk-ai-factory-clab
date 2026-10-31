@@ -1,0 +1,5 @@
+# KAI Scheduler (kai-scheduler/KAI-Scheduler, chart v0.18.6): the Run:ai scheduler NVIDIA open-sourced. It runs next
+# to the default scheduler; only pods with schedulerName: kai-scheduler and a kai.scheduler/queue label use it.
+# NonMemoryEnforced (the default) lets a pod ask for part of a GPU with the gpu-fraction annotation.
+global:
+  gpuSharingMode: NonMemoryEnforced

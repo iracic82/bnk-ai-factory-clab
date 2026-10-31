@@ -1,0 +1,46 @@
+# One KAI queue per tenant under a parent that owns the 8 fake H100s. quota = GPUs the tenant is guaranteed,
+# limit -1 = it may borrow whatever is idle, overQuotaWeight = its share of the idle GPUs. When a tenant asks for
+# its quota back, KAI reclaims it from whoever borrowed it (preemptible workloads only, e.g. a batch Job).
+# CPU and memory are left unlimited (-1): the GPU is the resource being shared here.
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata: {name: ai-factory}
+spec:
+  displayName: AI Factory GPUs
+  resources:
+    gpu: {quota: 8, limit: 8, overQuotaWeight: 1}
+    cpu: {quota: -1, limit: -1, overQuotaWeight: 1}
+    memory: {quota: -1, limit: -1, overQuotaWeight: 1}
+---
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata: {name: tenant-a}
+spec:
+  displayName: Aurora Health
+  parentQueue: ai-factory
+  resources:
+    gpu: {quota: 4, limit: -1, overQuotaWeight: 2}
+    cpu: {quota: -1, limit: -1, overQuotaWeight: 1}
+    memory: {quota: -1, limit: -1, overQuotaWeight: 1}
+---
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata: {name: tenant-b}
+spec:
+  displayName: Borealis Bank
+  parentQueue: ai-factory
+  resources:
+    gpu: {quota: 2, limit: -1, overQuotaWeight: 1}
+    cpu: {quota: -1, limit: -1, overQuotaWeight: 1}
+    memory: {quota: -1, limit: -1, overQuotaWeight: 1}
+---
+apiVersion: scheduling.run.ai/v2
+kind: Queue
+metadata: {name: tenant-c}
+spec:
+  displayName: Cobalt Labs
+  parentQueue: ai-factory
+  resources:
+    gpu: {quota: 2, limit: -1, overQuotaWeight: 1}
+    cpu: {quota: -1, limit: -1, overQuotaWeight: 1}
+    memory: {quota: -1, limit: -1, overQuotaWeight: 1}

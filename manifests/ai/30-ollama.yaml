@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Namespace
+metadata: {name: llm-light}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: ollama-models, namespace: llm-light}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: nfs
+  resources: {requests: {storage: 20Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ollama, namespace: llm-light, labels: {app: ollama}}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: ollama}}
+  template:
+    metadata: {labels: {app: ollama}}
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:0.6.8
+        env:
+        - {name: OLLAMA_HOST, value: "0.0.0.0:11434"}
+        - {name: OLLAMA_KEEP_ALIVE, value: "-1"}
+        - {name: OLLAMA_NUM_PARALLEL, value: "4"}
+        - {name: OLLAMA_MAX_LOADED_MODELS, value: "4"}
+        - {name: OLLAMA_CONTEXT_LENGTH, value: "8192"}
+        ports: [{name: http, containerPort: 11434}]
+        lifecycle:
+          postStart:
+            exec:
+              command:
+              - /usr/bin/bash
+              - -c
+              - |
+                (
+                  sleep 8
+                  # m:pin. Four pinned models fill the 12Gi limit; qwen2.5:3b loads on demand.
+                  for mp in qwen2.5:1.5b:1 qwen2.5:0.5b:1 llama3.2:1b:1 smollm2:360m:1 qwen2.5:3b:0; do
+                    m=${mp%:*}
+                    ollama pull "$m"
+                    # Ollama starts one thread per visible core (24), the CPU limit is 10, and CFS throttling then
+                    # cuts generation from 18 to 2 tokens/s. num_thread = the CPU limit, baked into the model.
+                    printf 'FROM %s\nPARAMETER num_thread 10\n' "$m" > /tmp/Modelfile && ollama create "$m" -f /tmp/Modelfile
+                    [ "${mp##*:}" = 1 ] || continue
+                    # load-only request: no prompt => model is loaded and kept resident, nothing is generated
+                    body="{\"model\":\"$m\",\"keep_alive\":-1}"
+                    exec 3<>/dev/tcp/127.0.0.1/11434
+                    printf 'POST /api/generate HTTP/1.0\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s' "${#body}" "$body" >&3
+                    cat <&3 >/dev/null; exec 3>&-
+                  done
+                ) >/tmp/warmup.log 2>&1 &
+        readinessProbe: {httpGet: {path: /api/version, port: 11434}, periodSeconds: 5}
+        resources:
+          requests: {cpu: "4", memory: 6Gi}
+          limits: {cpu: "10", memory: 12Gi}
+        volumeMounts: [{name: models, mountPath: /root/.ollama}]
+      volumes:
+      - name: models
+        persistentVolumeClaim: {claimName: ollama-models}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: ollama, namespace: llm-light}
+spec:
+  selector: {app: ollama}
+  ports: [{name: http, port: 11434, targetPort: 11434}]

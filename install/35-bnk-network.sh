@@ -26,7 +26,12 @@ apply_immutable() {   # $1 file: delete + recreate the routing CRs in it if the 
 step "tenant namespaces and hello apps"
 kubectl apply -f "$M/tenants/hello.yaml" >/dev/null
 step "TMM legs and VIP pool"
-kubectl apply -f "$M/bnk/10-network.yaml"
+# the internal leg lives on the kind docker network, whose subnet docker chooses per host
+KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
+[ -n "$KIND_SUBNET" ] || fail "cannot read the kind network subnet"
+INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"; INTERNAL_PLEN="${KIND_SUBNET#*/}"
+sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|" -e "s|__INTERNAL_PLEN__|$INTERNAL_PLEN|" "$M/bnk/10-network.yaml" | kubectl apply -f -
+ok "internal self IP $INTERNAL_SELFIP/$INTERNAL_PLEN on the kind network $KIND_SUBNET"
 step "global routing"
 apply_immutable "$M/bnk/20-routing-global.yaml"
 step "tenant VRFs, routing, first VIPs"

@@ -71,9 +71,12 @@ if [ "$cur" != "$TARGET_MANIFEST" ]; then
 else ok "already on $TARGET_MANIFEST"; fi
 
 step "AI features and the EVE network model (patched on; the installer's template has no knob for them)"
+# pseudoCNI must leave pod, service and node-network traffic alone; the node network is whatever docker gave kind
+KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
 # aiGateway + intelligentLB are what the lab is about. demoMode as on EVE. The legacy network model (Vrf, Vxlan,
 # RoutingConfig) is the only one that carries EVPN in 2.4.1, and the controller registers its Vrf handler only with
 # USE_GATEWAY_SETTINGS=false. OcNOS (ZEBOS_STATE=ocnos) is the routing stack whose BGP comes from GlobalRoutingConfig.
+kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{"advanced":{"pseudoCNI":{"env":[{"name":"EXCLUDE_CIDR","value":"192.168.0.0/16,10.96.0.0/12,'"$KIND_SUBNET"'"}]}}}}' >/dev/null
 kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{
   "aiGateway":{"enabled":true,"aiMetrics":true},
   "intelligentLB":{"enabled":true},
@@ -83,8 +86,7 @@ kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{
     "cneController":{"env":[{"name":"USE_GATEWAY_SETTINGS","value":"false"},{"name":"VRF_MODE","value":"true"},
                             {"name":"MAX_ACTIVE_TMM_REPLICAS","value":"32"},{"name":"TMM_DEFAUlT_MTU","value":"1500"}]},
     "tmm":{"env":[{"name":"TMM_CALICO_ROUTER","value":"default"},{"name":"TMM_DEFAULT_MTU","value":"1500"},
-                  {"name":"TMM_MAPRES_ADDL_VETHS_ON_DP","value":"TRUE"},{"name":"ZEBOS_STATE","value":"ocnos"}]},
-    "pseudoCNI":{"env":[{"name":"EXCLUDE_CIDR","value":"192.168.0.0/16,10.96.0.0/12,172.18.0.0/16"}]}
+                  {"name":"TMM_MAPRES_ADDL_VETHS_ON_DP","value":"TRUE"},{"name":"ZEBOS_STATE","value":"ocnos"}]}
   }}}'
 kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}{"\n"}'
 kubectl get pods -A | grep -E 'f5-|tmm' | grep -v Running | grep -v Completed || ok "every F5 pod Running"

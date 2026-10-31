@@ -47,7 +47,18 @@ bash install/05-registry-mirrors.sh
 bash install/10-fabric.sh
 bash install/20-cluster.sh
 bash install/30-bnk.sh
+bash install/35-bnk-network.sh
 for s in 40-ai 50-agents 60-guardrails; do [ -x "install/$s.sh" ] && bash "install/$s.sh"; done
-# pull the images the kind nodes and the fabric use through docker too, so docker's own cache has them
+# Harvest: every image any pod references (Pending ones included, a small build VM leaves some Pending) and every
+# image the BNK release manifest names, pulled on one kind node so it passes through the mirrors into the cache.
+# No list to maintain: the cluster is the list.
+step "harvest images through the mirrors"
+{ kubectl get pods -A -o jsonpath='{range .items[*]}{range .spec.initContainers[*]}{.image}{"\n"}{end}{range .spec.containers[*]}{.image}{"\n"}{end}{end}'
+  kubectl get cnemanifest -A -o yaml 2>/dev/null | grep -oE 'repo\.f5\.com/[A-Za-z0-9/_.-]+:[A-Za-z0-9._-]+'
+} | grep -v '^$' | sort -u > /tmp/images.txt
+echo "  $(wc -l < /tmp/images.txt) distinct images"
+while read -r img; do docker exec bnk-control-plane crictl pull "$img" >/dev/null 2>&1 || echo "  could not pull $img"; done < /tmp/images.txt
+# images docker itself runs (kind nodes, fabric, client, mirrors) live in docker's own cache
 for i in kindest/node:v1.30.13 quay.io/frrouting/frr:10.6.2 nicolaka/netshoot:v0.14 registry:2.8.3; do docker pull -q "$i"; done
+du -sh /var/lib/bnk-mirrors | sed 's/^/  mirror cache: /'
 echo; echo "BAKE DONE. Now: bash $LAB_ROOT/instruqt/bnk-ai-factory-clab/build/finalise-image.sh (from a copy), stop the VM, save it."

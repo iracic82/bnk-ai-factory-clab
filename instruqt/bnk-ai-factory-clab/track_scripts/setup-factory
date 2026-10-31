@@ -43,6 +43,8 @@ step "cluster"
 bash install/20-cluster.sh
 step "BNK"
 bash install/30-bnk.sh
+step "BNK on the fabric"
+bash install/35-bnk-network.sh
 # The learner is root on this VM. The FAR credential and the licence token have done their work (images sit in
 # the mirrors' cache, the licence is a License CR), so they leave the disk here. The CalypsoAI key stays only
 # if chapter 10 is to use the real service; 60-guardrails.sh reads it and shreds it too.

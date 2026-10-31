@@ -23,8 +23,8 @@ spec:
   name: internal
   interfaces: ["1.2"]
   internal: true
-  selfip_v4s: [172.21.0.250]        # kind docker network 172.21.0.0/16; nodes are .13-.15, docker hands out low addresses
-  prefixlen_v4: 16
+  selfip_v4s: [__INTERNAL_SELFIP__]   # <kind network>/16 + .0.250, filled in by install/35-bnk-network.sh (docker picks the subnet)
+  prefixlen_v4: __INTERNAL_PLEN__
   auto_lasthop: AUTO_LASTHOP_ENABLED
 ---
 apiVersion: k8s.f5net.com/v1
