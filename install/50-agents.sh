@@ -42,10 +42,12 @@ done
 step "NVIDIA OpenShell $OPENSHELL (gateway + Agent Sandbox controller $SANDBOX)"
 kubectl apply -f "https://github.com/kubernetes-sigs/agent-sandbox/releases/download/$SANDBOX/sandbox.yaml" >/dev/null
 kubectl -n agent-sandbox-system rollout status deploy --timeout=300s >/dev/null
-W="$REPO_ROOT/.cache/openshell-$OPENSHELL"; mkdir -p "$W"
-[ -d "$W/deploy/helm/openshell" ] || curl -sSfL "https://github.com/NVIDIA/OpenShell/archive/refs/tags/v$OPENSHELL.tar.gz" | tar -xz -C "$W" --strip-components=1
+# The published chart, not the source tree: the chart in the source tarball carries appVersion 0.0.0 (CI patches it
+# at release), which became image tag 0.0.0 and the certgen pre-install job died on an image that does not exist
+# (bake of 2026-10-31). oci://ghcr.io/nvidia/openshell/helm-chart 0.1.5 has appVersion 0.1.5; the EVE lab used the
+# same chart (pulled as charts/helm-chart there).
 kubectl create ns openshell --dry-run=client -o yaml | kubectl apply -f - >/dev/null
-helm upgrade --install openshell "$W/deploy/helm/openshell" -n openshell --wait --timeout 10m >/dev/null
+helm upgrade --install openshell oci://ghcr.io/nvidia/openshell/helm-chart --version "$OPENSHELL" -n openshell --wait --timeout 10m >/dev/null
 kubectl -n openshell rollout status statefulset/openshell --timeout=300s >/dev/null 2>&1 || kubectl -n openshell rollout status deploy --timeout=300s >/dev/null
 if ! command -v openshell >/dev/null; then
   R="https://github.com/NVIDIA/OpenShell/releases/download/v$OPENSHELL"; T=$(mktemp -d)

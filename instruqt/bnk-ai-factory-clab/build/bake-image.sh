@@ -72,9 +72,10 @@ done
 # image the BNK release manifest names, pulled on one kind node so it passes through the mirrors into the cache.
 # No list to maintain: the cluster is the list.
 step "harvest images through the mirrors"
-{ kubectl get pods -A -o jsonpath='{range .items[*]}{range .spec.initContainers[*]}{.image}{"\n"}{end}{range .spec.containers[*]}{.image}{"\n"}{end}{end}'
-  kubectl get cnemanifest -A -o yaml 2>/dev/null | grep -oE 'repo\.f5\.com/[A-Za-z0-9/_.-]+:[A-Za-z0-9._-]+'
-} | grep -v '^$' | sort -u > /tmp/images.txt
+# every grep here may legitimately match nothing; under pipefail that must not end the bake (it did, silently)
+{ kubectl get pods -A -o jsonpath='{range .items[*]}{range .spec.initContainers[*]}{.image}{"\n"}{end}{range .spec.containers[*]}{.image}{"\n"}{end}{end}' || true
+  kubectl get cnemanifest -A -o yaml 2>/dev/null | grep -oE 'repo\.f5\.com/[A-Za-z0-9/_.-]+:[A-Za-z0-9._-]+' || true
+} | { grep -v '^$' || true; } | sort -u > /tmp/images.txt
 echo "  $(wc -l < /tmp/images.txt) distinct images"
 while read -r img; do docker exec bnk-control-plane crictl pull "$img" >/dev/null 2>&1 || echo "  could not pull $img"; done < /tmp/images.txt
 # images docker itself runs (kind nodes, fabric, client, mirrors) live in docker's own cache
