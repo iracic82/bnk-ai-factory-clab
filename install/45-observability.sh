@@ -10,7 +10,9 @@ helm repo add prometheus-community https://prometheus-community.github.io/helm-c
 helm repo update prometheus-community >/dev/null 2>&1 || true
 
 step "kube-prometheus-stack $KPS"
-mkdir -p "$SECRETS_DIR"; [ -s "$SECRETS_DIR/grafana-admin" ] || { umask 077; tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20 > "$SECRETS_DIR/grafana-admin"; }
+# not `tr </dev/urandom | head -c 20`: under pipefail head's SIGPIPE to tr fails the pipeline and set -e ends the
+# script before helm runs, with no message (bake of 2026-10-31)
+mkdir -p "$SECRETS_DIR"; [ -s "$SECRETS_DIR/grafana-admin" ] || { umask 077; python3 -c 'import secrets; print(secrets.token_urlsafe(15))' > "$SECRETS_DIR/grafana-admin"; }
 kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n monitoring create secret generic grafana-admin --from-literal=admin-user=admin --from-literal=admin-password="$(cat "$SECRETS_DIR/grafana-admin")" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
