@@ -28,6 +28,10 @@ for n in far-pull-secret far-secret; do   # the picker image comes from repo.f5.
 done
 
 step "NVIDIA Dynamo platform $DYNAMO + NATS"
+# The chart's dependencies name the prometheus-community repo; helm needs that index in its cache (a fresh VM
+# has none; the image finalise step deletes /root/.cache/helm).
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null 2>&1 || true
+helm repo update prometheus-community >/dev/null 2>&1 || warn "helm repo update prometheus-community failed"
 helm upgrade --install dynamo-platform "https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-platform-$DYNAMO.tgz" \
   -n dynamo-system --create-namespace --set global.nats.install=true --wait --timeout "$(tmo 15m 5m)" >/dev/null
 kubectl -n dynamo-system rollout status statefulset/dynamo-platform-nats --timeout=300s >/dev/null
