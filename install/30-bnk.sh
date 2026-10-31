@@ -87,16 +87,36 @@ fi
 # order the controller wants: phase 50 runs in the background (its wait cannot be shortened: environments/lab.env
 # sets BNK_WAIT_TIMEOUT=1800 after the caller's value), phase 60 applies the licence as soon as the License CRD
 # exists, and phase 50 then returns on its own when Available turns True. Then verify.
-step "phase 50 (CNEInstance; its wait for Available runs while the licence goes in)"
-"$DEPLOY/install.sh" --env lab --profile host --phase 50 & P50=$!
-step "phase 60 (licence; the controller configures TMM only once it is Active)"
-for _ in $(seq 1 120); do kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 && break; sleep 5; done
-kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 || { kill "$P50" 2>/dev/null; fail "License CRD never appeared; the CNEInstance did not install its CRDs"; }
-"$DEPLOY/install.sh" --env lab --profile host --phase 60
-step "phase 50's wait for Available (TMM is configured now that the licence is Active)"
-wait "$P50" || fail "phase 50 did not reach Available"
-avail=$(kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
-[ "$avail" = True ] || fail "CNEInstance Available=$avail after phase 50; see the conditions above"
+#
+# Once only: phase 50 applies the installer's full template, which pins manifestVersion 2.4.0. Run again on an
+# upgraded instance it rolls the manifest back and drops the feature patch (resume of 2026-10-31). So a resume
+# that finds the CNEInstance with an Active licence skips both phases and goes on to the upgrade and the patch.
+lic_state() { kubectl -n f5-cne-core get license.k8s.f5net.com f5-cne-cluster-license -o jsonpath='{.status.state}' 2>/dev/null || true; }
+if kubectl -n f5-bnk get cneinstance f5-bnk-instance >/dev/null 2>&1 && [ "$(lic_state)" = Active ]; then
+  ok "CNEInstance present and licence Active: phases 50 and 60 not re-run (phase 50 would re-apply the 2.4.0 template)"
+else
+  step "phase 50 (CNEInstance; its wait for Available runs while the licence goes in)"
+  "$DEPLOY/install.sh" --env lab --profile host --phase 50 & P50=$!
+  step "phase 60 (licence; the controller configures TMM only once it is Active)"
+  for _ in $(seq 1 120); do kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 && break; sleep 5; done
+  kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 || { kill "$P50" 2>/dev/null; fail "License CRD never appeared; the CNEInstance did not install its CRDs"; }
+  "$DEPLOY/install.sh" --env lab --profile host --phase 60
+  step "phase 50's wait for Available (TMM is configured now that the licence is Active)"
+  wait "$P50" || fail "phase 50 did not reach Available"
+fi
+
+# Available is the installer's own health condition; the upgrade refuses to start without it, and a resume may
+# land while the operator is still rolling something (every rollout flips it False for a while).
+step "CNEInstance Available"
+avail=""
+for i in $(seq 1 120); do
+  avail=$(kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
+  [ "$avail" = True ] && break
+  [ $((i % 6)) -eq 0 ] && kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}{"\n"}' | tr ' ' '\n' | grep -E '=False$' | paste -sd' ' | sed 's/^/      outstanding: /'
+  sleep 15
+done
+[ "$avail" = True ] || fail "CNEInstance Available=$avail after 30 minutes; the conditions above say which component"
+ok "CNEInstance Available"
 step "phase 70 (verify)"
 "$DEPLOY/install.sh" --env lab --profile host --phase 70
 
