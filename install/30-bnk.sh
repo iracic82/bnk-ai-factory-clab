@@ -60,7 +60,7 @@ step "Gateway API Inference Extension CRDs $GAIE_VERSION (the controller watches
 kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$GAIE_VERSION/manifests.yaml" >/dev/null
 kubectl wait --for=condition=Established crd/inferencepools.inference.networking.k8s.io --timeout=60s >/dev/null
 step "NetworkAttachmentDefinitions for TMM's legs (order = TMM interface number)"
-kubectl apply -f - <<'EOF'
+nad_out=$(kubectl apply -f - <<'EOF'
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata: {name: external-net, namespace: f5-bnk}
@@ -73,6 +73,12 @@ metadata: {name: internal-net, namespace: f5-bnk}
 spec:
   config: '{"cniVersion":"0.3.1","type":"macvlan","master":"eth2","mode":"bridge","ipam":{}}'
 EOF
+); echo "$nad_out"
+# a NAD is read when the pod is created: if one changed and TMM already runs, TMM gets a new pod with the new legs
+if echo "$nad_out" | grep -q configured && kubectl -n f5-bnk get ds f5-tmm >/dev/null 2>&1; then
+  warn "a NAD changed; restarting TMM so it picks up the new leg"
+  kubectl -n f5-bnk rollout restart ds/f5-tmm >/dev/null
+fi
 
 # The installer runs 50 (CNEInstance, then wait for Available) before 60 (License). In 2.4.0 the controller refuses
 # to configure TMM until the License is Active ("Configs are not allowed since license is not activated"), so
