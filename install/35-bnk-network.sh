@@ -31,18 +31,23 @@ apply_f5() {          # kubectl apply -f "$1" (or - for stdin held in $2), retri
   fail "the F5 validation webhook kept refusing $f"
 }
 
-apply_immutable() {   # $1 file: delete + recreate the routing CRs in it if the content changed
+apply_immutable() {   # $1 file: apply it; the routing CRs *in this file* are deleted first if the file changed
+  # Each file carries its own hash, and only the routing objects named in that file are compared and deleted.
+  # (The first version compared one hash across every routing CR, so applying 40-tenants.yaml after
+  # 20-routing-global.yaml deleted the GlobalRoutingConfig: bake of 2026-10-31.)
   local f="$1" h; h=$(sha256sum "$f" | cut -c1-16)
-  local cur; cur=$(kubectl -n f5-bnk get routingtemplates.k8s.f5net.com,globalroutingconfigs.k8s.f5net.com,routingconfigs.k8s.f5net.com \
-                   -o jsonpath='{range .items[*]}{.metadata.annotations.factory\.lab/hash}{" "}{end}' 2>/dev/null | tr ' ' '\n' | sort -u | grep -v '^$' || true)
-  if [ -n "$cur" ] && [ "$cur" != "$h" ]; then
-    warn "routing CRs changed; deleting the old ones (immutable upstream)"
-    kubectl -n f5-bnk delete routingconfigs.k8s.f5net.com,globalroutingconfigs.k8s.f5net.com,routingtemplates.k8s.f5net.com --all --wait >/dev/null
-  fi
-  apply_f5 "$f" >/dev/null
-  for k in routingtemplates.k8s.f5net.com globalroutingconfigs.k8s.f5net.com routingconfigs.k8s.f5net.com; do
-    kubectl -n f5-bnk annotate "$k" --all "factory.lab/hash=$h" --overwrite >/dev/null 2>&1 || true
+  local objs; objs=$(kubectl -n f5-bnk apply --dry-run=client -o name -f "$f" | grep -E '^(routingtemplate|globalroutingconfig|routingconfig)\.' || true)
+  local stale="" o cur
+  for o in $objs; do
+    cur=$(kubectl -n f5-bnk get "$o" -o jsonpath='{.metadata.annotations.factory\.lab/hash}' 2>/dev/null || true)
+    [ -n "$cur" ] && [ "$cur" != "$h" ] && stale="$stale $o"
   done
+  if [ -n "$stale" ]; then
+    warn "$(basename "$f") changed; recreating its routing CRs (immutable upstream):$stale"
+    kubectl -n f5-bnk delete $stale --wait >/dev/null
+  fi
+  apply_f5 "$f"
+  for o in $objs; do kubectl -n f5-bnk annotate "$o" "factory.lab/hash=$h" --overwrite >/dev/null 2>&1 || true; done
 }
 
 # Routing first: 30-bnk.sh switched dynamicRouting on, so TMM is restarting and its init-f5-tmm-routing container is
@@ -63,7 +68,6 @@ kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/nu
   warn "TMM not Ready yet:"; kubectl -n f5-bnk get pods -l app=f5-tmm -o wide | sed 's/^/      /'
   kubectl -n f5-bnk get pods -l app=f5-tmm -o jsonpath='{range .items[*].status.initContainerStatuses[*]}{.name}={.state}{"\n"}{end}{range .items[*].status.containerStatuses[*]}{.name}={.state}{"\n"}{end}' | sed 's/^/      /'; }
 step "tenant VRFs, routing, first VIPs"
-apply_f5 "$M/bnk/40-tenants.yaml"
 apply_immutable "$M/bnk/40-tenants.yaml"
 step "tenant egress"
 apply_f5 "$M/bnk/30-egress.yaml"
