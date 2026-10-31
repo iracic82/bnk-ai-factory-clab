@@ -18,6 +18,7 @@ virtualmachines:
   - 30300   # Grafana
   - 30909   # Prometheus
   - 30808   # kagent UI
+  - 5050    # Lab Topology (scripts/topology-api.py)
   environment:
     KUBECONFIG: /root/lab/clab/kubeconfig
     LAB_ROOT: /root/lab

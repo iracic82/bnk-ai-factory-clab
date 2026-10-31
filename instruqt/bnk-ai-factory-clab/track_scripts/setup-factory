@@ -63,6 +63,23 @@ for s in 40-ai 45-observability 50-agents 60-guardrails; do
   bash "install/$s.sh" || echo "WARNING: install/$s.sh failed; see above. The lab starts without that layer."
 done
 
+step "Lab Topology tab (port 5050 on the VM address)"
+# the live topology page every chapter has as a tab; reads docker, the cluster, leaf1 and openshell, nothing more
+BIND=$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -1)
+cat > /etc/systemd/system/lab-topology.service <<UNIT
+[Unit]
+Description=lab topology page: ${BIND:-0.0.0.0}:5050
+After=network-online.target docker.service
+[Service]
+Environment=KUBECONFIG=$LAB_ROOT/clab/kubeconfig
+ExecStart=/usr/bin/python3 $LAB_ROOT/instruqt/bnk-ai-factory-clab/scripts/topology-api.py --bind ${BIND:-0.0.0.0} --port 5050
+Restart=always
+RestartSec=2
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload; systemctl enable --now lab-topology >/dev/null 2>&1; systemctl restart lab-topology
+
 step "learner shell"
 cat > /etc/profile.d/factory.sh <<EOF
 export KUBECONFIG=$LAB_ROOT/clab/kubeconfig LAB_ROOT=$LAB_ROOT

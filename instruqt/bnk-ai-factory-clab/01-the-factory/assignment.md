@@ -32,6 +32,12 @@ tabs:
   type: service
   hostname: factory
   port: 30443
+- id: topology
+  title: Lab Topology
+  type: service
+  hostname: factory
+  path: /topology
+  port: 5050
 difficulty: basic
 timelimit: 900
 enhanced_loading: false
