@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Pass when the fabric carries TMM's sessions and a tenant VIP answers from behind r5.
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+n=$(docker exec leaf1 vtysh -c 'show bgp vrf all summary' 2>/dev/null | grep -cE '^\S+.*\s65100\s')
+[ "$n" -ge 4 ] || fail-message "leaf1 sees $n Established sessions from TMM (AS 65100); expected 4 (default domain + 3 tenant VRFs)."
+code=$(docker exec client curl -s -m 5 -o /dev/null -w '%{http_code}' http://10.201.100.10/ 2>/dev/null)
+[ "$code" = 200 ] || fail-message "the client got HTTP '$code' from Aurora's VIP 10.201.100.10; expected 200."
+exit 0

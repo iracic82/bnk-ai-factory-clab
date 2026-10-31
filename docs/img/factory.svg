@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1380" width="2400" height="1380" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12"><title>AI factory on one VM: fabric, kind, BNK, Polaris, simulators, agents, guardrails</title>
+<rect width="2400" height="1380" fill="#ffffff"/>
+<text x="1200.0" y="40" font-size="26" font-weight="700" fill="#0f172a" text-anchor="middle">AI factory on one VM: containerlab fabric, kind, BNK 2.4.2, Polaris, NVIDIA simulators, agents, CalypsoAI</text>
+<text x="1200.0" y="66" font-size="14" font-weight="400" fill="#475569" text-anchor="middle">Instruqt VM n2-standard-32, image f5/aibnk · numbered circles = the chapter that looks there (docs/storyline.md)</text>
+<rect x="30" y="90" width="2340" height="1230" rx="16" fill="#fafafa" stroke="#0f172a" stroke-width="2.5"/>
+<text x="50" y="116" font-size="13.5" font-weight="600" fill="#0f172a" text-anchor="start">VM: docker, containerlab 0.75, kind v1.30.13, registry mirrors (/var/lib/bnk-mirrors), ollama (qwen2.5:1.5b on CPU)</text>
+<rect x="50" y="140" width="700" height="560" rx="12" fill="#f0fdf4" stroke="#16a34a" stroke-width="2"/>
+<text x="66" y="166" font-size="15" font-weight="700" fill="#15803d" text-anchor="start">FRR EVPN fabric (quay.io/frrouting/frr:10.6.2), configs from fabric/gen.py</text>
+<rect x="716" y="148" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="730" y="167" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+<line x1="140" y1="220" x2="140" y2="310" stroke="#16a34a" stroke-width="2"/>
+<line x1="140" y1="310" x2="140" y2="430" stroke="#16a34a" stroke-width="2"/>
+<line x1="140" y1="430" x2="350" y2="310" stroke="#16a34a" stroke-width="2"/>
+<line x1="140" y1="430" x2="350" y2="540" stroke="#16a34a" stroke-width="2"/>
+<line x1="350" y1="310" x2="590" y2="370" stroke="#16a34a" stroke-width="2"/>
+<line x1="350" y1="310" x2="590" y2="560" stroke="#16a34a" stroke-width="2"/>
+<line x1="350" y1="540" x2="590" y2="370" stroke="#16a34a" stroke-width="2"/>
+<line x1="350" y1="540" x2="590" y2="560" stroke="#16a34a" stroke-width="2"/>
+<rect x="80" y="198" width="120" height="44" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<text x="140" y="218" font-size="14" font-weight="700" fill="#14532d" text-anchor="middle">client</text>
+<text x="140" y="234" font-size="10.5" font-weight="400" fill="#166534" text-anchor="middle">172.16.250.10</text>
+<rect x="80" y="288" width="120" height="44" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<text x="140" y="308" font-size="14" font-weight="700" fill="#14532d" text-anchor="middle">r5</text>
+<text x="140" y="324" font-size="10.5" font-weight="400" fill="#166534" text-anchor="middle">AS 65500</text>
+<rect x="80" y="408" width="120" height="44" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<text x="140" y="428" font-size="14" font-weight="700" fill="#14532d" text-anchor="middle">border1</text>
+<text x="140" y="444" font-size="10.5" font-weight="400" fill="#166534" text-anchor="middle">AS 65209 · VRF-lite to r5</text>
+<rect x="290" y="288" width="120" height="44" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<text x="350" y="308" font-size="14" font-weight="700" fill="#14532d" text-anchor="middle">spine1</text>
+<text x="350" y="324" font-size="10.5" font-weight="400" fill="#166534" text-anchor="middle">AS 65200</text>
+<rect x="290" y="518" width="120" height="44" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<text x="350" y="538" font-size="14" font-weight="700" fill="#14532d" text-anchor="middle">spine2</text>
+<text x="350" y="554" font-size="10.5" font-weight="400" fill="#166534" text-anchor="middle">AS 65200</text>
+<rect x="530" y="348" width="120" height="44" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<text x="590" y="368" font-size="14" font-weight="700" fill="#14532d" text-anchor="middle">leaf1</text>
+<text x="590" y="384" font-size="10.5" font-weight="400" fill="#166534" text-anchor="middle">AS 65201 · VTEP, TMM's gateway</text>
+<rect x="530" y="538" width="120" height="44" rx="8" fill="#ffffff" stroke="#16a34a" stroke-width="2"/>
+<text x="590" y="558" font-size="14" font-weight="700" fill="#14532d" text-anchor="middle">leaf2</text>
+<text x="590" y="574" font-size="10.5" font-weight="400" fill="#166534" text-anchor="middle">AS 65202 · VTEP</text>
+<text x="66" y="640" font-size="12.5" font-weight="400" fill="#166534" text-anchor="start">VRFs on leaves and border1: external (L3VNI 10000), tenant-a/b/c (10001-10003), RT 65000:&lt;vni&gt;</text>
+<text x="66" y="662" font-size="12.5" font-weight="400" fill="#166534" text-anchor="start">leaf1 eth3 -&gt; bnk-worker eth1: untagged 172.16.10.0/24 (TMM .11, leaf .1 as AS 65000) + VLAN 101-103 (172.17.10x.0/24)</text>
+<text x="66" y="684" font-size="12.5" font-weight="400" fill="#166534" text-anchor="start">r5 gives every VRF a default and takes the VIP pools and tenant SNAT pools back; the client stands in for the internet</text>
+<rect x="780" y="140" width="1570" height="1170" rx="12" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+<text x="796" y="166" font-size="15" font-weight="700" fill="#1d4ed8" text-anchor="start">kind cluster bnk (Calico, feature gates for Substrate): bnk-control-plane · bnk-worker (app=f5-tmm) · bnk-worker2 (workload=ai, fake H100s)</text>
+<rect x="796" y="186" width="1538" height="200" rx="10" fill="#ffffff" stroke="#dc2626" stroke-width="2"/>
+<text x="810" y="210" font-size="13.5" font-weight="700" fill="#b91c1c" text-anchor="start">BNK 2.4.2 host mode (f5-bnk): TMM on bnk-worker, 2 Gi hugepages · OcNOS BGP AS 65100 to leaf1 · legacy network model (Vrf, RoutingConfig) · F5BnkGateway VIP pool 172.16.100.10-29</text>
+<rect x="2292" y="192" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2306" y="211" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+<rect x="2257" y="192" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2271" y="211" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
+<rect x="810.0" y="226" width="365.5" height="140" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="820.0" y="250" font-size="13.5" font-weight="700" fill="#991b1b" text-anchor="start">external leg 1.1</text>
+<text x="820.0" y="272" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">172.16.10.11/24 · VIPs 172.16.100.x</text>
+<text x="820.0" y="290" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">· BGP to leaf1</text>
+<rect x="1187.5" y="226" width="365.5" height="140" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="1197.5" y="250" font-size="13.5" font-weight="700" fill="#991b1b" text-anchor="start">tenant legs</text>
+<text x="1197.5" y="272" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">VLAN 101/102/103 · 172.17.10x.11 ·</text>
+<text x="1197.5" y="290" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">eBGP in each VRF · VIP</text>
+<text x="1197.5" y="308" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">10.20x.100.10 · SNAT 10.20x.200.10</text>
+<rect x="1565.0" y="226" width="365.5" height="140" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="1575.0" y="250" font-size="13.5" font-weight="700" fill="#991b1b" text-anchor="start">internal leg 1.2</text>
+<text x="1575.0" y="272" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">&lt;kind net&gt;.0.250 · node -&gt; TMM</text>
+<text x="1575.0" y="290" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">egress tunnels (F5SPKEgress per</text>
+<text x="1575.0" y="308" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">tenant)</text>
+<rect x="1942.5" y="226" width="365.5" height="140" rx="8" fill="#fef2f2" stroke="#fca5a5" stroke-width="1.5"/>
+<text x="1952.5" y="250" font-size="13.5" font-weight="700" fill="#991b1b" text-anchor="start">per request</text>
+<text x="1952.5" y="272" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">F5BigCneIrule + NetPolicy ·</text>
+<text x="1952.5" y="290" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">F5BigPersistenceProfile</text>
+<text x="1952.5" y="308" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">MODEL_CONTEXT_PROTOCOL /</text>
+<text x="1952.5" y="326" font-size="11.5" font-weight="400" fill="#7f1d1d" text-anchor="start">AGENT2AGENT · Access JWT CRDs</text>
+<rect x="796" y="402" width="1538" height="250" rx="10" fill="#ffffff" stroke="#7c3aed" stroke-width="2"/>
+<text x="810" y="426" font-size="14" font-weight="700" fill="#6d28d9" text-anchor="start">AI layer</text>
+<rect x="2292" y="408" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2306" y="427" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+<rect x="2257" y="408" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2271" y="427" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+<rect x="810.0" y="442" width="290.0" height="190" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="820.0" y="466" font-size="13.5" font-weight="700" fill="#5b21b6" text-anchor="start">Polaris AI Gateway</text>
+<text x="820.0" y="488" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">console :30443 · tenants lab,</text>
+<text x="820.0" y="506" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">tenant-a/b/c · providers dynamo</text>
+<text x="820.0" y="524" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">+ ollama · virtual keys ·</text>
+<text x="820.0" y="542" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">routes 172.16.100.13 / .20 /</text>
+<text x="820.0" y="560" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">.21 / .22</text>
+<rect x="1112.0" y="442" width="290.0" height="190" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="1122.0" y="466" font-size="13.5" font-weight="700" fill="#5b21b6" text-anchor="start">NVIDIA Dynamo 1.5.1</text>
+<text x="1122.0" y="488" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">aigw-models: Frontend + 2</text>
+<text x="1122.0" y="506" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">Mocker decode workers (vllm:*</text>
+<text x="1122.0" y="524" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">metrics, KV events on NATS) ·</text>
+<text x="1122.0" y="542" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">simulated, no GPU</text>
+<rect x="1414.0" y="442" width="290.0" height="190" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="1424.0" y="466" font-size="13.5" font-weight="700" fill="#5b21b6" text-anchor="start">F5 Endpoint Picker</text>
+<text x="1424.0" y="488" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">F5EPP engine dynamo ·</text>
+<text x="1424.0" y="506" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">prefix-cache + prefill-load</text>
+<text x="1424.0" y="524" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">scorers · InferencePool</text>
+<text x="1424.0" y="542" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">model-pool behind VIP</text>
+<text x="1424.0" y="560" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">172.16.100.12:8000</text>
+<rect x="1716.0" y="442" width="290.0" height="190" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="1726.0" y="466" font-size="13.5" font-weight="700" fill="#5b21b6" text-anchor="start">GPU simulators</text>
+<text x="1726.0" y="488" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">fake GPU operator 0.2.1: 4 x</text>
+<text x="1726.0" y="506" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">H100 per worker, nvidia-smi +</text>
+<text x="1726.0" y="524" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">DCGM · KAI v0.18.6 queues</text>
+<text x="1726.0" y="542" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">ai-factory -&gt; tenant-a/b/c</text>
+<text x="1726.0" y="560" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">(4/2/2)</text>
+<rect x="2018.0" y="442" width="290.0" height="190" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="2028.0" y="466" font-size="13.5" font-weight="700" fill="#5b21b6" text-anchor="start">Observability</text>
+<text x="2028.0" y="488" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">kube-prometheus-stack · Grafana</text>
+<text x="2028.0" y="506" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">:30300 · Prometheus :30909 ·</text>
+<text x="2028.0" y="524" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">scrapes mocker, picker, DCGM</text>
+<rect x="796" y="668" width="1538" height="330" rx="10" fill="#ffffff" stroke="#0891b2" stroke-width="2"/>
+<text x="810" y="692" font-size="14" font-weight="700" fill="#0e7490" text-anchor="start">Agents and their runtime</text>
+<rect x="2292" y="674" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2306" y="693" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">6</text>
+<rect x="2257" y="674" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2271" y="693" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">7</text>
+<rect x="2222" y="674" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2236" y="693" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">8</text>
+<rect x="2187" y="674" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2201" y="693" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">9</text>
+<rect x="810.0" y="708" width="491.3333333333333" height="180" rx="8" fill="#ecfeff" stroke="#0b6bcb" stroke-width="1.5"/>
+<text x="820.0" y="732" font-size="13.5" font-weight="700" fill="#0b6bcb" text-anchor="start">tenant-a · Aurora Health</text>
+<text x="820.0" y="754" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">MCP server: clinical queue, MRNs</text>
+<text x="820.0" y="774" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">kagent Agent assistant · own AI Gateway key</text>
+<text x="820.0" y="794" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">OpenShell sandbox: key injected only toward 172.16.100.2x</text>
+<text x="820.0" y="814" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">Substrate SandboxAgent on WorkerPool kagent-default</text>
+<text x="820.0" y="834" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">published VIP 172.16.100.16-18 · NetworkPolicy tenant-isolation</text>
+<rect x="1313.3333333333333" y="708" width="491.3333333333333" height="180" rx="8" fill="#ecfeff" stroke="#a3367a" stroke-width="1.5"/>
+<text x="1323.3333333333333" y="732" font-size="13.5" font-weight="700" fill="#a3367a" text-anchor="start">tenant-b · Borealis Bank</text>
+<text x="1323.3333333333333" y="754" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">MCP server: payments under review</text>
+<text x="1323.3333333333333" y="774" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">kagent Agent assistant · own AI Gateway key</text>
+<text x="1323.3333333333333" y="794" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">OpenShell sandbox: key injected only toward 172.16.100.2x</text>
+<text x="1323.3333333333333" y="814" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">Substrate SandboxAgent on WorkerPool kagent-default</text>
+<text x="1323.3333333333333" y="834" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">published VIP 172.16.100.16-18 · NetworkPolicy tenant-isolation</text>
+<rect x="1816.6666666666665" y="708" width="491.3333333333333" height="180" rx="8" fill="#ecfeff" stroke="#b35c00" stroke-width="1.5"/>
+<text x="1826.6666666666665" y="732" font-size="13.5" font-weight="700" fill="#b35c00" text-anchor="start">tenant-c · Cobalt Labs</text>
+<text x="1826.6666666666665" y="754" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">MCP server: experiments + the shadow agent</text>
+<text x="1826.6666666666665" y="774" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">kagent Agent assistant · own AI Gateway key</text>
+<text x="1826.6666666666665" y="794" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">OpenShell sandbox: key injected only toward 172.16.100.2x</text>
+<text x="1826.6666666666665" y="814" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">Substrate SandboxAgent on WorkerPool kagent-default</text>
+<text x="1826.6666666666665" y="834" font-size="11.5" font-weight="400" fill="#155e75" text-anchor="start">published VIP 172.16.100.16-18 · NetworkPolicy tenant-isolation</text>
+<rect x="1826.6666666666665" y="850" width="471.3333333333333" height="30" rx="6" fill="#fff7ed" stroke="#ea580c" stroke-width="1.5" stroke-dasharray="5,4"/>
+<text x="1834.6666666666665" y="870" font-size="11" font-weight="700" fill="#9a3412" text-anchor="start">billing-reconciler (chapter 9): billing_export -&gt; lookup_record (Aurora) -&gt; post_report(webhook)</text>
+<text x="810" y="918" font-size="12.5" font-weight="400" fill="#155e75" text-anchor="start">kagent 0.10.4 (UI :30808, k8s tool server read-only) · operator agent factory-operator · NVIDIA OpenShell 0.1.5 gateway + Agent Sandbox v1.0.7 · Agent Substrate v0.0.11</text>
+<text x="810" y="940" font-size="12.5" font-weight="400" fill="#155e75" text-anchor="start">model for every agent: qwen2.5-1.5b on ollama (CPU, on the VM), reached only through the Polaris AI Gateway</text>
+<text x="810" y="962" font-size="12.5" font-weight="600" fill="#155e75" text-anchor="start">controls in order: Polaris identity (virtual key per principal) -&gt; CalypsoAI content scan in TMM -&gt; OpenShell network policy -&gt; BNK egress in the tenant VRF</text>
+<rect x="796" y="1014" width="1538" height="170" rx="10" fill="#ffffff" stroke="#ca8a04" stroke-width="2"/>
+<text x="810" y="1038" font-size="14" font-weight="700" fill="#a16207" text-anchor="start">Guardrails in the data path (guardrails namespace)</text>
+<rect x="2292" y="1020" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2306" y="1039" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">10</text>
+<rect x="2257" y="1020" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2271" y="1039" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">11</text>
+<rect x="2222" y="1020" width="28" height="28" rx="14" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="2236" y="1039" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">12</text>
+<text x="810" y="1066" font-size="12.5" font-weight="400" fill="#713f12" text-anchor="start">request -&gt; TMM (tenant-c-ai listener) -&gt; iRule: Content-Length checks, collect body -&gt; sideband POST /backend/v1/scans -&gt; verdict -&gt; block (X-Guardrail: blocked, model never sees it) or release</text>
+<text x="810" y="1090" font-size="12.5" font-weight="400" fill="#713f12" text-anchor="start">scanner = mock-calypso (always; MRN / ID / card shapes, exfiltration verbs) or calypso-bridge -&gt; real CalypsoAI project AI-Instruqt (token in the bridge, never in the iRule)</text>
+<text x="810" y="1114" font-size="12.5" font-weight="400" fill="#713f12" text-anchor="start">attached by the learner: NetPolicy guardrails-tenant-c (extensionRefs F5BigCneIrule guardrails, targetRefs Gateway tenant-c-ai)</text>
+<text x="810" y="1138" font-size="12.5" font-weight="400" fill="#713f12" text-anchor="start">where the webhook dies: OpenShell refuses the socket inside a sandbox; outside one, the packet enters VRF tenant-c and the firewall ACL has no rule for it; tcpdump on border1 shows nothing</text>
+<text x="810" y="1162" font-size="12.5" font-weight="400" fill="#713f12" text-anchor="start">on the record: Polaris console (who, key, model, tenant), Prometheus, TMM log, OpenShell audit</text>
+<line x1="650" y1="370" x2="780" y2="286" stroke="#dc2626" stroke-width="3"/>
+<text x="660" y="355" font-size="11" font-weight="700" fill="#b91c1c" text-anchor="start">veth leaf1 eth3 = bnk-worker eth1</text>
+<line x1="650" y1="560" x2="780" y2="522" stroke="#2563eb" stroke-width="2" stroke-dasharray="6,4"/>
+<text x="660" y="585" font-size="11" font-weight="400" fill="#1d4ed8" text-anchor="start">leaf2 eth3 = bnk-worker2 eth1 (spare)</text>
+<text x="1200.0" y="1358" font-size="13" font-weight="400" fill="#475569" text-anchor="middle">docs/storyline.md for the chapters · install/*.sh in order 00, 05, 10, 20, 30, 35, 40, 45, 50, 60 · re-run this script to redraw</text>
+</svg>

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Nothing to change in this chapter; it is a tour. The check passes on a healthy lab.
+exit 0

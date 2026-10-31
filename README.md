@@ -39,6 +39,8 @@ are baked in.
 One TMM, on `bnk-worker`. Labelling a second node sends the lifecycle operator into a panic loop
 (`bnk-deploy/lib/05-nodes.sh` has the measurement); I re-check that on 2.4.1 before deciding otherwise.
 
+![The factory on one VM](docs/img/factory.svg)
+
 ## What is in here
 
 | Path | What |
