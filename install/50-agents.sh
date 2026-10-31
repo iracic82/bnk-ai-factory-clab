@@ -113,6 +113,10 @@ run_ate() {   # hack/install-ate.sh "$@", with its real error shown instead of b
   [ "$rc" = 0 ] || { echo "$out" | tail -8 | sed 's/^/      /'; fail "hack/install-ate.sh $* failed (exit $rc)"; }
 }
 for ns in ate-system podcertificate-controller-system; do kubectl create ns $ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null; done
+# The chart templates the podcertificate-controller-system namespace and refuses one it does not own ("invalid
+# ownership metadata", second fresh play 2026-10-31). The pools above need it first, so Helm adopts it.
+kubectl label ns podcertificate-controller-system app.kubernetes.io/managed-by=Helm --overwrite >/dev/null
+kubectl annotate ns podcertificate-controller-system meta.helm.sh/release-name=substrate meta.helm.sh/release-namespace=ate-system --overwrite >/dev/null
 ( cd "$S" && { [ -d .git ] || git init -q . ; }
   for f in --create-podcertificate-controller-cas --create-session-id-ca-pool-secret --create-jwt-authority-pool-secret; do
     kubectl -n ate-system get secret session-id-ca-pool >/dev/null 2>&1 && [ "$f" = --create-session-id-ca-pool-secret ] && continue
