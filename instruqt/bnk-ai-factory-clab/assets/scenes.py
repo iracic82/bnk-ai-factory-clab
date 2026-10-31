@@ -309,7 +309,7 @@ def c13():
     s.row(A, AH, [("Polaris · the calls", ["refused with Aurora's key", "passed with Cobalt's key", "management API :18443"], {"color": GREEN}),
                   ("TMM · the verdicts", ["NetPolicy guardrails-tenant-c", "X-Guardrail: blocked", "the egress that was removed"], {"color": RED}),
                   ("OpenShell · the refusals", ["DENIED curl -> .21 (ch 8)", "DENIED curl -> webhook (ch 12)", "per sandbox, with the binary"], {"color": PINK}),
-                  ("Prometheus · the load", ["dynamo_component_inflight_requests", "kai_queue_allocated_gpus", "Grafana for the picture"], {"color": ORANGE})])
+                  ("Prometheus · the load", ["dynamo inflight requests", "kai_queue_allocated_gpus", "Grafana for the picture"], {"color": ORANGE})])
     for x in (166, 455, 744, 1033):
         s.down(x, A + AH, B, DIM)
     s.strip(B, 150, "/root/incident-timeline.md · five lines, each with its source",
