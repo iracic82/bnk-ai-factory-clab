@@ -31,11 +31,11 @@ secrets:
   key: BNK_LICENSE_JWT
 - name: GH_READ_TOKEN
   key: GH_READ_TOKEN
-# Optional. With them, chapter 10 scans through the real CalypsoAI (project "AI-Instruqt"); without a key the mock
-# answers. CALYPSO_URL is the scan endpoint of the region the project lives in.
+# CalypsoAI project "AI-Instruqt" (type Agentic). With these, chapter 10 scans through the real service; without a
+# key the mock answers. The team secrets are named AI_CALYPSO_*; the scripts read the CALYPSO_* names. The scan
+# endpoint defaults to https://us2.calypsoai.app/backend/v1/scans; a team secret AI_CALYPSO_URL mapped to
+# CALYPSO_URL overrides it for another region.
 - name: CALYPSO_API_KEY
-  key: CALYPSO_API_KEY
+  key: AI_CALYPSO_API
 - name: CALYPSO_PROJECT_ID
-  key: CALYPSO_PROJECT_ID
-- name: CALYPSO_URL
-  key: CALYPSO_URL
+  key: AI_CALYPSO_PROJECT
