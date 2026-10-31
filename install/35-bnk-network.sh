@@ -63,6 +63,19 @@ KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gatewa
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"; INTERNAL_PLEN="${KIND_SUBNET#*/}"
 apply_f5 "$M/bnk/10-network.yaml" "$(sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|" -e "s|__INTERNAL_PLEN__|$INTERNAL_PLEN|" "$M/bnk/10-network.yaml")"
 ok "internal self IP $INTERNAL_SELFIP/$INTERNAL_PLEN on the kind network $KIND_SUBNET"
+
+step "routes to the shared VIP pool through TMM's internal leg (nodes and the VM)"
+# Published VIPs (172.16.100.0/24: pool VIP, AI Gateway routes, agents gateway) are announced to the fabric, which
+# the client behind r5 uses. Pods and the VM have no leg on the fabric; they reach the same VIPs through TMM's
+# internal self IP on the kind network, the way the EVE lab's nodes reached them through R5's address on the node
+# subnet. Tenant pods are different: F5SPKEgress steers them into their VRF, and the fabric brings them back.
+for n in bnk-control-plane bnk-worker bnk-worker2; do docker exec "$n" ip route replace 172.16.100.0/24 via "$INTERNAL_SELFIP"; done
+sudo ip route replace 172.16.100.0/24 via "$INTERNAL_SELFIP" 2>/dev/null || warn "could not add the VM route to 172.16.100.0/24"
+# Calico masquerades pod traffic leaving a node. That must not apply to traffic entering the node -> TMM egress
+# tunnels (CSRC's bnkvxlan* interfaces), or TMM sees the node's address instead of the pod's and the F5SPKEgress
+# SNAT never matches. The EVE lab set the same filter for its node NIC (install/ai4/75-calico-node-egress.sh there).
+kubectl patch felixconfigurations.crd.projectcalico.org default --type merge -p '{"spec":{"iptablesNATOutgoingInterfaceFilter":"eth0"}}' >/dev/null
+ok "VIP routes via $INTERNAL_SELFIP on 3 nodes and the VM; Calico NAT-outgoing limited to eth0"
 step "TMM back with routing"
 kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/null 2>&1 || kubectl -n f5-bnk wait --for=condition=Ready pod -l app=f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || {
   warn "TMM not Ready yet:"; kubectl -n f5-bnk get pods -l app=f5-tmm -o wide | sed 's/^/      /'

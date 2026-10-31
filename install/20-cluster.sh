@@ -33,6 +33,23 @@ for n in bnk-control-plane bnk-worker bnk-worker2; do
 done
 rm -rf "$T"
 
+step "a second leg for bnk-worker on the kind network (the parent for TMM's internal macvlan)"
+# TMM's internal leg is a macvlan on the TMM node. A macvlan child cannot exchange packets with its parent's own
+# address (the EVE lab needed a third NIC for the same reason, docs/topology.md there). With eth0 as the parent,
+# bnk-worker itself, and every pod on it, would never reach TMM's internal self IP: no egress tunnel from that node,
+# no route to the VIPs from it. So bnk-worker gets a second veth into the same docker bridge, eth2, with no address;
+# the NAD internal-net (30-bnk.sh) uses it as the parent, and the node keeps talking through eth0 across the bridge.
+BR="br-$(docker network inspect kind -f '{{.Id}}' | cut -c1-12)"
+ip link show "$BR" >/dev/null 2>&1 || fail "kind docker bridge $BR not found"
+if ! docker exec bnk-worker ip link show eth2 >/dev/null 2>&1; then
+  PID=$(docker inspect -f '{{.State.Pid}}' bnk-worker)
+  sudo ip link del tmm-int0 2>/dev/null || true
+  sudo ip link add tmm-int0 mtu 1500 type veth peer name eth2 mtu 1500 netns "$PID"
+  sudo ip link set tmm-int0 master "$BR" up
+  docker exec bnk-worker ip link set eth2 up
+fi
+ok "bnk-worker eth2 <-> $BR:tmm-int0 ($(docker exec bnk-worker cat /sys/class/net/eth2/operstate))"
+
 step "node roles"
 kubectl label node bnk-worker app=f5-tmm --overwrite >/dev/null
 kubectl label node bnk-worker2 workload=ai --overwrite >/dev/null

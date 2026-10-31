@@ -1,0 +1,33 @@
+# BNK entry for kagent's A2A endpoint: Gateway agents-gw on VIP 172.16.100.14 and the /api/a2a/ route to the kagent
+# controller. Only the A2A path is published; the kagent UI stays a ClusterIP (published on the VM by a socat unit in
+# install/50-agents.sh). Chapter 5 attaches the AGENT2AGENT persistence profile to this gateway; chapter 13 calls it
+# from the client behind r5. Adapted from the EVE lab (ref/home_k8s/ai4/40-agents-gateway.yaml): same VIP, no R5 NAT.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agents-gw
+  namespace: kagent
+spec:
+  gatewayClassName: f5-gateway-class
+  infrastructure:
+    parametersRef: {group: k8s.f5net.com, kind: F5BnkGateway, name: f5-bnkgateway}
+  addresses:
+  - {type: IPAddress, value: 172.16.100.14}
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces: {from: Same}
+      kinds: [{group: gateway.networking.k8s.io, kind: HTTPRoute}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kagent
+  namespace: kagent
+spec:
+  parentRefs: [{name: agents-gw, sectionName: http}]
+  rules:
+  - matches: [{path: {type: PathPrefix, value: /api/a2a/}}]
+    backendRefs: [{name: kagent-controller, port: 8083}]

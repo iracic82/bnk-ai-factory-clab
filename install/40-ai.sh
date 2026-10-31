@@ -127,8 +127,15 @@ until kubectl apply -f "$M/42-queues.yaml" >/dev/null 2>&1; do sleep 5; done
 kubectl get nodes -o custom-columns='NODE:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu,PRODUCT:.metadata.labels.nvidia\.com/gpu\.product'
 kubectl get queues.scheduling.run.ai
 
-step "a request through tenant-a's AI Gateway route, from the client behind r5"
+step "the two paths to an AI Gateway route: the fabric (client behind r5) and TMM's internal leg (a node, as pods do)"
 K=$(cat "$SECRETS_DIR/aigw/tenant-a.key" 2>/dev/null || true)
 [ -n "$K" ] && docker exec client curl -sS -m 120 http://172.16.100.20/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
   -d '{"model":"qwen2.5-1.5b","messages":[{"role":"user","content":"Reply with exactly: ready"}],"max_tokens":8}' | jq -c '{model, reply:.choices[0].message.content, err:.error}' || warn "no tenant-a key to test with"
 unset K
+# kagent and the sandboxes reach the lab route on 172.16.100.13 through the node route added in 35-bnk-network.sh
+L=$(cat "$SECRETS_DIR/aigw/lab.key" 2>/dev/null || true)
+for n in bnk-control-plane bnk-worker; do
+  code=$(docker exec "$n" curl -s -m 15 -o /dev/null -w '%{http_code}' http://172.16.100.13/v1/models -H "Authorization: Bearer $L" || echo 000)
+  [ "$code" = 200 ] && ok "$n -> 172.16.100.13 via TMM's internal leg: $code" || warn "$n -> 172.16.100.13 answered $code (the node route or the internal leg)"
+done
+unset L

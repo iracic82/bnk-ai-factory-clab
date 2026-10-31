@@ -36,7 +36,7 @@ fi
 # Knobs the installer's host profile and lab environment accept from the caller (profiles/host.env keeps ${VAR:-})
 export BNK_TMM_NODES=bnk-worker BNK_TMM_MANAGE_LABELS=true
 export BNK_STORAGECLASS=standard
-export BNK_NETWORK_ATTACHMENTS="external-net,internal-net"   # TMM 1.1 = macvlan on eth1 (leaf1 eth3), 1.2 = macvlan on eth0 (node net)
+export BNK_NETWORK_ATTACHMENTS="external-net,internal-net"   # TMM 1.1 = macvlan on eth1 (leaf1 eth3), 1.2 = macvlan on eth2 (second veth on the kind bridge, 20-cluster.sh)
 export BNK_TMM_MAPRES=true                      # maps the extra leg onto TMM's data plane
 # Dynamic routing stays OFF for the install: with it on, TMM's init-f5-tmm-routing container waits for a routing
 # configuration (GlobalRoutingConfig) that 35-bnk-network.sh can only apply once BNK is up, and the installer waits
@@ -71,7 +71,7 @@ apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata: {name: internal-net, namespace: f5-bnk}
 spec:
-  config: '{"cniVersion":"0.3.1","type":"macvlan","master":"eth0","mode":"bridge","ipam":{}}'
+  config: '{"cniVersion":"0.3.1","type":"macvlan","master":"eth2","mode":"bridge","ipam":{}}'
 EOF
 
 # The installer runs 50 (CNEInstance, then wait for Available) before 60 (License). In 2.4.0 the controller refuses

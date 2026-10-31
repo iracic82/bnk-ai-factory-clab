@@ -25,6 +25,8 @@ helm upgrade --install kagent-crds oci://ghcr.io/kagent-dev/kagent/helm/kagent-c
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" \
   --set controller.substrate.enabled=false --set substrateWorkerPool.create=false --wait --timeout "$(tmo 15m 6m)" >/dev/null
 kubectl apply -f "$M/platform-agent.yaml" >/dev/null
+kubectl apply -f "$M/agents-gateway.yaml" >/dev/null     # A2A on VIP 172.16.100.14 (kagent-values a2aBaseUrl)
+kubectl -n kagent wait --for=condition=Programmed gateway/agents-gw --timeout=240s >/dev/null && ok "agents gateway on 172.16.100.14" || warn "gateway agents-gw not Programmed"
 expose_service kagent-ui kagent kagent-ui 30808 8080
 ok "kagent up; operator agent factory-operator; UI on :30808"
 

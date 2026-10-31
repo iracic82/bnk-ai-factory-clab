@@ -1,7 +1,7 @@
 # TMM's legs, legacy network model (the only one that carries VRF routing to the fabric in 2.4.x; the controller
 # registers its Vrf handler with USE_GATEWAY_SETTINGS=false, set in install/30-bnk.sh). TMM interfaces follow the
 # pod's NAD order: 1.1 external-net (macvlan on the worker's eth1, the veth into leaf1), 1.2 internal-net (macvlan on
-# eth0, the kind node network, for the node -> TMM egress tunnels).
+# eth2, a second veth of bnk-worker on the kind docker bridge, for the node -> TMM egress tunnels and the VIP routes).
 #
 # Differences from EVE: one TMM, so one self IP per leg; the leaf is every tenant's VTEP, so there is no VLAN 100
 # EVPN underlay and no Vxlan CR on TMM; each tenant has a plain VLAN leg (101-103) into its VRF where TMM peers
