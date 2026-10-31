@@ -105,16 +105,22 @@ export PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=auto
 # use that bundle. mTLS mode, as on EVE: the CA and JWT pools come from the project's own bootstrap script, created
 # BEFORE the chart so the pod certificate controller and the API server find them at first start.
 S="$REPO_ROOT/.cache/substrate-$SUBSTRATE"; mkdir -p "$S"
-[ -f "$S/hack/install-ate.sh" ] || curl -sSfL "https://github.com/kagent-dev/substrate/archive/refs/tags/v$SUBSTRATE.tar.gz" | tar -xz -C "$S" --strip-components=1
+[ -f "$S/hack/install-ate.sh" ] || curl -sSfL "https://github.com/kagent-dev/substrate/archive/refs/tags/v$SUBSTRATE.tar.gz" | tar -xz -C "$S" --strip-components=1 || fail "substrate v$SUBSTRATE source tarball: download or unpack failed"
+command -v go >/dev/null 2>&1 || warn "go is not on PATH ($PATH); hack/install-ate.sh needs it"
+run_ate() {   # hack/install-ate.sh "$@", with its real error shown instead of being lost in a grep pipeline
+  local out rc; out=$(bash hack/install-ate.sh "$@" 2>&1); rc=$?
+  echo "$out" | grep -iE "created|error" | tail -2 || true
+  [ "$rc" = 0 ] || { echo "$out" | tail -8 | sed 's/^/      /'; fail "hack/install-ate.sh $* failed (exit $rc)"; }
+}
 for ns in ate-system podcertificate-controller-system; do kubectl create ns $ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null; done
 ( cd "$S" && { [ -d .git ] || git init -q . ; }
   for f in --create-podcertificate-controller-cas --create-session-id-ca-pool-secret --create-jwt-authority-pool-secret; do
     kubectl -n ate-system get secret session-id-ca-pool >/dev/null 2>&1 && [ "$f" = --create-session-id-ca-pool-secret ] && continue
     kubectl -n ate-system get secret session-id-jwt-pool >/dev/null 2>&1 && [ "$f" = --create-jwt-authority-pool-secret ] && continue
     kubectl -n podcertificate-controller-system get secret service-dns-ca-pool >/dev/null 2>&1 && [ "$f" = --create-podcertificate-controller-cas ] && continue
-    bash hack/install-ate.sh "$f" 2>&1 | grep -iE "created|error" | tail -2
+    run_ate "$f"
   done
-  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || bash hack/install-ate.sh --create-valkey-ca-certs-secret 2>&1 | grep -iE "created|error" | tail -1 )
+  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || run_ate --create-valkey-ca-certs-secret )
 helm upgrade --install substrate-crds oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds --version $SUBSTRATE -n ate-system --wait >/dev/null
 helm upgrade --install substrate oci://ghcr.io/kagent-dev/substrate/helm/substrate --version $SUBSTRATE -n ate-system --set auth.mode=mtls >/dev/null
 kubectl -n podcertificate-controller-system rollout status deploy --timeout=180s >/dev/null 2>&1 || warn "podcertificate controller not up yet"
