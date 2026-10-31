@@ -11,7 +11,7 @@
 #                                                            LICENSE_FILE defaults to spk-eval-igor.jwt)
 #
 # Phases 00-40 run first, then the NetworkAttachmentDefinition for TMM's external leg is created (Multus arrives in
-# phase 10, and FLO needs the NAD to exist before the CNEInstance in phase 50 names it), then 50-70.
+# phase 10, and FLO needs the NAD to exist before the CNEInstance in phase 50 names it), then 50, 60, 50 again, 70.
 source "$(dirname "$0")/lib/common.sh"
 kubectl get node bnk-worker -L app --no-headers | grep -q f5-tmm || fail "bnk-worker is not labelled app=f5-tmm; run 20-cluster.sh"
 
@@ -74,8 +74,20 @@ spec:
   config: '{"cniVersion":"0.3.1","type":"macvlan","master":"eth0","mode":"bridge","ipam":{}}'
 EOF
 
-step "phases 50-70 (CNEInstance, licence, verify)"
-for p in 50 60 70; do "$DEPLOY/install.sh" --env lab --profile host --phase "$p"; done
+# The installer runs 50 (CNEInstance, then wait for Available) before 60 (License). In 2.4.0 the controller refuses
+# to configure TMM until the License is Active ("Configs are not allowed since license is not activated"), so
+# Available cannot turn True inside phase 50 and its whole wait is spent for nothing (bake of 2026-10-31; phase 50
+# warns on timeout, it does not fail, which is why this read as slowness before). Same phases, unmodified, in the
+# order the controller wants: apply the CNEInstance with a token wait, licence as soon as the License CRD exists,
+# then the real wait, then verify.
+step "phase 50 (CNEInstance applied; the wait comes after the licence)"
+BNK_WAIT_TIMEOUT=60 "$DEPLOY/install.sh" --env lab --profile host --phase 50 || true
+step "phase 60 (licence; the controller configures TMM only once it is Active)"
+for _ in $(seq 1 60); do kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 && break; sleep 5; done
+kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 || fail "License CRD never appeared; the CNEInstance did not install its CRDs"
+"$DEPLOY/install.sh" --env lab --profile host --phase 60
+step "phases 50 and 70 (the wait for Available, then verify)"
+for p in 50 70; do "$DEPLOY/install.sh" --env lab --profile host --phase "$p"; done
 
 cur=$(kubectl get cneinstance -n f5-bnk f5-bnk-instance -o jsonpath='{.spec.manifestVersion}')
 if [ "$cur" != "$TARGET_MANIFEST" ]; then
