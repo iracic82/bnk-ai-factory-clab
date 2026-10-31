@@ -2,94 +2,293 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Lab Topology</title>
+<title>Northlight AI factory topology</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/dist/vis-network.min.js" integrity="sha384-6ox9IspbVlrc5vabD45kZcCJ8HeSwMAQjf9Iq48U/+srTVTNzsB7EqDC5oYpA0WC" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  :root { --ink:#0f172a; --mute:#475569; --line:#cbd5e1; --ok:#16a34a; --bad:#dc2626; --unk:#94a3b8; }
-  html, body { margin:0; height:100%; font-family: Inter, "Segoe UI", Helvetica, Arial, sans-serif; color:var(--ink); background:#ffffff; }
-  #bar { display:flex; gap:16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); font-size:13px; }
-  #bar b { font-size:15px; }
-  #bar .pill { padding:2px 10px; border-radius:12px; background:#f1f5f9; color:var(--mute); }
-  #net { position:absolute; top:46px; bottom:0; left:0; right:320px; }
-  #side { position:absolute; top:46px; bottom:0; right:0; width:320px; border-left:1px solid var(--line); padding:14px; overflow:auto; font-size:13px; box-sizing:border-box; }
-  #side h3 { margin:0 0 6px; font-size:14px; }
-  .legend span { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
-  .legend div { margin:4px 0; color:var(--mute); }
-  #detail { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); white-space:pre-wrap; font-family: Consolas, Menlo, monospace; font-size:12px; color:var(--ink); }
-  .ok { color:var(--ok); font-weight:700 } .bad { color:var(--bad); font-weight:700 }
+/* One wide SVG of the factory as it is built on this VM, a flow picker above it, a numbered step rail beside it.
+   Dark on purpose: it sits next to the Polaris console tab. Same shape as the bnk-ai-gateway lab's page. */
+:root {
+  color-scheme: dark;
+  --bg: #0e1116; --panel: #151a22; --line: #2a3240; --ink: #e6e9ef; --dim: #8a94a6;
+  --tmm: #e4002b; --fab: #58a6ff; --ten: #7ee787; --ai: #f0a040; --agent: #c792ea; --deny: #ff5c7a; --ctrl: #6aa8ff; --bad: #ffd166;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+html, body { background: var(--bg); color: var(--ink); margin: 0; }
+body { font-family: var(--sans); font-size: 14px; padding: 16px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; }
+.sub { color: var(--dim); margin: 4px 0 14px; max-width: 90ch; }
+.flows { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.flows button { font: 500 13px var(--sans); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 11px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.flows button[aria-pressed="true"] { border-color: var(--c); box-shadow: inset 0 -2px 0 var(--c); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.wrap { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .wrap { grid-template-columns: 1fr; } }
+.canvas { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+svg { display: block; min-width: 1000px; width: 100%; height: auto; }
+.zone { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.zonename { font: 600 12px var(--sans); fill: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
+.box rect { fill: #1b2230; stroke: var(--line); stroke-width: 1.2; rx: 6; }
+.box text { fill: var(--ink); font: 500 12.5px var(--sans); }
+.box .m { font: 400 10.5px var(--mono); fill: var(--dim); }
+.box.tmm > rect { fill: #1d1418; stroke: var(--tmm); }
+.box.bad > rect { stroke: var(--bad); stroke-dasharray: 5 4; fill: #23200f; }
+.box.lit rect { stroke-width: 2.4; filter: drop-shadow(0 0 6px var(--glow)); }
+.box.live-ok rect { stroke: #2ea043; }
+.box.live-down rect { stroke: var(--deny); stroke-width: 2; }
+.wire { stroke: #3a4456; stroke-width: 3; fill: none; }
+.wirelabel { font: 400 10.5px var(--mono); fill: var(--dim); }
+.seg { fill: none; stroke-width: 4; stroke-linecap: round; opacity: 0; transition: opacity .25s; }
+.seg.on { opacity: 1; } .seg.dash { stroke-dasharray: 8 7; }
+.pkt { r: 7; opacity: 0; filter: drop-shadow(0 0 5px currentColor); }
+.rail { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.rail h2 { font-size: 15px; margin: 0 0 4px; }
+.status { font: 500 11px var(--mono); color: var(--dim); display: inline-block; margin-bottom: 10px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 10px; }
+.status.ok { color: var(--ten); border-color: var(--ten); } .status.ch { color: var(--ai); border-color: var(--ai); }
+ol { margin: 0; padding-left: 22px; } li { margin: 0 0 9px; color: var(--dim); line-height: 1.42; }
+li.cur { color: var(--ink); } li code, .why code { font: 500 12px var(--mono); color: var(--ink); background: #0e1116; padding: 1px 5px; border-radius: 4px; }
+.ctl { display: flex; gap: 8px; margin: 12px 0; }
+.ctl button { font: 500 13px var(--sans); color: var(--ink); background: #1b2230; border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.why { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); padding-top: 10px; line-height: 1.45; }
+.live { font: 400 11.5px var(--mono); color: var(--dim); margin-top: 10px; }
+body.still .flows, body.still .ctl, body.still .live { display: none; }
 </style>
 </head>
 <body>
-<div id="bar"><b>Lab Topology</b> <span class="pill" id="when">loading</span> <span class="pill" id="sum"></span> <span style="color:var(--mute)">Northlight Compute's AI factory, live. Green: up and healthy. Red: down or not Ready. Grey: not reported. Click a node.</span></div>
-<div id="net"></div>
-<div id="side">
-  <h3>What you are looking at</h3>
-  <div class="legend">
-    <div><span style="background:#e0f2fe;border:2px solid #0284c7"></span>fabric: spines, leaves, border, r5, client (FRR in containerlab)</div>
-    <div><span style="background:#ffffff;border:2px solid #94a3b8"></span>kind nodes</div>
-    <div><span style="background:#fee2e2;border:2px solid #dc2626"></span>BNK: TMM on the fabric, the controller</div>
-    <div><span style="background:#dcfce7;border:2px solid #16a34a"></span>tenants: one VRF each, with its AI route</div>
-    <div><span style="background:#fef3c7;border:2px solid #d97706"></span>AI layer: Polaris, picker, Dynamo mocker, ollama</div>
-    <div><span style="background:#ede9fe;border:2px solid #7c3aed"></span>agents, sandboxes, Agent Substrate</div>
-    <div><span style="background:#fde68a;border:2px solid #b45309"></span>an agent nobody approved (chapter 10)</div>
-  </div>
-  <div id="detail">Edges with a label are a live BGP session, a route or a published path; dashed edges are control or data paths that are not measured here.</div>
+<h1>Northlight Compute · the AI factory on this VM</h1>
+<p class="sub">Every box is real and running here. Pick a flow and step through it hop by hop; the step rail says what each hop does and what to look at in the terminal. Boxes outlined green are up right now, red are not (polled every 10 s).</p>
+<div class="flows" role="group" aria-label="Choose a flow" id="flows"></div>
+<div class="wrap">
+<div class="canvas">
+<svg id="topo" viewBox="0 0 1300 760" role="img" aria-label="Factory topology with animated flows">
+  <!-- zones -->
+  <rect class="zone" x="16" y="60" width="560" height="660" rx="10"/>
+  <text class="zonename" x="30" y="84">fabric and the outside · containerlab, FRR, BGP EVPN</text>
+  <rect class="zone" x="596" y="60" width="300" height="660" rx="10"/>
+  <text class="zonename" x="610" y="84">kind cluster · three containers</text>
+  <rect class="zone" x="916" y="60" width="368" height="660" rx="10"/>
+  <text class="zonename" x="930" y="84">what runs on the cluster</text>
+
+  <!-- fabric -->
+  <g class="box" id="n-client"><rect x="36" y="110" width="150" height="56"/><text x="48" y="131">client</text><text class="m" x="48" y="148">172.16.250.10 · behind r5</text></g>
+  <g class="box" id="n-r5"><rect x="36" y="196" width="150" height="56"/><text x="48" y="217">r5 · exit router</text><text class="m" x="48" y="234">AS 65500 · VRF-lite .200/.101-3</text></g>
+  <g class="box" id="n-border"><rect x="36" y="282" width="150" height="70"/><text x="48" y="303">border1</text><text class="m" x="48" y="320">4 VRFs as L3VNI</text><text class="m" x="48" y="336">type-5 to and from leaf1</text></g>
+  <g class="box" id="n-spine1"><rect x="230" y="200" width="110" height="46"/><text x="242" y="220">spine1</text><text class="m" x="242" y="236">AS 65200</text></g>
+  <g class="box" id="n-spine2"><rect x="230" y="306" width="110" height="46"/><text x="242" y="326">spine2</text><text class="m" x="242" y="342">AS 65200</text></g>
+  <g class="box" id="n-leaf1"><rect x="380" y="200" width="170" height="86"/><text x="392" y="221">leaf1</text><text class="m" x="392" y="238">AS 65201 · VRF external</text><text class="m" x="392" y="254">+ tenant-a/b/c (L3VNI)</text><text class="m" x="392" y="270">eth3 = handoff to TMM</text></g>
+  <g class="box" id="n-leaf2"><rect x="380" y="306" width="170" height="56"/><text x="392" y="327">leaf2</text><text class="m" x="392" y="344">AS 65202 · to bnk-worker2</text></g>
+  <g class="box" id="n-webhook"><rect x="36" y="420" width="150" height="56"/><text x="48" y="441">webhook (ch 10-12)</text><text class="m" x="48" y="458">on the client · :8080</text></g>
+  <g class="box" id="n-fabnote"><rect x="230" y="420" width="320" height="60"/><text x="242" y="441">per tenant VRF, on leaf1 and border1</text><text class="m" x="242" y="458">VLAN 101/102/103 handoff · r5 hands a default back</text><text class="m" x="242" y="473">only the tenant's VIP pool and SNAT pool are accepted</text></g>
+
+  <!-- kind -->
+  <g class="box" id="n-worker"><rect x="612" y="110" width="268" height="210"/><text x="624" y="131">bnk-worker</text><text class="m" x="624" y="148">eth1 ↔ leaf1 eth3 · eth2 ↔ kind bridge</text></g>
+  <g class="box tmm" id="n-tmm"><rect x="628" y="160" width="236" height="150"/></g>
+  <text x="640" y="180" style="font:600 12px var(--sans);fill:var(--tmm)">TMM · BNK data plane · AS 65100</text>
+  <g class="box" id="n-ext"><rect x="640" y="190" width="212" height="34"/><text x="650" y="205">1.1 external · 172.16.10.11</text><text class="m" x="650" y="218">VLAN 101-103 self IPs .11</text></g>
+  <g class="box" id="n-vips"><rect x="640" y="232" width="212" height="34"/><text x="650" y="247">VIP pool 172.16.100.10-29</text><text class="m" x="650" y="260">tenant VIPs 10.20x.100.x in VRFs</text></g>
+  <g class="box" id="n-int"><rect x="640" y="274" width="212" height="30"/><text x="650" y="289">1.2 internal · 172.18.0.250</text><text class="m" x="650" y="300">node routes 172.16.100/24 here</text></g>
+  <g class="box" id="n-worker2"><rect x="612" y="350" width="268" height="100"/><text x="624" y="371">bnk-worker2</text><text class="m" x="624" y="388">eth1 ↔ leaf2 eth3 · workload=ai</text><text class="m" x="624" y="404">4 fake H100 · mocker · picker</text><text class="m" x="624" y="420">tenant hello pods (pool members)</text></g>
+  <g class="box" id="n-cp"><rect x="612" y="480" width="268" height="70"/><text x="624" y="501">bnk-control-plane</text><text class="m" x="624" y="518">kube-apiserver · PodCertificateRequest on</text><text class="m" x="624" y="534">Calico VXLAN · Multus · lifecycle operator</text></g>
+  <g class="box" id="n-csrc"><rect x="612" y="580" width="268" height="60"/><text x="624" y="601">egress tunnels (CSRC)</text><text class="m" x="624" y="618">node → TMM 172.18.0.250 per tenant VRF</text><text class="m" x="624" y="633">pods of tenant-x leave with SNAT 10.20x.200.x</text></g>
+
+  <!-- cluster workloads -->
+  <g class="box" id="n-ctrl"><rect x="932" y="110" width="166" height="56"/><text x="944" y="131">f5-cne-controller</text><text class="m" x="944" y="148">Gateway API, CRDs, Polaris API</text></g>
+  <g class="box" id="n-polaris"><rect x="1108" y="110" width="166" height="56"/><text x="1120" y="131">Polaris AI Gateway</text><text class="m" x="1120" y="148">tenants · keys · routes</text></g>
+  <g class="box" id="n-picker"><rect x="932" y="180" width="166" height="56"/><text x="944" y="201">F5EPP picker</text><text class="m" x="944" y="218">cache + load scorers</text></g>
+  <g class="box" id="n-mocker"><rect x="1108" y="180" width="166" height="56"/><text x="1120" y="201">Dynamo mocker x2</text><text class="m" x="1120" y="218">KV events on NATS</text></g>
+  <g class="box" id="n-ta"><rect x="932" y="256" width="342" height="50"/><text x="944" y="276">Aurora Health · tenant-a</text><text class="m" x="944" y="293">assistant · MCP :8001 · key · route .20 · VIP .16 · MCP gw .23</text></g>
+  <g class="box" id="n-tb"><rect x="932" y="316" width="342" height="50"/><text x="944" y="336">Borealis Bank · tenant-b</text><text class="m" x="944" y="353">assistant · MCP :8001 · key · route .21 · VIP .17</text></g>
+  <g class="box" id="n-tc"><rect x="932" y="376" width="342" height="50"/><text x="944" y="396">Cobalt Labs · tenant-c</text><text class="m" x="944" y="413">assistant · MCP :8001 · key · route .22 · VIP .18</text></g>
+  <g class="box bad" id="n-shadow"><rect x="932" y="436" width="342" height="46"/><text x="944" y="455">billing-reconciler · the agent nobody approved (ch 10)</text><text class="m" x="944" y="471">tenant-c · plain pod · no sandbox · Cobalt's own key</text></g>
+  <g class="box" id="n-kagent"><rect x="932" y="500" width="166" height="56"/><text x="944" y="521">kagent</text><text class="m" x="944" y="538">A2A on .14 · factory-operator</text></g>
+  <g class="box" id="n-openshell"><rect x="1108" y="500" width="166" height="56"/><text x="1120" y="521">OpenShell</text><text class="m" x="1120" y="538">3 sandboxes · deny log</text></g>
+  <g class="box" id="n-substrate"><rect x="932" y="570" width="166" height="56"/><text x="944" y="591">Agent Substrate</text><text class="m" x="944" y="608">WorkerPool · actors</text></g>
+  <g class="box" id="n-guard"><rect x="1108" y="570" width="166" height="56"/><text x="1120" y="591">CalypsoAI scanner</text><text class="m" x="1120" y="608">iRule sideband · mock or real</text></g>
+  <g class="box" id="n-mon"><rect x="932" y="640" width="342" height="46"/><text x="944" y="660">Prometheus · Grafana · Polaris console · this page</text><text class="m" x="944" y="676">what every chapter reads back</text></g>
+
+  <!-- wires -->
+  <path class="wire" d="M186 138 H206 V224 H186 M186 224 H206 V317 H186 M186 317 H230 V223 M230 223 H230 M230 329 H230"/>
+  <path class="wire" d="M340 223 H380 M340 329 H380 M340 223 L380 329 M340 329 L380 223"/>
+  <path class="wire" d="M550 243 H612 M550 334 H612 M550 371 H612"/>
+  <path class="wire" d="M880 215 H932 M880 400 H932 M880 610 H932"/>
+  <g id="segs"></g>
+  <circle class="pkt" id="pkt" cx="0" cy="0"/>
+</svg>
+</div>
+<aside class="rail">
+  <h2 id="ftitle"></h2>
+  <span class="status" id="fstatus"></span>
+  <ol id="steps"></ol>
+  <div class="ctl"><button id="prev" type="button">Back</button><button id="next" type="button">Next hop</button><button id="play" type="button">Play</button></div>
+  <div class="why" id="fwhy"></div>
+  <div class="live" id="live">live state: loading</div>
+</aside>
 </div>
 <script>
-const groups = {
-  fabric:    {color:{background:'#e0f2fe', border:'#0284c7'}, shape:'box'},
-  node:      {color:{background:'#ffffff', border:'#94a3b8'}, shape:'box'},
-  bnk:       {color:{background:'#fee2e2', border:'#dc2626'}, shape:'box'},
-  tenant:    {color:{background:'#dcfce7', border:'#16a34a'}, shape:'box'},
-  route:     {color:{background:'#dcfce7', border:'#16a34a'}, shape:'ellipse'},
-  ai:        {color:{background:'#fef3c7', border:'#d97706'}, shape:'box'},
-  agent:     {color:{background:'#ede9fe', border:'#7c3aed'}, shape:'box'},
-  sandbox:   {color:{background:'#ede9fe', border:'#7c3aed'}, shape:'ellipse'},
-  substrate: {color:{background:'#ede9fe', border:'#7c3aed'}, shape:'box'},
-  shadow:    {color:{background:'#fde68a', border:'#b45309'}, shape:'box'},
+// Paths share the SVG coordinate system. Each flow is a list of hops: a path, a colour, the boxes to light, a sentence.
+const P = {
+  cliR5:   "M111 166 V196",
+  r5Bord:  "M111 252 V282",
+  bordSp1: "M186 317 H206 V223 H230",
+  sp1Leaf: "M340 223 H380",
+  leafW:   "M550 243 H612 V190 H640",
+  extVip:  "M746 224 V232",
+  vipTen:  "M852 249 H900 V281 H932",
+  tenCli:  "M932 281 H900 V249 H852 M746 232 V224 M640 190 H612 V243 H550 M380 223 H340 M230 223 H206 V317 H186 M111 282 V252 M111 196 V166",
+  podCsrc: "M1103 426 V560 H960 V580",
+  csrcInt: "M612 610 H596 V289 H640",
+  intExt:  "M746 274 V224",
+  extLeaf: "M640 190 H612 V243 H550",
+  leafSp:  "M380 223 H340",
+  spBord:  "M230 223 H206 V317 H186",
+  bordR5:  "M111 282 V252",
+  r5Cli:   "M111 196 V166",
+  cliWh:   "M111 166 V420",
+  agentInt:"M932 281 H900 V289 H852",
+  intPol:  "M640 289 H596 V140 H932 V138 M1098 138 H1108",
+  polPick: "M1015 166 V180",
+  pickMock:"M1098 208 H1108",
+  polMock: "M1191 166 V180",
+  cliTmm:  "M111 166 V196 M111 252 V282 M186 317 H206 V223 H230 M340 223 H380 M550 243 H612 V207 H640",
+  tmmMcp:  "M852 207 H900 V281 H932",
+  tmmA2a:  "M852 207 H900 V528 H932",
+  sbxAi:   "M1108 528 H1098 V281 H932 V289 H900 V289 H852",
+  sbxDeny: "M1108 528 H1098 V440 H1060",
+  shadowTa:"M932 459 H900 V281 H932",
+  shadowPol:"M932 459 H900 V140 H932 M1098 138 H1108",
+  shadowOut:"M1103 482 V560 H960 V580 M612 610 H596 V289 H640 M746 274 V224 M640 190 H612 V243 H550 M380 223 H340 M230 223 H206 V317 H186 M111 282 V252 M111 196 V166 M111 166 V420",
+  tmmGuard:"M852 207 H900 V598 H1108",
+  guardTmm:"M1108 598 H900 V207 H852",
+  tmmBack: "M852 207 H900 V459 H932",
+  shadowDrop:"M1103 482 V560 H960 V580 M612 610 H596 V289 H640",
+  ctrlTmm: "M932 138 H900 V215 H864",
+  ctrlPol: "M1098 138 H1108",
+  subKag:  "M1015 570 V556",
+  kagSub:  "M1015 556 V570",
+  subAi:   "M1098 598 H1100 V289 H852",
 };
-const container = document.getElementById('net');
-const nodes = new vis.DataSet([]), edges = new vis.DataSet([]);
-const net = new vis.Network(container, {nodes, edges}, {
-  groups,
-  nodes: {font:{size:13, face:'Inter, Segoe UI, Helvetica, Arial, sans-serif', multi:false}, margin:10, borderWidth:2, shadow:{enabled:true, size:4, x:1, y:1}},
-  edges: {font:{size:11, color:'#475569', strokeWidth:3, strokeColor:'#ffffff'}, smooth:{type:'cubicBezier'}, arrows:{to:{enabled:false}}, color:{color:'#94a3b8'}},
-  physics: {solver:'forceAtlas2Based', forceAtlas2Based:{gravitationalConstant:-70, springLength:120, springConstant:0.06}, stabilization:{iterations:250}},
-  interaction: {hover:true, tooltipDelay:100},
-});
-let firstDraw = true;
-function colorFor(ok, base) {
-  if (ok === true) return {background: base.background, border: '#16a34a'};
-  if (ok === false) return {background: '#fff1f2', border: '#dc2626'};
-  return {background: base.background, border: base.border};
-}
-async function refresh() {
-  let d;
-  try { d = await (await fetch('api/topology', {cache:'no-store'})).json(); }
-  catch (e) { document.getElementById('when').textContent = 'api unreachable'; return; }
-  document.getElementById('when').textContent = 'as of ' + d.generated;
-  const s = d.summary;
-  document.getElementById('sum').textContent = `${s.containers_up} containers · BGP ${Object.entries(s.bgp).map(([k,v])=>k+':'+v).join(' ') || 'none'} · ${s.agents} agents · ${s.sandboxes} sandboxes`;
-  d.nodes.forEach(n => {
-    const base = groups[n.group].color;
-    nodes.update({id:n.id, label:n.label, group:n.group, title:n.title + (n.ok===true?'  [ok]':n.ok===false?'  [down]':''), color: colorFor(n.ok, base), borderWidth: n.ok===false ? 3 : 2});
+const C = { fab:"var(--fab)", tmm:"var(--tmm)", ten:"var(--ten)", ai:"var(--ai)", agent:"var(--agent)", deny:"var(--deny)", ctrl:"var(--ctrl)", bad:"var(--bad)" };
+const FLOWS = [
+ { id:"setup", label:"How it is built", color:C.ctrl, status:["ok","chapter 1"], steps:[
+    {p:"ctrlTmm", c:C.ctrl, d:true, lit:["n-ctrl","n-tmm","n-cp"], t:"You declare on Kubernetes: a <code>CNEInstance</code>, <code>Vrf</code>s, <code>F5SPKVlan</code> legs, <code>RoutingConfig</code>s, Gateways. The lifecycle operator and <code>f5-cne-controller</code> turn them into TMM configuration over gRPC."},
+    {p:"leafW", c:C.ctrl, d:true, lit:["n-leaf1","n-worker","n-ext"], t:"containerlab wired <code>bnk-worker eth1</code> to <code>leaf1 eth3</code>. TMM's external leg is a macvlan on it: untagged for VRF external, VLAN 101 to 103 for the tenants. Four BGP sessions, one veth."},
+    {p:"ctrlPol", c:C.ctrl, d:true, lit:["n-polaris","n-ctrl"], t:"The same controller runs the Polaris AI Gateway: tenants, provider keys, models, virtual keys and routes, each route a Gateway on a VIP from the pool."}],
+   why:"Everything is a declaration. Chapter 1 reads the result on every hop before anything changes." },
+ { id:"vip", label:"A client reaches a tenant VIP", color:C.fab, status:["ok","chapter 1 and 2"], steps:[
+    {p:"cliR5", c:C.fab, lit:["n-client","n-r5"], t:"The client sends <code>GET http://10.201.100.10/</code>, Aurora's first VIP. r5 has the /32 from border1's tenant-a sub-interface."},
+    {p:"r5Bord", c:C.fab, lit:["n-border"], t:"border1 receives it in VRF tenant-a and forwards on the L3VNI: the packet becomes VXLAN towards leaf1's VTEP."},
+    {p:"bordSp1", c:C.fab, lit:["n-spine1"], t:"Over the underlay: eBGP unnumbered, loopback to loopback, either spine."},
+    {p:"sp1Leaf", c:C.fab, lit:["n-leaf1"], t:"leaf1 decapsulates into VRF tenant-a. The /32 came from TMM over eBGP on VLAN 101, so the next hop is TMM's self IP <code>172.17.101.11</code>."},
+    {p:"leafW", c:C.tmm, lit:["n-ext","n-tmm"], t:"Out of <code>eth3</code> tagged 101, into <code>bnk-worker eth1</code>, into TMM's VLAN leg <code>fab-a</code>. The client's address is untouched all the way here."},
+    {p:"vipTen", c:C.ten, lit:["n-vips","n-ta"], t:"The virtual server in route domain tenant-a load balances to Aurora's hello pods with SNAT automap. The answer goes back the same way."}],
+   why:"The fabric sees the tenant as a VRF end to end; leaf1 accepts only the VIP pool and the SNAT pool from TMM; r5 is an ordinary upstream." },
+ { id:"egress", label:"A tenant pod leaves the factory", color:C.ten, status:["ok","chapter 2 and 12"], steps:[
+    {p:"podCsrc", c:C.ten, lit:["n-tc","n-csrc"], t:"A pod in tenant-c opens a connection to the outside. The <code>F5SPKEgress</code> for the namespace steers it into a VXLAN tunnel from its node to TMM's internal self IP."},
+    {p:"csrcInt", c:C.ten, lit:["n-int"], t:"TMM receives it on its internal leg, in route domain tenant-c, and SNATs it from the tenant's pool <code>10.203.200.0/24</code>."},
+    {p:"intExt", c:C.tmm, lit:["n-tmm","n-ext"], t:"Routing in the VRF: the default route came from leaf1 over eBGP on VLAN 103."},
+    {p:"extLeaf", c:C.fab, lit:["n-leaf1"], t:"leaf1 VRF tenant-c, then a type-5 towards border1."},
+    {p:"spBord", c:C.fab, lit:["n-border","n-r5"], t:"border1 to r5 on the tenant-c sub-interface. r5 accepted the SNAT pool from that VRF, so the return path exists."},
+    {p:"cliWh", c:C.ten, lit:["n-client","n-webhook"], t:"The client, or the webhook on it, sees <code>10.203.200.x</code>, never a pod address. Delete the <code>F5SPKEgress</code> and this flow has no first hop: that is chapter 12."}],
+   why:"Egress is a declaration per namespace: a tunnel, a route domain, a SNAT pool. Without it a pod has no way out through TMM." },
+ { id:"aigw", label:"An agent calls its model", color:C.ai, status:["ok","chapter 9"], steps:[
+    {p:"agentInt", c:C.agent, lit:["n-ta","n-int"], t:"Aurora's assistant posts to <code>http://172.16.100.20/v1/chat/completions</code> with Aurora's virtual key. The node routes <code>172.16.100.0/24</code> to TMM's internal self IP."},
+    {p:"intPol", c:C.tmm, lit:["n-tmm","n-vips","n-polaris"], t:"The route is a Gateway on the VIP pool with Polaris's profile: key valid, tenant matches, model in scope, limits and budget, then a provider is chosen. A key from another tenant stops here with 401."},
+    {p:"polMock", c:C.ai, lit:["n-mocker","n-ta"], t:"The deployment for <code>tenant-a-qwen2.5-1.5b</code> is ollama on the VM; for the Dynamo model it is the mocker frontend. Tokens are metered and the call is recorded under the key."}],
+   why:"Pods never need the fabric to reach their model: the AI routes are reachable through TMM's internal leg. Keys and model names belong to a tenant." },
+ { id:"picker", label:"The pool VIP and the picker", color:C.ai, status:["ok","chapter 4"], steps:[
+    {p:"cliTmm", c:C.fab, lit:["n-client","n-ext","n-vips"], t:"A request to the pool VIP <code>172.16.100.12:8000</code> crosses the fabric like any published VIP."},
+    {p:"polPick", c:C.ctrl, d:true, lit:["n-picker"], t:"The HTTPRoute's backend is an <code>InferencePool</code>; TMM asks F5's Endpoint Picker, engine <code>dynamo</code>, which worker should take this prompt."},
+    {p:"pickMock", c:C.ai, lit:["n-mocker"], t:"The picker scores prefix-cache hits (from KV events on NATS), prefill load, queue depth and KV usage, and names a worker. TMM sends the request there."}],
+   why:"The picker is cache- and load-aware. It knows nothing about rack or rail; chapter 14 puts those labels on and shows what the router can and cannot see." },
+ { id:"mcp", label:"MCP and A2A sessions stick", color:C.agent, status:["ch","chapter 5"], steps:[
+    {p:"cliTmm", c:C.agent, lit:["n-client","n-ext"], t:"A client starts an MCP session on Aurora's MCP gateway <code>172.16.100.23</code>; the answer carries <code>Mcp-Session-Id</code>."},
+    {p:"tmmMcp", c:C.agent, lit:["n-vips","n-ta"], t:"The listener has an <code>F5BigPersistenceProfile</code> of type <code>MODEL_CONTEXT_PROTOCOL</code>, attached through a <code>NetPolicy</code>. TMM reads the session id from the protocol and keeps every follow-up on the pod that created it, with three replicas behind the route."},
+    {p:"tmmA2a", c:C.agent, lit:["n-kagent"], t:"The agents gateway <code>172.16.100.14</code> carries the <code>AGENT2AGENT</code> type for <code>message/send</code> and <code>tasks/get</code>."}],
+   why:"Protocol-aware persistence: no cookie the application has to set, no header rewriting." },
+ { id:"sandbox", label:"An agent in an OpenShell sandbox", color:C.agent, status:["ok","chapter 8"], steps:[
+    {p:"sbxAi", c:C.agent, lit:["n-openshell","n-ta","n-int"], t:"The sanctioned assistant runs in a sandbox with one provider: Aurora's AI route. The supervisor injects the key on the way out; the sandbox never holds it."},
+    {p:"sbxDeny", c:C.deny, lit:["n-openshell","n-shadow"], t:"Anything else, Borealis's route, a webhook, a pod next door, is <code>DENIED</code> by the sandbox's network policy before a packet leaves, and logged with the binary and the destination."}],
+   why:"The runtime enforces the allow-list in the kernel; policy changes hot-reload." },
+ { id:"shadow", label:"The agent nobody approved", color:C.bad, status:["ch","chapter 10"], steps:[
+    {p:"shadowTa", c:C.bad, lit:["n-shadow","n-ta"], t:"<code>billing-reconciler</code> runs as a plain pod in tenant-c. Its tools are the sanctioned ones: Cobalt's export, Aurora's <code>lookup_record</code> across namespaces, a webhook post."},
+    {p:"shadowPol", c:C.deny, lit:["n-polaris"], t:"First run with a copied key from Aurora: Polaris refuses it on Cobalt's route, 401. Identity holds."},
+    {p:"shadowPol", c:C.bad, lit:["n-polaris","n-mocker"], t:"Second run with Cobalt's own key, which every Cobalt developer has: the model call passes. The agent assembles the report."},
+    {p:"shadowOut", c:C.bad, lit:["n-csrc","n-int","n-ext","n-leaf1","n-border","n-r5","n-webhook"], t:"<code>post_report</code> leaves through Cobalt's egress, SNAT <code>10.203.200.x</code>, VLAN 103, border1, r5, and lands on the webhook. Nothing read the content; nothing stopped the destination."}],
+   why:"Identity was necessary and not sufficient. Two more layers are needed, each in its own place." },
+ { id:"guard", label:"Guardrail in the data path", color:C.tmm, status:["ch","chapter 11"], steps:[
+    {p:"shadowPol", c:C.bad, lit:["n-shadow","n-vips"], t:"Same task, same key. The request arrives on Cobalt's AI route, which now carries the guardrail <code>NetPolicy</code>."},
+    {p:"tmmGuard", c:C.tmm, lit:["n-tmm","n-guard"], t:"The iRule collects the body, opens a sideband connection to the scanner and sends the whole prompt to <code>/backend/v1/scans</code>."},
+    {p:"guardTmm", c:C.deny, lit:["n-tmm"], t:"Verdict <code>flagged</code>: TMM answers the caller itself with a 200 that reads like a model reply and <code>X-Guardrail: blocked</code>. The model never sees the request."},
+    {p:"tmmBack", c:C.deny, lit:["n-shadow","n-mon"], t:"The agent has nothing to post. Polaris has the call, TMM has the verdict."}],
+   why:"Content inspection where the content flows, attached with the same NetPolicy shape as a persistence profile." },
+ { id:"noexit", label:"Nowhere to send it", color:C.deny, status:["ch","chapter 12"], steps:[
+    {p:"sbxDeny", c:C.deny, lit:["n-openshell"], t:"A clean prompt and the same webhook, from the sandboxed assistant: the policy has no entry for the webhook. <code>DENIED</code>, logged."},
+    {p:"shadowDrop", c:C.deny, lit:["n-shadow","n-csrc","n-int"], t:"The plain pod tries the same. Its namespace's <code>F5SPKEgress</code> has been removed: there is no tunnel, no route domain, no SNAT. The packet has no first hop."},
+    {p:"bordR5", c:C.deny, lit:["n-border","n-webhook"], t:"border1's capture on VLAN 103 stays empty. The webhook log does not move."}],
+   why:"Reachability is the last layer. When no declaration gives a pod a way out, content and identity never come into it." },
+];
+const $ = id => document.getElementById(id);
+const segs = $("segs"), pkt = $("pkt");
+let flow = FLOWS[0], step = 0, timer = null, anim = null;
+const still = /-still$/.test(location.hash);
+if (still) document.body.classList.add("still");
+function render() {
+  segs.innerHTML = "";
+  document.querySelectorAll(".box.lit").forEach(b => b.classList.remove("lit"));
+  flow.steps.forEach((s, i) => {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    el.setAttribute("d", P[s.p]); el.setAttribute("class", "seg" + (s.d ? " dash" : "") + ((i <= step || still) ? " on" : ""));
+    el.style.stroke = s.c; el.style.opacity = (i === step || still) ? 1 : (i < step ? .35 : 0);
+    segs.appendChild(el);
   });
-  const seen = new Set();
-  d.edges.forEach(e => {
-    const id = e.from + '>' + e.to; seen.add(id);
-    edges.update({id, from:e.from, to:e.to, label:e.label, dashes:e.dashes, width: e.ok===true ? 2.5 : 1.5,
-      color: e.ok===true ? {color:'#16a34a'} : e.ok===false ? {color:'#dc2626'} : {color:'#94a3b8'}});
-  });
-  edges.getIds().forEach(id => { if (!seen.has(id)) edges.remove(id); });
-  if (firstDraw) { firstDraw = false; setTimeout(() => net.fit({animation:true}), 600); }
+  const lit = still ? flow.steps.flatMap(s => s.lit) : flow.steps[step].lit;
+  lit.forEach(id => { const n = $(id); if (n) { n.classList.add("lit"); n.style.setProperty("--glow", flow.steps[step].c); } });
+  $("ftitle").textContent = flow.label;
+  const st = $("fstatus"); st.className = "status " + flow.status[0]; st.textContent = flow.status[1];
+  $("steps").innerHTML = flow.steps.map((s, i) => `<li class="${i === step || still ? "cur" : ""}">${s.t}</li>`).join("");
+  $("fwhy").innerHTML = flow.why;
+  document.querySelectorAll("#flows button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.id === flow.id)));
+  if (!still) movePacket();
 }
-net.on('click', p => {
-  const id = p.nodes[0]; if (!id) return;
-  const n = nodes.get(id);
-  document.getElementById('detail').textContent = n.label.replace('\n', '  ') + '\n' + n.title;
-});
-refresh(); setInterval(refresh, 6000);
+function movePacket() {
+  cancelAnimationFrame(anim);
+  const path = segs.children[step]; if (!path) return;
+  const len = path.getTotalLength(), t0 = performance.now(), dur = Math.max(600, len * 2.2);
+  pkt.style.fill = flow.steps[step].c; pkt.style.color = flow.steps[step].c; pkt.style.opacity = 1;
+  const tick = now => { const k = Math.min(1, (now - t0) / dur), pt = path.getPointAtLength(k * len);
+    pkt.setAttribute("cx", pt.x); pkt.setAttribute("cy", pt.y); if (k < 1) anim = requestAnimationFrame(tick); };
+  anim = requestAnimationFrame(tick);
+}
+function go(i) { step = Math.max(0, Math.min(flow.steps.length - 1, i)); render(); }
+function pick(id) { flow = FLOWS.find(f => f.id === id) || FLOWS[0]; stop(); go(0); }
+function stop() { clearInterval(timer); timer = null; $("play").textContent = "Play"; }
+$("next").onclick = () => { stop(); go(step + 1); };
+$("prev").onclick = () => { stop(); go(step - 1); };
+$("play").onclick = () => { if (timer) return stop(); $("play").textContent = "Pause"; timer = setInterval(() => step < flow.steps.length - 1 ? go(step + 1) : stop(), 2600); };
+$("flows").innerHTML = FLOWS.map(f => `<button type="button" data-id="${f.id}" style="--c:${f.color}"><i class="dot"></i>${f.label}</button>`).join("");
+$("flows").onclick = e => { const b = e.target.closest("button"); if (b) pick(b.dataset.id); };
+const want = location.hash.replace(/^#/, "").replace(/-still$/, "");
+pick(FLOWS.some(f => f.id === want) ? want : "setup");
+if (still) { step = flow.steps.length - 1; render(); }
+// live state from /api/topology (scripts/topology-api.py): colour the boxes that have a live source
+const LIVE = { client:"n-client", r5:"n-r5", border1:"n-border", spine1:"n-spine1", spine2:"n-spine2", leaf1:"n-leaf1", leaf2:"n-leaf2",
+  "bnk-worker":"n-worker", "bnk-worker2":"n-worker2", "bnk-control-plane":"n-cp", tmm:"n-tmm", ctrl:"n-ctrl", polaris:"n-polaris",
+  picker:"n-picker", mocker:"n-mocker", "tenant-a-ai":"n-ta", "tenant-b-ai":"n-tb", "tenant-c-ai":"n-tc", substrate:"n-substrate",
+  "tenant-c/billing-reconciler":"n-shadow", "sb-tenant-a":"n-openshell", "tenant-a/assistant":"n-kagent" };
+async function live() {
+  if (still) return;
+  try {
+    const d = await (await fetch("api/topology", {cache:"no-store"})).json();
+    let ok = 0, down = 0;
+    d.nodes.forEach(n => { const id = LIVE[n.id]; if (!id) return; const el = $(id); if (!el) return;
+      el.classList.remove("live-ok", "live-down"); if (n.ok === true) { el.classList.add("live-ok"); ok++; } else if (n.ok === false) { el.classList.add("live-down"); down++; } });
+    const sb = Object.keys(d.summary.sandboxes || {}).length || d.summary.sandboxes;
+    $("live").textContent = `live ${d.generated}: ${ok} up, ${down} down · BGP ${Object.entries(d.summary.bgp).map(([k,v])=>k+":"+v).join(" ") || "none"} · ${d.summary.agents} agents · ${sb} sandboxes`;
+  } catch (e) { $("live").textContent = "live state unavailable"; }
+}
+live(); setInterval(live, 10000);
 </script>
 </body>
 </html>
