@@ -108,6 +108,26 @@ if [ "$cur" != "$TARGET_MANIFEST" ]; then
   BNK_WAIT_TIMEOUT=1800 "$DEPLOY/upgrade.sh" --env lab --profile host --to "$TARGET_MANIFEST"
 else ok "already on $TARGET_MANIFEST"; fi
 
+# The installer's upgrade.sh raises the manifest but keeps the operator chart at its own pin (v2.30.0-0.5.2, the 2.4.0
+# one). The release manifest names the operator it was built with (2.4.2: v2.30.0-0.11.4), and only that chart's
+# CNEInstance CRD carries spec.aiGateway: patched against the 2.4.0 CRD, aiGateway was dropped as an unknown field
+# (bake of 2026-10-31). So: read the operator version from the target manifest and bring the chart to it, values
+# untouched (the two charts have the same values; phase 70 of the installer verified the result on EVE with 0.11.4).
+step "lifecycle operator at the version the $TARGET_MANIFEST manifest names"
+MF=$(mktemp -d)
+helm pull "oci://repo.f5.com/release/f5-bigip-k8s-manifest" --version "$TARGET_MANIFEST" --untar --untardir "$MF" >/dev/null
+FLO_WANT=$(grep -A1 'name: charts/f5-lifecycle-operator' "$MF"/f5-bigip-k8s-manifest/*.yaml | sed -n 's/.*version: *\([^ ]*\).*/\1/p' | head -1)
+rm -rf "$MF"
+[ -n "$FLO_WANT" ] || fail "cannot read the lifecycle operator version from the $TARGET_MANIFEST manifest"
+FLO_CUR=$(helm get metadata f5-lifecycle-operator -n f5-cne-core -o json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+if [ "$FLO_CUR" != "$FLO_WANT" ]; then
+  helm upgrade f5-lifecycle-operator oci://repo.f5.com/charts/f5-lifecycle-operator --version "$FLO_WANT" -n f5-cne-core --reuse-values >/dev/null
+  kubectl -n f5-cne-core rollout status deploy/f5-lifecycle-operator --timeout=300s >/dev/null
+fi
+for _ in $(seq 1 30); do kubectl explain cneinstance.spec.aiGateway >/dev/null 2>&1 && break; sleep 5; done
+kubectl explain cneinstance.spec.aiGateway >/dev/null 2>&1 || fail "the CNEInstance CRD still has no spec.aiGateway after operator $FLO_WANT"
+ok "operator $FLO_CUR -> $FLO_WANT; CNEInstance CRD knows spec.aiGateway"
+
 step "AI features and the EVE network model (patched on; the installer's template has no knob for them)"
 # pseudoCNI must leave pod, service and node-network traffic alone; the node network is whatever docker gave kind
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
@@ -115,7 +135,8 @@ KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gatewa
 # RoutingConfig) is the only one that carries EVPN in 2.4.1, and the controller registers its Vrf handler only with
 # USE_GATEWAY_SETTINGS=false. OcNOS (ZEBOS_STATE=ocnos) is the routing stack whose BGP comes from GlobalRoutingConfig.
 kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{"advanced":{"pseudoCNI":{"env":[{"name":"EXCLUDE_CIDR","value":"192.168.0.0/16,10.96.0.0/12,'"$KIND_SUBNET"'"}]}}}}' >/dev/null
-kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{
+# a field the CRD does not know is silently dropped by a merge patch; the warning becomes an error here on purpose
+FEATURES='{"spec":{
   "aiGateway":{"enabled":true,"aiMetrics":true},
   "intelligentLB":{"enabled":true},
   "dynamicRouting":{"enabled":true},
@@ -127,5 +148,8 @@ kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{
     "tmm":{"env":[{"name":"TMM_CALICO_ROUTER","value":"default"},{"name":"TMM_DEFAULT_MTU","value":"1500"},
                   {"name":"TMM_MAPRES_ADDL_VETHS_ON_DP","value":"TRUE"},{"name":"ZEBOS_STATE","value":"ocnos"}]}
   }}}'
+kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p "$FEATURES" --dry-run=server --warnings-as-errors -o name >/dev/null \
+  || fail "the CNEInstance CRD rejects a field of the feature patch (see the warning above)"
+kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p "$FEATURES"
 kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}{"\n"}'
 kubectl get pods -A | grep -E 'f5-|tmm' | grep -v Running | grep -v Completed || ok "every F5 pod Running"
