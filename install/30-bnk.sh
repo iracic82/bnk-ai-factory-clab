@@ -43,7 +43,7 @@ export BNK_TMM_MAPRES=true                      # maps the extra leg onto TMM's 
 # for TMM: a deadlock (bake of 2026-10-31). The patch below switches it on; step 35 applies the configs first thing.
 export BNK_DYNAMIC_ROUTING=false
 export BNK_EPP_NAMESPACES="aigw-models"
-export BNK_WAIT_TIMEOUT="${BNK_WAIT_TIMEOUT:-$(tmo 1800 600)}"
+# BNK_WAIT_TIMEOUT cannot be set from here: environments/lab.env fixes it at 1800 after the caller's value
 export BNK_REQUIRE_LICENSE=true
 
 step "phases 00-40 (preflight, nodes, Multus, cert-manager, registry, FLO, certificates)"
@@ -84,16 +84,21 @@ fi
 # to configure TMM until the License is Active ("Configs are not allowed since license is not activated"), so
 # Available cannot turn True inside phase 50 and its whole wait is spent for nothing (bake of 2026-10-31; phase 50
 # warns on timeout, it does not fail, which is why this read as slowness before). Same phases, unmodified, in the
-# order the controller wants: apply the CNEInstance with a token wait, licence as soon as the License CRD exists,
-# then the real wait, then verify.
-step "phase 50 (CNEInstance applied; the wait comes after the licence)"
-BNK_WAIT_TIMEOUT=60 "$DEPLOY/install.sh" --env lab --profile host --phase 50 || true
+# order the controller wants: phase 50 runs in the background (its wait cannot be shortened: environments/lab.env
+# sets BNK_WAIT_TIMEOUT=1800 after the caller's value), phase 60 applies the licence as soon as the License CRD
+# exists, and phase 50 then returns on its own when Available turns True. Then verify.
+step "phase 50 (CNEInstance; its wait for Available runs while the licence goes in)"
+"$DEPLOY/install.sh" --env lab --profile host --phase 50 & P50=$!
 step "phase 60 (licence; the controller configures TMM only once it is Active)"
-for _ in $(seq 1 60); do kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 && break; sleep 5; done
-kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 || fail "License CRD never appeared; the CNEInstance did not install its CRDs"
+for _ in $(seq 1 120); do kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 && break; sleep 5; done
+kubectl get crd licenses.k8s.f5net.com >/dev/null 2>&1 || { kill "$P50" 2>/dev/null; fail "License CRD never appeared; the CNEInstance did not install its CRDs"; }
 "$DEPLOY/install.sh" --env lab --profile host --phase 60
-step "phases 50 and 70 (the wait for Available, then verify)"
-for p in 50 70; do "$DEPLOY/install.sh" --env lab --profile host --phase "$p"; done
+step "phase 50's wait for Available (TMM is configured now that the licence is Active)"
+wait "$P50" || fail "phase 50 did not reach Available"
+avail=$(kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
+[ "$avail" = True ] || fail "CNEInstance Available=$avail after phase 50; see the conditions above"
+step "phase 70 (verify)"
+"$DEPLOY/install.sh" --env lab --profile host --phase 70
 
 cur=$(kubectl get cneinstance -n f5-bnk f5-bnk-instance -o jsonpath='{.spec.manifestVersion}')
 if [ "$cur" != "$TARGET_MANIFEST" ]; then
