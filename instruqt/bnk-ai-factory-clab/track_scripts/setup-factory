@@ -61,18 +61,19 @@ cd "$LAB_ROOT"
 step "environment"
 echo "user=$(id -un) HOME=$HOME shell=$BASH_VERSION"
 for t in bash git docker kind containerlab kubectl helm python3 jq sudo curl; do printf '  %-12s %s\n' "$t" "$(command -v "$t" || echo MISSING)"; done
+echo "pwd=$(pwd) LAB_ROOT=$LAB_ROOT"; ls -la "$LAB_ROOT/install" | head -5; stat -c '%A %U %N' "$LAB_ROOT/install/00-host-prep.sh"
 step "host (hugepages, limits; already baked, this re-asserts after boot)"
-bash install/00-host-prep.sh
+bash "$LAB_ROOT"/install/00-host-prep.sh
 step "registry mirrors"
-bash install/05-registry-mirrors.sh
+bash "$LAB_ROOT"/install/05-registry-mirrors.sh
 step "fabric + kind"
-bash install/10-fabric.sh
+bash "$LAB_ROOT"/install/10-fabric.sh
 step "cluster"
-bash install/20-cluster.sh
+bash "$LAB_ROOT"/install/20-cluster.sh
 step "BNK"
-bash install/30-bnk.sh
+bash "$LAB_ROOT"/install/30-bnk.sh
 step "BNK on the fabric"
-bash install/35-bnk-network.sh
+bash "$LAB_ROOT"/install/35-bnk-network.sh
 # The learner is root on this VM. The FAR credential and the licence token have done their work (images sit in
 # the mirrors' cache, the licence is a License CR), so they leave the disk here. The CalypsoAI key stays only
 # if chapter 10 is to use the real service; 60-guardrails.sh reads it and shreds it too.
@@ -81,9 +82,9 @@ unset FAR_PULL_B64 BNK_LICENSE_JWT
 # The layers above BNK: a failure here is reported in /var/log/setup-factory.log and the chapter that needs the
 # layer says so in its check, but it does not take the whole start down with it.
 for s in 40-ai 45-observability 50-agents 60-guardrails; do
-  [ -x "install/$s.sh" ] || continue
+  [ -f "$LAB_ROOT/install/$s.sh" ] || continue
   step "$s"
-  bash "install/$s.sh" || echo "WARNING: install/$s.sh failed; see above. The lab starts without that layer."
+  bash "$LAB_ROOT/install/$s.sh" || echo "WARNING: install/$s.sh failed; see above. The lab starts without that layer."
 done
 
 step "Lab Topology tab (port 5050 on the VM address)"
