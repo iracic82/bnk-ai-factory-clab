@@ -10,23 +10,33 @@ source "$(dirname "$0")/lib/common.sh"
 source "$(dirname "$0")/lib/expose.sh"
 need helm; need jq; need docker
 M="$REPO_ROOT/manifests/ai"; NS=f5-bnk
-kubectl -n $NS get cneinstance f5-bnk-instance >/dev/null || fail "no CNEInstance; run 30-bnk.sh"
+# AI_STAGE=pre runs what needs no BNK (Dynamo, mocker, ollama, GPU simulators) so it can overlap BNK's own waits;
+# AI_STAGE=post runs what does (picker, Polaris, tenants, route tests); unset or "all" runs everything in order.
+AI_STAGE="${AI_STAGE:-all}"
+stage() { [ "$AI_STAGE" = all ] || [ "$AI_STAGE" = "$1" ]; }
+stage pre || kubectl -n $NS get cneinstance f5-bnk-instance >/dev/null || fail "no CNEInstance; run 30-bnk.sh"
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
 KIND_GW=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Gateway}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+$' | head -1)
 [ -n "$KIND_SUBNET" ] && [ -n "$KIND_GW" ] || fail "cannot read the kind network"
 GAIE=$GAIE_VERSION; DYNAMO=1.5.1; FGO=0.2.1; KAI=v0.18.6; OLLAMA_IMG=ollama/ollama:0.6.8
 
+if stage pre; then
 step "Gateway API Inference Extension CRDs $GAIE"
 kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$GAIE/manifests.yaml" >/dev/null
 step "namespaces and pull secrets"
 kubectl create ns aigw-models --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl label ns aigw-models aigw.lab/engine=dynamo --overwrite >/dev/null
+fi
+if stage post; then
+step "pull secrets for the picker image (repo.f5.com)"
 for n in far-pull-secret far-secret; do   # the picker image comes from repo.f5.com
   kubectl -n $NS get secret far-pull-secret -o json \
     | jq --arg n "$n" 'del(.metadata.namespace,.metadata.uid,.metadata.resourceVersion,.metadata.creationTimestamp,.metadata.ownerReferences,.metadata.managedFields) | .metadata.name=$n' \
     | kubectl -n aigw-models apply -f - >/dev/null
 done
+fi
 
+if stage pre; then
 step "NVIDIA Dynamo platform $DYNAMO + NATS"
 # The chart's dependencies name the prometheus-community repo; helm needs that index in its cache (a fresh VM
 # has none; the image finalise step deletes /root/.cache/helm).
@@ -41,6 +51,8 @@ step "Mocker workers (DynamoGraphDeployment)"
 kubectl apply -f "$M/10-dynamo-mocker.yaml" >/dev/null
 kubectl -n aigw-models wait dynamographdeployment/mocker --for=condition=Ready --timeout="$(tmo 1200s 300s)" >/dev/null && ok "mocker Ready" || warn "mocker not Ready yet (continuing)"
 
+fi
+if stage post; then
 step "model pool behind its own VIP with the F5 Endpoint Picker"
 kubectl apply -f "$M/20-pool-vip.yaml" >/dev/null
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # same rule as install/35-bnk-network.sh
@@ -50,6 +62,8 @@ for _ in $(seq 1 "$(tmo 120 60)"); do kubectl -n aigw-models get deploy model-po
 kubectl -n aigw-models get deploy model-pool-epp >/dev/null 2>&1 || warn "no model-pool-epp Deployment yet (the controller has not acted on the F5EPP)"
 kubectl -n aigw-models rollout status deploy/model-pool-epp --timeout="$(tmo 600s 180s)" >/dev/null 2>&1 && ok "picker running" || warn "picker not up yet"
 
+fi
+if stage pre; then
 step "ollama on the VM for the agents' model (qwen2.5:1.5b)"
 # A container on the VM, bound to the kind gateway address and loopback only: pods reach it over the node network,
 # nothing on the LAN does, and /var/lib/lab-ollama (the weights) is part of the baked image.
@@ -66,6 +80,8 @@ done
 curl -sS -m 5 http://127.0.0.1:11434/api/generate -d '{"model":"qwen2.5:1.5b","keep_alive":-1}' >/dev/null 2>&1 || true
 ok "ollama at $KIND_GW:11434 with $(docker exec lab-ollama ollama list | tail -n +2 | wc -l) models"
 
+fi
+if stage post; then
 step "Polaris AI Gateway: Reconciled, console and management API on the host"
 r=""
 for i in $(seq 1 "$(tmo 90 18)"); do
@@ -166,6 +182,8 @@ aigw_tenant tenant-b "Borealis Bank" 172.16.100.21
 aigw_tenant tenant-c "Cobalt Labs"   172.16.100.22
 unset TOK
 
+fi
+if stage pre; then
 step "GPU simulators: fake GPU operator $FGO (4 x H100 per worker) and KAI scheduler $KAI with a queue per tenant"
 for n in bnk-worker bnk-worker2; do kubectl label node $n run.ai/simulated-gpu-node-pool=h100 --overwrite >/dev/null; done
 helm upgrade -i gpu-operator oci://ghcr.io/run-ai/fake-gpu-operator/fake-gpu-operator --version $FGO -n gpu-operator --create-namespace -f "$M/40-fake-gpu-values.yaml" --wait --timeout 5m >/dev/null
@@ -176,6 +194,8 @@ until kubectl apply -f "$M/42-queues.yaml" >/dev/null 2>&1; do sleep 5; done
 kubectl get nodes -o custom-columns='NODE:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu,PRODUCT:.metadata.labels.nvidia\.com/gpu\.product'
 kubectl get queues.scheduling.run.ai
 
+fi
+if stage post; then
 step "the two paths to an AI Gateway route: the fabric (client behind r5) and TMM's internal leg (a node, as pods do)"
 K=$(cat "$SECRETS_DIR/aigw/tenant-a.key" 2>/dev/null || true)
 [ -n "$K" ] && docker exec client curl -sS -m 120 http://172.16.100.20/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
@@ -188,3 +208,4 @@ for n in bnk-control-plane bnk-worker; do
   [ "$code" = 200 ] && ok "$n -> 172.16.100.13 via TMM's internal leg: $code" || warn "$n -> 172.16.100.13 answered $code (the node route or the internal leg)"
 done
 unset L
+fi

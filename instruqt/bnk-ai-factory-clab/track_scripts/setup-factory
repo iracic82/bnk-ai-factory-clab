@@ -69,6 +69,15 @@ step "fabric + kind"
 bash "$LAB_ROOT"/install/10-fabric.sh
 step "cluster"
 bash "$LAB_ROOT"/install/20-cluster.sh
+# What needs no BNK starts now and overlaps BNK's own waits: the AI layer's Dynamo, mocker, ollama and GPU
+# simulators (AI_STAGE=pre) and the observability stack. Their logs are printed after the fabric step.
+layer() {   # name [stage]: runs install/<name>.sh with AI_STAGE=<stage>, logging to its own file
+  local n=$1 st=${2:-all} l="/var/log/setup-$1${2:+-$2}.log"
+  AI_STAGE=$st bash "$LAB_ROOT/install/$n.sh" >"$l" 2>&1 || echo "WARNING: install/$n.sh${2:+ ($2)} failed; see $l. The lab starts without that layer." >>"$l"
+}
+show() { local l="/var/log/setup-$1${2:+-$2}.log"; [ -f "$l" ] && { step "$1${2:+ ($2)}"; cat "$l"; }; }
+layer 40-ai pre & PRE=$!
+layer 45-observability & OBS=$!
 step "BNK"
 bash "$LAB_ROOT"/install/30-bnk.sh
 step "BNK on the fabric"
@@ -83,13 +92,11 @@ unset FAR_PULL_B64 BNK_LICENSE_JWT
 # The tolerant layers run two at a time: observability needs nothing from the AI layer, and the agents and the
 # guardrail both need only the AI layer's keys and routes. Each layer logs to its own file so the output stays
 # readable, and is printed under its own header once its pair has finished.
-layer() { bash "$LAB_ROOT/install/$1.sh" >"/var/log/setup-$1.log" 2>&1 || echo "WARNING: install/$1.sh failed; see /var/log/setup-$1.log. The lab starts without that layer." >>"/var/log/setup-$1.log"; }
-for pair in "40-ai 45-observability" "50-agents 60-guardrails"; do
-  pids=""
-  for s in $pair; do [ -f "$LAB_ROOT/install/$s.sh" ] && { layer "$s" & pids="$pids $!"; }; done
-  wait $pids || true
-  for s in $pair; do [ -f "/var/log/setup-$s.log" ] && { step "$s"; cat "/var/log/setup-$s.log"; }; done
-done
+wait $PRE $OBS || true
+show 40-ai pre; show 45-observability
+layer 40-ai post; show 40-ai post
+layer 50-agents & A=$!; layer 60-guardrails & G=$!; wait $A $G || true
+show 50-agents; show 60-guardrails
 
 step "Lab Topology tab (port 5050 on the VM address)"
 # the live topology page every chapter has as a tab; reads docker, the cluster, leaf1 and openshell, nothing more
