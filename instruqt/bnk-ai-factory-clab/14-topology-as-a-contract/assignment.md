@@ -119,7 +119,7 @@ is the Dynamo pool behind the pool VIP. Same picker, one more layer in front of 
 ## Disaggregated, on paper
 
 The `F5EPP` can split the pool into prefill and decode workers by label and pick one of each. Read the field and the
-label it keys on; that is the closest thing in this factory to a topology-aware decision, and it is still about role,
+label it keys on. That is the closest thing in this factory to a topology-aware decision, and it is still about role,
 not place:
 
 ```bash,run
@@ -132,7 +132,7 @@ kubectl -n aigw-models get pods -L nvidia.com/dynamo-component-type --no-headers
 - Which signals cross the boundary into the router today: cache state and load, over NATS and metrics.
 - Which do not: rack, rail, link utilisation. They exist on the pods now as labels and nothing reads them.
 - Where it would go: a scorer plugin next to the ones above, fed by those labels, for prefill and decode pairing on
-  a real fabric. The labels are the easy half; the plugin that reads them is the work.
+  a real fabric. The labels are the easy half. The plugin that reads them is the work.
 
 Nothing here is a verdict on either project. It is the list of what reaches the picker in this factory and what
 does not, which is what the GPU team asked for.

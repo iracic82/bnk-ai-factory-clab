@@ -4,7 +4,7 @@ id: nsy7m9xovcyr
 type: challenge
 title: 12. Nowhere to send it
 teaser: A clean prompt and the same webhook. The sandboxed assistant is refused by
-  OpenShell before a packet leaves; the plain pod is dropped by BNK in Cobalt's VRF
+  OpenShell before a packet leaves. The plain pod is dropped by BNK in Cobalt's VRF
   once its egress declaration is gone. Watch border1 see nothing.
 notes:
 - type: text
@@ -15,8 +15,8 @@ notes:
     can get there.
 
     Two kinds of agent, two answers. The sanctioned assistant runs in an OpenShell sandbox whose network policy
-    lists one host, its AI route; the webhook is not on the list. The agent from chapter 10 is a plain pod in
-    Cobalt's namespace; it leaves through TMM in Cobalt's VRF with Cobalt's SNAT address, because that is what an
+    lists one host, its AI route. The webhook is not on the list. The agent from chapter 10 is a plain pod in
+    Cobalt's namespace. It leaves through TMM in Cobalt's VRF with Cobalt's SNAT address, because that is what an
     `F5SPKEgress` declares for the namespace. Remove the declaration and there is no path at all.
 tabs:
 - id: 3fitc4dy0pwz
@@ -140,7 +140,7 @@ unset K
 docker exec bnk-worker2 ip route get 172.16.100.22 | head -1
 ```
 
-The node's route for `172.16.100.0/24` points at TMM's internal self IP. The model is reachable; the outside is not.
+The node's route for `172.16.100.0/24` points at TMM's internal self IP. The model is reachable. The outside is not.
 
 ## Put it back the right way
 

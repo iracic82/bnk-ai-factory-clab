@@ -52,12 +52,12 @@ listener through the NetPolicy you already have.
 
 [button label="Open the Lab Topology" variant="outline"](tab-2)
 
-The **Lab Topology** tab stays on the MCP flow; the second hop is the listener this chapter programs.
+The **Lab Topology** tab stays on the MCP flow. The second hop is the listener this chapter programs.
 
 ## An iRule, and where it runs
 
 Read the rule first. It is short: on `HTTP_REQUEST`, if the path is `/factory/whoami`, respond with a JSON body and
-a header; otherwise insert the header and let the request continue to the pool:
+a header. Otherwise insert the header and let the request continue to the pool:
 
 ```bash,run
 sed -n '/kind: F5BigCneIrule/,/^---/p' $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml
@@ -97,7 +97,7 @@ kubectl -n tenant-a logs -l app=agent --all-containers --tail=0 -f
 for i in 1 2 3; do docker exec client curl -s -m 5 -o /dev/null -w '%{http_code} ' http://172.16.100.23/factory/whoami; done; echo
 ```
 
-Terminal 2 stays silent. Now the MCP route underneath it, which still works and still returns a session id; the
+Terminal 2 stays silent. Now the MCP route underneath it, which still works and still returns a session id. The
 stamp is on the request the pod receives, not on the response:
 
 ```bash,run
@@ -139,8 +139,8 @@ kubectl -n tenant-a get netpolicy tenant-mcp-sessions -o jsonpath='{range .statu
 ## The Access CRDs
 
 BNK 2.4 ships a set of CRDs for identity at ingress, and they are why the release notes describe MCP and A2A delivery
-"with OIDC and JWT validation". A `F5BigAccessJwtConfig` describes the issuer, keys and claims a token must carry; an
-access profile ties it to a listener; the Gateway rejects a request whose token does not validate before any pod
+"with OIDC and JWT validation". A `F5BigAccessJwtConfig` describes the issuer, keys and claims a token must carry. An
+access profile ties it to a listener. The Gateway rejects a request whose token does not validate before any pod
 sees it. The attachment is the same NetPolicy shape you used twice today:
 
 ```bash,run
@@ -155,7 +155,7 @@ tokens, this is where they are checked, next to the iRule and the persistence pr
 
 - One listener, one NetPolicy, two extensions: a protocol-aware profile and her own Tcl.
 - An iRule change is a `kubectl apply`, picked up by TMM in seconds, with the sessions intact.
-- Identity checks have a home at the traffic layer; the CRDs are there, the IdP is the only thing missing here.
+- Identity checks have a home at the traffic layer. The CRDs are there, the IdP is the only thing missing here.
 
 ## Checkpoint
 

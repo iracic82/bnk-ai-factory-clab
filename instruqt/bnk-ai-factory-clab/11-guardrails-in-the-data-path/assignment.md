@@ -14,7 +14,7 @@ notes:
     The answer is that nothing read it: Polaris checked the key, the picker chose a worker, and the content went
     through.
 
-    Northlight has a scanner (CalypsoAI; in this lab a mock that answers in the same wire format, or the real
+    Northlight has a scanner (CalypsoAI, in this lab a mock that answers in the same wire format, or the real
     service if the track was started with a key). What it did not have was a place to put it in the path. BNK
     gives it one: an iRule on the tenant's AI route collects the request body, opens a sideband connection to the
     scanner, and answers the client itself on a `flagged` verdict. The model never sees the request.
@@ -77,11 +77,11 @@ kubectl -n guardrails get svc,deploy
 sed -n '/when HTTP_REQUEST_DATA/,/HTTP::release/p' $LAB_ROOT/manifests/guardrails/20-guardrails-irule.yaml | sed -n '1,40p'
 ```
 
-The shape of the rule: on `HTTP_REQUEST` it asks TMM to collect the body; on `HTTP_REQUEST_DATA` it opens a sideband
+The shape of the rule: on `HTTP_REQUEST` it asks TMM to collect the body. On `HTTP_REQUEST_DATA` it opens a sideband
 connection to the scanner, posts the whole prompt to `/backend/v1/scans`, and reads the outcome. `passed` releases
 the request towards the model. `flagged` makes TMM answer the caller itself with `HTTP::respond 200`, a body that
 reads like a model reply, and a header `X-Guardrail: blocked`. The scanner mode is `mock` unless real CalypsoAI
-credentials were given to the track; the iRule is identical in both cases.
+credentials were given to the track. The iRule is identical in both cases.
 
 Ask the scanner directly from inside the cluster, with a harmless sentence and with last night's kind of request:
 
@@ -111,7 +111,7 @@ kubectl -n f5-bnk get netpolicy guardrails-tenant-c -o jsonpath='{range .status.
 kubectl -n f5-bnk get gateway tenant-c-ai -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}{"\n"}'
 ```
 
-Keep **Terminal 2** on the webhook log from chapter 10; it is the thing that must not move:
+Keep **Terminal 2** on the webhook log from chapter 10. It is the thing that must not move:
 
 ```
 docker exec client tail -f /tmp/webhook.log
@@ -165,15 +165,15 @@ kubectl -n kagent exec deploy/kagent-controller -- sh -c "curl -s -m 240 http://
 docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook after:  /"'
 ```
 
-The agent's model call carried the export it had just read; the scanner flagged it; TMM returned the block message
-as the assistant's answer; the agent had nothing to post. Open the **Polaris** tab: the call is recorded under
+The agent's model call carried the export it had just read. The scanner flagged it. TMM returned the block message
+as the assistant's answer, and the agent had nothing to post. Open the **Polaris** tab: the call is recorded under
 `tenant-c`, and the record shows what TMM answered.
 
 [button label="Open Polaris" variant="success"](tab-3)
 
 ## Detach, and attach again
 
-The attachment is one object. Delete it and the route is back to Polaris only; apply it and the verdict is back.
+The attachment is one object. Delete it and the route is back to Polaris only. Apply it and the verdict is back.
 Nothing restarts either way:
 
 ```bash,run
@@ -189,8 +189,8 @@ docker exec client sh -c 'grep -i x-guardrail /tmp/h'; unset K
 ## What Mira writes in the ticket
 
 - Content inspection where the content flows: in TMM, on the tenant's route, before the model.
-- Attached with the same `NetPolicy` shape as chapters 5 and 6; detached with `kubectl delete -f`.
-- The verdict comes from the scanner; the enforcement and the record come from the data plane. Chapter 12 is the
+- Attached with the same `NetPolicy` shape as chapters 5 and 6, detached with `kubectl delete -f`.
+- The verdict comes from the scanner. The enforcement and the record come from the data plane. Chapter 12 is the
   case the scanner cannot see: a clean prompt.
 
 ## Checkpoint

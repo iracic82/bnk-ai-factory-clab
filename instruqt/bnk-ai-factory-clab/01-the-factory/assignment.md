@@ -11,9 +11,9 @@ notes:
   contents: |-
     **Northlight Compute, Monday of week one.**
 
-    Northlight is a neocloud. It does not sell servers; it sells slices of one AI factory to enterprises that will
+    Northlight is a neocloud. It does not sell servers. It sells slices of one AI factory to enterprises that will
     never build their own. This quarter three of them signed: Aurora Health, a hospital group with a clinical queue
-    it wants an assistant for; Borealis Bank, which wants the same for payments; Cobalt Labs, a research shop that
+    it wants an assistant for, Borealis Bank, which wants the same for payments, and Cobalt Labs, a research shop that
     wants GPUs more than anything else. They will share the fabric, the cluster and the GPUs, and each has been
     promised that nothing of theirs touches the others.
 
@@ -66,7 +66,7 @@ leaves, goes through what you see here.
 
 The **Lab Topology** tab is the interactive version of that picture. Pick a flow and step through it hop by hop.
 It opens on **A client reaches a tenant VIP**, which is the request you send at the end of this chapter. Keep it
-open; it polls the VM and colours what is up.
+open. It polls the VM and colours what is up.
 
 ## The room
 
@@ -130,7 +130,7 @@ That `default` in VRF tenant-a is not from TMM. It came from r5 through border1,
 ## The exit
 
 border1 holds the same VRFs and hands each one to r5 over a VLAN-tagged link, VRF-lite: VLAN 200 for `external`,
-101 to 103 for the tenants. r5 is one router with one table, the way an upstream usually is; it accepts from each
+101 to 103 for the tenants. r5 is one router with one table, the way an upstream usually is. It accepts from each
 VRF only that tenant's VIP pool and SNAT pool, and sends a default back.
 
 ```bash,run
@@ -150,7 +150,7 @@ docker exec border1 vtysh -c 'show running-config' | grep -E 'prefix-list to-r5-
 ## The cluster
 
 Now the inside. Three kind nodes, each a container on this VM. `bnk-worker` carries the label that puts TMM on it
-and 2 MiB hugepages for TMM's memory; `bnk-worker2` carries the AI workloads and the simulated GPUs you meet in
+and 2 MiB hugepages for TMM's memory. `bnk-worker2` carries the AI workloads and the simulated GPUs you meet in
 chapter 3:
 
 ```bash,run
@@ -159,8 +159,8 @@ kubectl get nodes -o custom-columns='NODE:.metadata.name,HUGEPAGES:.status.alloc
 kubectl get pods -A --no-headers | awk '{c[$1]++} END {for (n in c) printf "%-24s %s pods\n", n, c[n]}' | sort
 ```
 
-Count the namespaces. `f5-bnk` and `f5-cne-core` are BNK; `aigw-models` the models and the picker; `kagent`,
-`openshell` and `ate-system` the agents and their runtimes; `tenant-a/b/c` the customers; `guardrails`,
+Count the namespaces. `f5-bnk` and `f5-cne-core` are BNK. `aigw-models` holds the models and the picker. `kagent`,
+`openshell` and `ate-system` hold the agents and their runtimes. `tenant-a/b/c` are the customers. `guardrails`,
 `monitoring`, `gpu-operator`, `kai-scheduler` the rest. Each is a chapter.
 
 ## The handoff
@@ -176,7 +176,7 @@ kubectl -n f5-bnk get f5-spk-vlans -o custom-columns='VLAN:.metadata.name,IF:.sp
 ```
 
 leaf1 has learned TMM's MAC on that port, and it peers with TMM four times: once in VRF `external` on the untagged
-leg and once inside each tenant VRF on its VLAN. TMM speaks AS 65100; the leaf answers as 65000 because that is what TMM's configuration
+leg and once inside each tenant VRF on its VLAN. TMM speaks AS 65100 and the leaf answers as 65000 because that is what TMM's configuration
 expects its gateway to be:
 
 ```bash,run
@@ -198,7 +198,7 @@ any router learns them.
 ## BNK itself
 
 The product is one CNEInstance that the lifecycle operator turns into pods. Its conditions are the health of the
-whole thing; the CRDs below it are the network model this lab uses (VRFs, VLAN legs, routing configs, a gateway
+whole thing. The CRDs below it are the network model this lab uses (VRFs, VLAN legs, routing configs, a gateway
 address pool):
 
 ```bash,run
@@ -228,7 +228,7 @@ docker exec leaf1 vtysh -c 'show bgp vrf tenant-a ipv4 unicast 10.201.100.10/32'
 ```
 
 leaf1 learned the /32 from `172.17.101.11`, TMM's self IP on VLAN 101, as a route-domain route. border1 learned it
-as an EVPN type-5 from leaf1 and installed it in VRF tenant-a; r5 got it over the VRF-lite link. Watch it on the
+as an EVPN type-5 from leaf1 and installed it in VRF tenant-a. r5 got it over the VRF-lite link. Watch it on the
 wire in **Terminal 2** while you send another request:
 
 ```bash,run
@@ -259,7 +259,7 @@ kubectl -n f5-bnk get pods -l app=tenant-a-hello -o wide --no-headers | awk '{pr
 ## The consoles
 
 Two things Mira keeps open for the rest of the week. The **Polaris** tab is the AI Gateway console (chapters 9 to
-13 live in it); its admin password is here, and only here:
+13 live in it). Its admin password is here, and only here:
 
 ```bash,run
 kubectl -n f5-bnk get secret f5-aigateway-admin -o jsonpath='{.data.password}' | base64 -d; echo

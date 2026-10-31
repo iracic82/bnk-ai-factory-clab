@@ -3,7 +3,7 @@ slug: the-picker
 id: ovove5gkzpwy
 type: challenge
 title: 4. The picker
-teaser: BNK does not only pick a node; its Endpoint Picker chooses the model worker
+teaser: BNK does not only pick a node. Its Endpoint Picker chooses the model worker
   per request, from the workers' own KV-cache events and load. Send the same prompt
   twice and watch the second one land where the cache is.
 notes:
@@ -19,7 +19,7 @@ notes:
     KV usage before TMM forwards the request to the chosen worker.
 
     This is the layer the llm-d project calls "topology must reach the router". BNK's picker is cache- and
-    load-aware; it does not yet score by network topology (rack, rail), which is what chapter 13 is about.
+    load-aware. It does not yet score by network topology (rack, rail), which is what chapter 13 is about.
 tabs:
 - id: megyxgnorev5
   title: Terminal
@@ -126,7 +126,7 @@ ask "List four prime numbers above 100."
 kubectl -n aigw-models logs $P --since=1m | grep -iE 'pick|select|endpoint' | tail -3
 ```
 
-This is the answer to Aurora's engineer. The gateway did not hash on a header or round-robin; it asked.
+This is the answer to Aurora's engineer. The gateway did not hash on a header or round-robin. It asked.
 
 ## Load-aware
 
@@ -160,8 +160,8 @@ kubectl -n aigw-models get inferencepool model-pool -o jsonpath='{.status}' | py
 ## Disaggregated mode
 
 The `F5EPP` has a `mode` field: `aggregated`, where every worker handles a request end to end, which is what runs
-here; or `disaggregated`, where the pool is split by label into prefill and decode workers and the picker chooses one
-of each. Read the field's description now; chapter 14 comes back to it when the question is whether the picker knows
+here, or `disaggregated`, where the pool is split by label into prefill and decode workers and the picker chooses one
+of each. Read the field's description now. Chapter 14 comes back to it when the question is whether the picker knows
 where a worker sits:
 
 ```bash,run

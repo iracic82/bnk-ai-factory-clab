@@ -66,7 +66,7 @@ model.
 
 ## Who is who
 
-Four kagent agents. The tenant assistants carry MCP tools from their own sidecar; `factory-operator` carries
+Four kagent agents. The tenant assistants carry MCP tools from their own sidecar. `factory-operator` carries
 read-only Kubernetes tools:
 
 ```bash,run
@@ -140,7 +140,7 @@ unset K
 ```
 
 Three lines: a 200, a refusal by key, a refusal by model. Polaris has all three, under the tenant whose route was
-called. The same holds for Borealis's and Cobalt's assistants; ask one if you want the symmetric proof:
+called. The same holds for Borealis's and Cobalt's assistants. Ask one if you want the symmetric proof:
 
 ```bash,run
 docker exec client curl -s -m 180 http://172.16.100.14/api/a2a/tenant-c/assistant/ -H 'Content-Type: application/json' -d '{
@@ -152,7 +152,7 @@ docker exec client curl -s -m 180 http://172.16.100.14/api/a2a/tenant-c/assistan
 ## The operator
 
 Open the **kagent** tab: the four agents, their tools and a chat with each. The tenant assistants have no Kubernetes
-tools; `factory-operator` has them read-only. Ask it "which pods are not Running?" and compare with the terminal:
+tools. `factory-operator` has them read-only. Ask it "which pods are not Running?" and compare with the terminal:
 
 [button label="Open kagent" variant="success"](tab-3)
 
@@ -161,7 +161,7 @@ kubectl get pods -A --field-selector status.phase!=Running,status.phase!=Succeed
 kubectl -n kagent get agent factory-operator -o jsonpath='{.spec.declarative.tools[*].mcpServer.toolNames}{"\n"}' | tr ' ' '\n' | head -12
 ```
 
-Every tool in that list is a read. The operator can tell Mira what is broken; it cannot change anything, and it
+Every tool in that list is a read. The operator can tell Mira what is broken. It cannot change anything, and it
 cannot read a tenant's records because it has none of their tools.
 
 ## What Mira says on Thursday

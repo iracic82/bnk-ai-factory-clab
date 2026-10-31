@@ -14,8 +14,8 @@ notes:
     when, and what stopped the second and third attempts.
 
     Nothing in this chapter is new. Every record you need was written by something you already met: Polaris logs
-    every model call per tenant and key; TMM answered the flagged request itself and marked it; OpenShell logged
-    every refused connection with the binary and the destination; Prometheus has the workers' load and the GPU
+    every model call per tenant and key. TMM answered the flagged request itself and marked it. OpenShell logged
+    every refused connection with the binary and the destination. Prometheus has the workers' load and the GPU
     queues around the same minutes.
 
     The task is to put them in order.
@@ -67,7 +67,7 @@ Prometheus has the load around all of it. This chapter reads the four and writes
 
 [button label="Open the Lab Topology" variant="outline"](tab-2)
 
-The **Lab Topology** tab opens on **The agent nobody approved**; every hop in that flow has a record somewhere
+The **Lab Topology** tab opens on **The agent nobody approved**, and every hop in that flow has a record somewhere
 below.
 
 ## Polaris: the calls
@@ -116,7 +116,7 @@ kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='{.metadata.cr
 
 That creation timestamp is from this session, not from track start: the egress object was deleted and re-created in
 chapter 12. Kubernetes keeps the fact, and the audit log would keep who did it. Keep **Terminal 2** on the BNK
-controller's recent log while you read; it names every object it programmed today:
+controller's recent log while you read. It names every object it programmed today:
 
 ```
 kubectl -n f5-bnk logs deploy/f5-cne-controller --since=3h | grep -iE 'netpolicy|egress|irule' | tail -20
@@ -137,7 +137,7 @@ sandbox's own log is the only record of them.
 ## Prometheus: the load around it
 
 The workers' running requests during the week and the GPU queues. In the **Prometheus** tab, graph the two
-expressions below over the last few hours; the burst from chapter 4 and the jobs from chapter 3 are visible.
+expressions below over the last few hours. The burst from chapter 4 and the jobs from chapter 3 are visible.
 
 [button label="Open Prometheus" variant="success"](tab-5)
 
@@ -159,7 +159,7 @@ cat /root/.bnk/grafana-admin; echo
 ## The webhook and the fabric
 
 Two more records live outside the cluster: the webhook's own log on the client, and the capture you ran on border1.
-The log has every POST with a timestamp; the capture had one burst on VLAN 103 and then nothing:
+The log has every POST with a timestamp. The capture had one burst on VLAN 103 and then nothing:
 
 ```bash,run
 docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs received: /"; grep -aoE "^> [0-9/ :.]+" /tmp/webhook.log | tail -3'
@@ -167,7 +167,7 @@ docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs re
 
 ## Write the timeline
 
-Five lines. Each one has a source above. Edit the dates if you want them exact; the check only needs the facts:
+Five lines. Each one has a source above. Edit the dates if you want them exact. The check only needs the facts:
 
 ```bash,run
 cat > /root/incident-timeline.md <<'EOF'

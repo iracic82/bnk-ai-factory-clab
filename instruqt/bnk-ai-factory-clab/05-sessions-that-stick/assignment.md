@@ -58,7 +58,7 @@ not a cookie. It is a persistence profile that reads the protocol itself.
 
 [button label="Open the Lab Topology" variant="outline"](tab-2)
 
-The **Lab Topology** tab opens on **MCP and A2A sessions stick**. The first two hops are this chapter; the third is
+The **Lab Topology** tab opens on **MCP and A2A sessions stick**. The first two hops are this chapter. The third is
 the same idea on the agents gateway.
 
 ## Publish Aurora's MCP server on BNK
@@ -104,7 +104,7 @@ for i in 1 2 3 4 5 6; do
 done | sort | uniq -c
 ```
 
-Two or three pod names. The lab's MCP server tolerates that; a real one that keeps session state in memory answers
+Two or three pod names. The lab's MCP server tolerates that. A real one that keeps session state in memory answers
 `404 session not found` for every call that lands on the wrong pod. Keep **Terminal 2** on the pods so you can see
 there are three and all are Ready:
 
@@ -115,7 +115,7 @@ kubectl -n tenant-a get pods -l app=agent -w
 ## Turn the profile on
 
 The profile encrypts the session cookie it issues with a passphrase from a Secret. Create the Secret, and BNK programs
-the profile within seconds; its condition tells you when:
+the profile within seconds, and its condition tells you when:
 
 ```bash,run
 kubectl -n tenant-a create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
@@ -124,7 +124,7 @@ kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions netpolicy te
 kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
 
-Read the two objects you just made live. The profile is the behaviour; the NetPolicy is the attachment, with the
+Read the two objects you just made live. The profile is the behaviour. The NetPolicy is the attachment, with the
 Gateway and its listener on one side and the profile on the other:
 
 ```bash,run
@@ -166,7 +166,7 @@ docker exec client curl -s -m 10 http://172.16.100.14/api/a2a/tenant-a/assistant
 ```
 
 The agent card is Aurora's assistant describing itself over the published front. The kagent controller runs as one
-replica here, so there is nothing to scatter yet; the profile is in place for when there are more, and every A2A
+replica here, so there is nothing to scatter yet. The profile is in place for when there are more, and every A2A
 call in chapters 7, 9 and 10 already goes through it.
 
 ## What Mira writes back to Aurora
@@ -174,8 +174,8 @@ call in chapters 7, 9 and 10 already goes through it.
 - A Gateway per tenant service, in the tenant's namespace, on an address from BNK's pool. The tenant's team can
   own that object.
 - `NetPolicy` is the attachment: the Gateway listener on one side, a BNK extension on the other, same namespace, one
-  per listener. Chapter 6 adds an iRule to this same NetPolicy; chapter 11 attaches a guardrail with another.
-- Two persistence types that read the protocol. The Polaris routes do not need them (one request, one answer); MCP
+  per listener. Chapter 6 adds an iRule to this same NetPolicy, and chapter 11 attaches a guardrail with another.
+- Two persistence types that read the protocol. The Polaris routes do not need them (one request, one answer). MCP
   servers and A2A agents do.
 
 ## Checkpoint

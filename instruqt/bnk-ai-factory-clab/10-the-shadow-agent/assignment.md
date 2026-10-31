@@ -137,7 +137,7 @@ move. Open the **Polaris** tab: the refused call is recorded under `tenant-c` wi
 
 [button label="Open Polaris" variant="success"](tab-3)
 
-Identity held. The developer learns nothing new from that; they already knew the key was not theirs.
+Identity held. The developer learns nothing new from that. They already knew the key was not theirs.
 
 ## Second attempt: the tenant's own key
 

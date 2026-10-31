@@ -14,7 +14,7 @@ notes:
     wire up wrong.
 
     Agent Substrate is that layer. A `WorkerPool` is a set of nodes-within-nodes that hold a golden snapshot of an
-    `ActorTemplate`; an actor is forked from it in milliseconds and runs under gVisor. Its only way out is
+    `ActorTemplate`. An actor is forked from it in milliseconds and runs under gVisor. Its only way out is
     Substrate's own router, which hands model calls to the AI Gateway. kagent 0.10 speaks Substrate natively: a
     `SandboxAgent` becomes an ActorTemplate, and the pool does the rest.
 
@@ -52,18 +52,18 @@ Northlight wants a front desk: an agent any customer can ask "what do I get here
 and locked away from the cluster network. The kagent team has a shape for that which is not a Deployment. Agent
 Substrate gives agents a scheduler of their own: worker pools, a golden snapshot with the runtime already loaded,
 actors forked from it in a moment, and an identity per actor from Kubernetes' certificate API. kagent declares a
-`SandboxAgent`; Substrate runs it as an actor.
+`SandboxAgent`, and Substrate runs it as an actor.
 
 ![Substrate's control plane in ate-system with the router as the actor's only network, kagent's WorkerPool, and the path from a SandboxAgent through a generated ActorTemplate to a running actor](../assets/scene-07.png)
 
 [button label="Open the Lab Topology" variant="outline"](tab-2)
 
-In the **Lab Topology** tab the Substrate box sits under kagent; the model path for an actor is the **An agent calls
+In the **Lab Topology** tab the Substrate box sits under kagent. The model path for an actor is the **An agent calls
 its model** flow, entered through the router instead of the pod network.
 
 ## The pieces
 
-Substrate's control plane lives in `ate-system`. Every node runs an `atelet`; the API server, the controller and the
+Substrate's control plane lives in `ate-system`. Every node runs an `atelet`. The API server, the controller and the
 router run as deployments. Every pod identity is a certificate issued through the `PodCertificateRequest` API, which
 this cluster has switched on at the API server:
 
@@ -74,7 +74,7 @@ kubectl api-resources --api-group=ate.dev
 kubectl get --raw /apis/certificates.k8s.io/v1beta1 | python3 -c 'import json,sys; print("certificates.k8s.io/v1beta1:", [r["name"] for r in json.load(sys.stdin)["resources"]])'
 ```
 
-Five kinds under `ate.dev`. The one you declare against is `WorkerPool`; the one Substrate generates is
+Five kinds under `ate.dev`. The one you declare against is `WorkerPool`. The one Substrate generates is
 `ActorTemplate`. The one the kagent chart created, and the workers it runs:
 
 ```bash,run
@@ -84,7 +84,7 @@ kubectl -n kagent get pods -l ate.dev/worker-pool=kagent-default -o wide --no-he
 ```
 
 Two workers on `ateom-gvisor`, which is the isolation layer each actor runs under. Keep **Terminal 2** on
-`ate-system` for the rest of the chapter; you will see the controller react to what you apply:
+`ate-system` for the rest of the chapter. You will see the controller react to what you apply:
 
 ```
 kubectl -n ate-system logs -f --tail=5 $(kubectl -n ate-system get deploy -o name | grep -i controller | head -1)
@@ -154,7 +154,7 @@ kubectl -n kagent get sandboxagent concierge -o jsonpath='{.spec.declarative.mod
 ## What it changes
 
 - A pod is scheduled, pulled, started and torn down by the kubelet. An actor is forked from a snapshot that already
-  has the runtime loaded; a second one costs almost nothing. Apply the same file under another name and watch how
+  has the runtime loaded, so a second one costs almost nothing. Apply the same file under another name and watch how
   fast the second actor is Ready.
 - The actor does not have the cluster network. Its model calls go through the router, which is the only thing it can
   reach, and the router talks to the AI Gateway route of its tenant.

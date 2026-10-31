@@ -4,7 +4,7 @@ id: fwycg1vescme
 type: challenge
 title: 8. OpenShell
 teaser: The sanctioned assistants run in OpenShell sandboxes. A provider injects the
-  tenant's key toward one host and nothing else; the sandbox's network policy refuses
+  tenant's key toward one host and nothing else. The sandbox's network policy refuses
   every other connection and logs it. Try to get out, then change the policy and try
   again.
 notes:
@@ -15,9 +15,9 @@ notes:
     not a promise.
 
     NVIDIA OpenShell is that list, enforced. A sandbox runs the agent's workload under gVisor with a supervisor
-    beside it. A **provider** describes one external service and the credential for it; the supervisor adds the
+    beside it. A **provider** describes one external service and the credential for it. The supervisor adds the
     credential to requests bound for that endpoint, so the key is never inside the sandbox. The **network policy**
-    is an allow-list by binary and destination; everything else is denied and written to the log.
+    is an allow-list by binary and destination. Everything else is denied and written to the log.
 
     The three tenant sandboxes were created at track start. This chapter reads one, tests its edges, and changes
     the policy while it runs.

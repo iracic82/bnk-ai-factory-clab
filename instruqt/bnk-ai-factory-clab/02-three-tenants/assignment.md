@@ -48,7 +48,7 @@ enhanced_loading: false
 # Three tenants
 
 Tuesday. Aurora Health's network team sends Mira a one line question: "Where exactly does our traffic stop being
-ours?" Borealis Bank asks the same thing in forty lines with a diagram attached. Cobalt Labs does not ask; they
+ours?" Borealis Bank asks the same thing in forty lines with a diagram attached. Cobalt Labs does not ask. They
 assume. Mira's answer is the same for all three, and it is not a policy document. It is a tenant: one declaration on
 BNK that becomes a route domain on TMM, a VLAN on the handoff, a VRF on every switch, a VIP pool, a SNAT pool, and a
 tenant in the AI Gateway with its own key. This chapter reads one tenant through every layer, proves the walls
@@ -84,7 +84,7 @@ kubectl -n f5-bnk exec $P -c f5-tmm-routing -- imish -e 'show ip route' | grep -
 ```
 
 The peer on `172.17.101.1` is leaf1's VLAN 101 address. The routes TMM learned from it are the default and the
-client subnet; the routes TMM announces are below.
+client subnet. The routes TMM announces are below.
 
 ## What the fabric accepts
 
@@ -147,14 +147,14 @@ docker exec r5 vtysh -c 'show ip route 10.201.200.0/24'
 ```
 
 Terminal 2 shows the SYN from a `10.201.200.x` address on the tenant-a sub-interface. The client has no web server, so
-the exit code is non-zero, and that is fine; the packet is what you wanted to see. The route r5 holds for that SNAT
+the exit code is non-zero, and that is fine. The packet is what you wanted to see. The route r5 holds for that SNAT
 pool is the return path, and it points at the tenant-a link only. Step through **A tenant pod leaves the factory**
 in the Lab Topology tab with the capture still on the screen.
 
 ## Publish a second service for Borealis Bank
 
 Borealis's team wants a reports endpoint next to their hello page. On BNK that is one object. The pool already exists
-(`tenant-b-hello`, with its members in `f5-bnk`); you add the `F5VirtualServer` in VRF tenant-b:
+(`tenant-b-hello`, with its members in `f5-bnk`). You add the `F5VirtualServer` in VRF tenant-b:
 
 ```bash,run
 cat <<'EOF' | kubectl apply -f -
