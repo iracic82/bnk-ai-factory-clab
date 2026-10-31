@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+for t in a b c; do kubectl -n tenant-$t delete jobs --all --ignore-not-found >/dev/null 2>&1; done
+exit 0

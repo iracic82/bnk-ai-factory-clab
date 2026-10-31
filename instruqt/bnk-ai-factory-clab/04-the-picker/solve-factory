@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -uo pipefail
+docker exec client curl -s -m 60 -o /dev/null http://172.16.100.12:8000/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"Qwen/Qwen3-0.6B","messages":[{"role":"user","content":"ping"}],"max_tokens":4}' 2>/dev/null
+exit 0

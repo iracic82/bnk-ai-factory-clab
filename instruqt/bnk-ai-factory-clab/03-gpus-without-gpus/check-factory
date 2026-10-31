@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+g=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.allocatable.nvidia\.com/gpu}{"\n"}{end}' | awk '{s+=$1} END {print s+0}')
+[ "$g" -ge 8 ] || fail-message "the cluster advertises $g GPUs; expected 8 (fake GPU operator on both workers)."
+for q in ai-factory tenant-a tenant-b tenant-c; do kubectl get queues.scheduling.run.ai "$q" >/dev/null 2>&1 || fail-message "KAI queue $q is missing."; done
+left=$(kubectl get jobs -A -l kai.scheduler/queue --no-headers 2>/dev/null | wc -l)
+[ "$left" -eq 0 ] || fail-message "$left GPU jobs are still there; delete them (the last command block) before checking."
+exit 0
