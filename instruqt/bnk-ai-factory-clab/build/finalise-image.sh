@@ -18,9 +18,15 @@ kind delete cluster --name bnk >/dev/null 2>&1 || true
 # the mirror containers go (the repo.f5.com one carries the FAR credential in its mounted config); the cache under
 # /var/lib/bnk-mirrors stays, and 05-registry-mirrors.sh recreates the containers at track start
 docker ps -aq --filter name='^mirror-' | xargs -r docker rm -f >/dev/null
-docker system prune -af --volumes >/dev/null 2>&1 || true
+# containers go (ollama's weights stay in /var/lib/lab-ollama); the images docker itself runs stay in docker's cache,
+# so no `docker system prune -a` here: it would drop the kind node, FRR, netshoot, registry and ollama images
+docker ps -aq | xargs -r docker rm -f >/dev/null 2>&1; docker volume prune -f >/dev/null 2>&1 || true
+# the socat units that published UIs point at ClusterIPs that no longer exist; setup-factory recreates them
+systemctl disable --now 'lab-expose-*' >/dev/null 2>&1 || true; rm -f /etc/systemd/system/lab-expose-*.service; systemctl daemon-reload
 step "secrets and clone"
-shred -u "$SECRETS_DIR"/* 2>/dev/null; rm -rf "$SECRETS_DIR" "$LAB_ROOT" /root/.kube /root/.config/helm/registry /root/.docker
+shred -u "$SECRETS_DIR"/* "$SECRETS_DIR"/aigw/* /root/bnk-secrets/* /root/bnk-secrets/aigw/* 2>/dev/null
+# /root/.config/openshell holds the CLI's mTLS bundle for the gateway; the track registers it again
+rm -rf "$SECRETS_DIR" /root/bnk-secrets "$LAB_ROOT" /root/.kube /root/.config/helm/registry /root/.docker /root/.config/openshell /root/.cache/helm
 rm -f /root/.bash_history /root/.python_history; history -c 2>/dev/null || true
 step "apt and logs"
 apt-get clean; rm -rf /var/lib/apt/lists/*; journalctl --rotate 2>/dev/null; journalctl --vacuum-time=1s 2>/dev/null
@@ -32,5 +38,6 @@ if grep -rIl -e '-----BEGIN' -e '"private_key"' /root /etc/docker /var/lib/docke
 echo
 echo "================================================================"
 echo " READY TO SAVE   mirrors: $size   disk: $(df -h / | tail -1 | awk '{print $3" of "$2}')"
-echo " Stop the VM and save it as f5/aibnk."
+echo " In THIS shell now:  history -c; unset FAR_PULL_B64 BNK_LICENSE_JWT GH_READ_TOKEN; export HISTFILE=/dev/null"
+echo " Then stop the VM and save it as f5/aibnk."
 echo "================================================================"
