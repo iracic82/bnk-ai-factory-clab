@@ -57,6 +57,15 @@ apply_immutable "$M/bnk/20-routing-global.yaml"
 step "tenant namespaces and hello apps"
 kubectl apply -f "$M/tenants/hello.yaml" >/dev/null
 for t in a b c; do kubectl -n f5-bnk rollout status deploy/tenant-$t-hello --timeout=180s >/dev/null 2>&1 || warn "tenant-$t-hello not up yet (the VIP stays down until its pool has members)"; done
+step "tenant VRFs (before the VLAN legs that bind to them)"
+# A leg programmed with vrf: tenant-x before that Vrf exists gets no connected route inside the VRF, so TMM's
+# BGP there never leaves Connect. Seen on the first fresh play (2026-10-31); the Vrf objects go in first.
+apply_f5 - "$(python3 -c '
+import sys
+docs = open(sys.argv[1]).read().split("\n---\n")
+print("\n---\n".join(d for d in docs if "kind: Vrf\n" in d))' "$M/bnk/40-tenants.yaml")"
+kubectl -n f5-bnk get vrf --no-headers | awk '{print "   vrf " $1}'
+
 step "TMM legs and VIP pool"
 # the internal leg lives on the kind docker network, whose subnet docker chooses per host
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
