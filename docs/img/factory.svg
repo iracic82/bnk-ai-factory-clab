@@ -76,7 +76,7 @@
 <text x="2271" y="427" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
 <rect x="810.0" y="442" width="290.0" height="190" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
 <text x="820.0" y="466" font-size="13.5" font-weight="700" fill="#5b21b6" text-anchor="start">Polaris AI Gateway</text>
-<text x="820.0" y="488" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">console :30443 · tenants lab,</text>
+<text x="820.0" y="488" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">console :3000 · tenants lab,</text>
 <text x="820.0" y="506" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">tenant-a/b/c · providers dynamo</text>
 <text x="820.0" y="524" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">+ ollama · virtual keys ·</text>
 <text x="820.0" y="542" font-size="11.5" font-weight="400" fill="#4c1d95" text-anchor="start">routes 172.16.100.13 / .20 /</text>

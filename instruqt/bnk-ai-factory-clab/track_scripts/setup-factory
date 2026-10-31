@@ -53,7 +53,7 @@ unset GH_READ_TOKEN auth
 echo "lab at $(git -C "$LAB_ROOT" rev-parse --short HEAD), $(git -C "$LAB_ROOT" ls-files | wc -l) tracked files"
 [ -f "$LAB_ROOT/install/00-host-prep.sh" ] || { ls -la "$LAB_ROOT"; git -C "$LAB_ROOT" status --short | head; fail "$LAB_ROOT has no install/00-host-prep.sh after checkout"; }
 # LAB_PUBLIC=1: the UIs (Polaris, Grafana, Prometheus, kagent) bind the VM's address, which is what the Instruqt
-# tabs on ports 30443/30300/30909/30808 connect to; the sandbox network is private to the learner
+# tabs on ports 3000/30300/30909/30808 connect to; the sandbox network is private to the learner
 export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig" LAB_PUBLIC=1
 cd "$LAB_ROOT"
 

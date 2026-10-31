@@ -14,7 +14,7 @@ virtualmachines:
   machine_type: n2-standard-32
   shell: /bin/bash
   ports:
-  - 30443   # Polaris console (AI Gateway)
+  - 3000   # Polaris console (AI Gateway)
   - 30300   # Grafana
   - 30909   # Prometheus
   - 30808   # kagent UI

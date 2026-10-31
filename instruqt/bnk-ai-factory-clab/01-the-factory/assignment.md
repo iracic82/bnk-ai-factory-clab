@@ -41,7 +41,7 @@ tabs:
   title: Polaris
   type: service
   hostname: factory
-  port: 30443
+  port: 3000
 difficulty: basic
 timelimit: 1800
 enhanced_loading: false

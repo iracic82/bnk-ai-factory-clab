@@ -93,7 +93,7 @@ kubectl -n $NS wait --for=condition=Ready pod/f5-aigateway-clickhouse-0 --timeou
 # the controller checks ClickHouse once at start and may have lost that race (seen on 2.4.1): one restart after ClickHouse is up
 kubectl -n $NS rollout restart deploy/f5-cne-controller >/dev/null 2>&1 || true
 kubectl -n $NS rollout status deploy/f5-cne-controller --timeout=300s >/dev/null 2>&1 || true
-expose_service polaris $NS f5-aigateway-console 30443
+expose_service polaris $NS f5-aigateway-console 3000
 LAB_PUBLIC=0 expose_service aigw-api $NS f5-cne-controller-api 18443
 API=http://127.0.0.1:18443
 for _ in $(seq 1 60); do curl -fsS -o /dev/null "$API/api/v1/admin/ready" && break; sleep 3; done

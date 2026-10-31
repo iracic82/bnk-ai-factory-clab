@@ -33,7 +33,7 @@ tabs:
   title: Polaris
   type: service
   hostname: factory
-  port: 30443
+  port: 3000
 - id: jrzaoipua0z5
   title: Lab Topology
   type: service

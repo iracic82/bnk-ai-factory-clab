@@ -40,7 +40,7 @@ tabs:
   title: Polaris
   type: service
   hostname: factory
-  port: 30443
+  port: 3000
 - id: qr8kdl5efojw
   title: Grafana
   type: service

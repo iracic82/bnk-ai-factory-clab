@@ -87,7 +87,7 @@ ax, ay = kx + 16, by + 216
 box(ax, ay, kw - 32, 250, "#ffffff", "#7c3aed", 10, 2)
 text(ax + 14, ay + 24, "AI layer", 14, "#6d28d9", 700)
 chapter(ax + kw - 60, ay + 20, 3); chapter(ax + kw - 95, ay + 20, 4)
-cells = [("Polaris AI Gateway", "console :30443 · tenants lab, tenant-a/b/c · providers dynamo + ollama · virtual keys · routes 172.16.100.13 / .20 / .21 / .22"),
+cells = [("Polaris AI Gateway", "console :3000 · tenants lab, tenant-a/b/c · providers dynamo + ollama · virtual keys · routes 172.16.100.13 / .20 / .21 / .22"),
          ("NVIDIA Dynamo 1.5.1", "aigw-models: Frontend + 2 Mocker decode workers (vllm:* metrics, KV events on NATS) · simulated, no GPU"),
          ("F5 Endpoint Picker", "F5EPP engine dynamo · prefix-cache + prefill-load scorers · InferencePool model-pool behind VIP 172.16.100.12:8000"),
          ("GPU simulators", "fake GPU operator 0.2.1: 4 x H100 per worker, nvidia-smi + DCGM · KAI v0.18.6 queues ai-factory -> tenant-a/b/c (4/2/2)"),
