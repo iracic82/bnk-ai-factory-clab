@@ -7,7 +7,8 @@
 #
 # Secrets, from the process environment only, as the installer wants them:
 #   FAR_PULL_JSON     path to cne_pull_64.json            (default: $SECRETS_DIR/cne_pull_64.json)
-#   BNK_LICENSE_JWT   the licence token                    (default: contents of $SECRETS_DIR/license.jwt)
+#   BNK_LICENSE_JWT   the licence token                    (default: contents of $SECRETS_DIR/$LICENSE_FILE,
+#                                                            LICENSE_FILE defaults to spk-eval-igor.jwt)
 #
 # Phases 00-40 run first, then the NetworkAttachmentDefinition for TMM's external leg is created (Multus arrives in
 # phase 10, and FLO needs the NAD to exist before the CNEInstance in phase 50 names it), then 50-70.
@@ -25,9 +26,10 @@ ok "bnk-deploy $(git -C "$DEPLOY" rev-parse --short HEAD)"
 
 export FAR_PULL_JSON="${FAR_PULL_JSON:-$SECRETS_DIR/cne_pull_64.json}"
 [ -r "$FAR_PULL_JSON" ] || fail "FAR_PULL_JSON $FAR_PULL_JSON is not readable"
+LICENSE_FILE="${LICENSE_FILE:-spk-eval-igor.jwt}"
 if [ -z "${BNK_LICENSE_JWT:-}" ]; then
-  [ -r "$SECRETS_DIR/license.jwt" ] || fail "no BNK_LICENSE_JWT and no $SECRETS_DIR/license.jwt"
-  BNK_LICENSE_JWT="$(tr -d '\n\r ' < "$SECRETS_DIR/license.jwt")"; export BNK_LICENSE_JWT
+  [ -r "$SECRETS_DIR/$LICENSE_FILE" ] || fail "no BNK_LICENSE_JWT and no $SECRETS_DIR/$LICENSE_FILE"
+  BNK_LICENSE_JWT="$(tr -d '\n\r ' < "$SECRETS_DIR/$LICENSE_FILE")"; export BNK_LICENSE_JWT
 fi
 
 # Knobs the installer's host profile and lab environment accept from the caller (profiles/host.env keeps ${VAR:-})

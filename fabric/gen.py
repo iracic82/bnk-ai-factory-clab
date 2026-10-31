@@ -62,9 +62,19 @@ def gw(subnet, host):            # "172.16.10.0/24", 1 -> "172.16.10.1/24"
     return ".".join(net.split(".")[:3] + [str(host)]) + "/" + plen
 
 
-def underlay(name, asn, lo, nports):
-    c = [f"frr defaults datacenter", f"hostname {name}", "service integrated-vtysh-config", "!",
-         f"router bgp {asn}", f" bgp router-id {lo}", " no bgp ebgp-requires-policy", " no bgp default ipv4-unicast",
+def vrf_vni_map():
+    # zebra's VRF -> L3VNI mapping; without it bgpd has no VNI to put behind "advertise ipv4 unicast" and exports
+    # no type-5 routes at all
+    c = []
+    for vrf, table, vni, *_ in VRFS:
+        c += [f"vrf {vrf}", f" vni {vni}", "exit-vrf", "!"]
+    return c
+
+
+def underlay(name, asn, lo, nports, vrfs=False):
+    c = [f"frr defaults datacenter", f"hostname {name}", "service integrated-vtysh-config", "!"]
+    c += vrf_vni_map() if vrfs else []
+    c += [f"router bgp {asn}", f" bgp router-id {lo}", " no bgp ebgp-requires-policy", " no bgp default ipv4-unicast",
          " bgp bestpath as-path multipath-relax", " neighbor fabric peer-group", " neighbor fabric remote-as external",
          " neighbor fabric capability extended-nexthop", " neighbor fabric bfd"]
     c += [f" neighbor eth{i} interface peer-group fabric" for i in range(1, nports + 1)]
@@ -74,8 +84,11 @@ def underlay(name, asn, lo, nports):
 
 
 def vrf_bgp(asn, lo, vrf, vni, extra):
+    # "advertise ipv4 unicast" exports the VRF's BGP table as type-5; the handoff subnets are connected routes, so
+    # they have to be redistributed first or the rest of the fabric never learns where 172.16.10.0/24 lives
     return [f"router bgp {asn} vrf {vrf}", f" bgp router-id {lo}", " no bgp ebgp-requires-policy",
             " bgp bestpath as-path multipath-relax"] + extra + [
+            " !", " address-family ipv4 unicast", "  redistribute connected", " exit-address-family",
             " !", " address-family l2vpn evpn", f"  route-target import {RT_ASN}:{vni}", f"  route-target export {RT_ASN}:{vni}",
             "  advertise ipv4 unicast", " exit-address-family", "exit", "!"]
 
@@ -93,7 +106,7 @@ def vrf_links(lo):               # kernel side of symmetric IRB, shared by leave
 
 
 def leaf(name, asn, lo):
-    c = underlay(name, asn, lo, UPLINKS["leaf"]) + ["  advertise-all-vni", " exit-address-family", "exit", "!"]
+    c = underlay(name, asn, lo, UPLINKS["leaf"], vrfs=True) + ["  advertise-all-vni", " exit-address-family", "exit", "!"]
     s = ["#!/bin/sh", "set -e", f"ip addr add {lo}/32 dev lo", "ip link set eth3 up"] + vrf_links(lo)
     for vrf, table, vni, handoff, vips, _ in VRFS:
         # the TMM-facing prefix list: only the VIP pool is accepted from TMM; TMM gets a default
@@ -115,7 +128,7 @@ def leaf(name, asn, lo):
 
 
 def border(name, asn, lo):
-    c = underlay(name, asn, lo, UPLINKS["border"]) + ["  advertise-all-vni", " exit-address-family", "exit", "!"]
+    c = underlay(name, asn, lo, UPLINKS["border"], vrfs=True) + ["  advertise-all-vni", " exit-address-family", "exit", "!"]
     s = ["#!/bin/sh", "set -e", f"ip addr add {lo}/32 dev lo", "ip link set eth3 up"] + vrf_links(lo)
     for vrf, table, vni, handoff, vips, p2p in VRFS:
         dev = f"eth3.{VLAN[vrf]}"
