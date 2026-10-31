@@ -75,7 +75,7 @@ ConfigMap the picker generated with its scoring pipeline:
 
 ```bash,run
 kubectl -n aigw-models get inferencepool model-pool -o yaml | sed -n '/^spec:/,/^status:/p'
-kubectl -n aigw-models get f5epp model-pool-epp -o jsonpath='{.spec.engine}{" "}{.spec.poolRef.name}{" "}{.status.conditions[-1].type}={.status.conditions[-1].status}{"\n"}'
+kubectl -n aigw-models get f5-epps model-pool-epp -o jsonpath='{.spec.engine}{" "}{.spec.poolRef.name}{" "}{.status.conditions[-1].type}={.status.conditions[-1].status}{"\n"}'
 kubectl -n aigw-models get cm model-pool-epp-config -o jsonpath='{.data.pool\.yaml}' | grep -E '^- name:|type:' | paste - - | column -t
 ```
 
@@ -85,7 +85,7 @@ The engine is `dynamo`, which means the prefix-cache scorer is fed by KV events 
 guessing from request history:
 
 ```bash,run
-kubectl -n aigw-models get f5epp model-pool-epp -o jsonpath='{.spec.natsURL}{"\n"}'
+kubectl -n aigw-models get f5-epps model-pool-epp -o jsonpath='{.spec.natsURL}{"\n"}'
 kubectl -n aigw-models get pods -o wide --no-headers | awk '{printf "%-44s %-10s %s\n", $1, $3, $7}'
 ```
 
@@ -165,7 +165,7 @@ of each. Read the field's description now. Chapter 14 comes back to it when the 
 where a worker sits:
 
 ```bash,run
-kubectl explain f5epp.spec.mode | sed -n '1,20p'
+kubectl explain f5-epps.spec.mode | sed -n '1,20p'
 ```
 
 ## Checkpoint

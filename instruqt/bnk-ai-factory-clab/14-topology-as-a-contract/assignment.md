@@ -64,8 +64,8 @@ The picker's plugins, as configured on the `F5EPP`: a wire into Dynamo's KV even
 saturation detector, and the scorers:
 
 ```bash,run
-kubectl -n aigw-models get f5epp model-pool-epp -o jsonpath='{.spec.eppConfig.config.plugins[*].type}{"\n"}' | tr ' ' '\n' | sed 's/^/  plugin: /'
-kubectl -n aigw-models get f5epp model-pool-epp -o jsonpath='{.spec.engine} {.spec.natsURL} mode={.spec.mode}{"\n"}'
+kubectl -n aigw-models get f5-epps model-pool-epp -o jsonpath='{.spec.eppConfig.config.plugins[*].type}{"\n"}' | tr ' ' '\n' | sed 's/^/  plugin: /'
+kubectl -n aigw-models get f5-epps model-pool-epp -o jsonpath='{.spec.engine} {.spec.natsURL} mode={.spec.mode}{"\n"}'
 ```
 
 Nothing in that list is a topology scorer. The picker sees two workers and their state, not their place. The
@@ -123,7 +123,7 @@ label it keys on. That is the closest thing in this factory to a topology-aware 
 not place:
 
 ```bash,run
-kubectl explain f5epp.spec.mode | sed -n '1,20p'
+kubectl explain f5-epps.spec.mode | sed -n '1,20p'
 kubectl -n aigw-models get pods -L nvidia.com/dynamo-component-type --no-headers | awk '{print $1, $NF}' | grep -vE '<none>' | head
 ```
 
