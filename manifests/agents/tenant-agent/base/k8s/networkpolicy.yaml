@@ -21,4 +21,6 @@ spec:
     - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
       podSelector: {matchLabels: {app: f5-tmm}}
     - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
-    ports: [{protocol: TCP, port: 8080}]
+    # 8080 is the tenant app behind its Gateway (chapter 9); 8001 is the MCP server behind its own Gateway
+    # (chapter 5). TMM SNATs to its internal self IP, so both published ports must admit that address.
+    ports: [{protocol: TCP, port: 8080}, {protocol: TCP, port: 8001}]
