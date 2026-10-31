@@ -1,6 +1,6 @@
 # BNK AI factory on containerlab
 
-The EVE-NG lab (`iracic82/Home_k8s`) rebuilt so it fits one Instruqt VM: BIG-IP Next for Kubernetes 2.4.1 in host
+The EVE-NG lab (`iracic82/Home_k8s`) rebuilt so it fits one Instruqt VM: BIG-IP Next for Kubernetes 2.4.2 in host
 mode on a kind cluster, with an FRR spine/leaf/border fabric around it, wired together by containerlab. Same
 address plan, same tenants, same agents, OpenShell and Agent Substrate included. No NICo and no semantic router.
 
@@ -73,5 +73,5 @@ Copied in, never referenced, so this repo stands alone:
 
 ## Status
 
-- 2026-10-31: repository started. Building the proof on the workstation (24 vCPU, 125 GB): fabric + kind +
+- 2026-10-31: repository started. Fabric + kind + Calico up on the workstation (24 vCPU, 125 GB) and routing end to end; BNK 2.4.2 install next (needs the hugepages step from 00-host-prep.sh). Instruqt packaging after that works.
   Calico + BNK, TMM peering with leaf1. Instruqt packaging comes after that works.

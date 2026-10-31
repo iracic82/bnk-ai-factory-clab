@@ -17,7 +17,8 @@ kubectl get node bnk-worker -L app --no-headers | grep -q f5-tmm || fail "bnk-wo
 
 DEPLOY="$REPO_ROOT/.cache/bnk-deploy"
 BNK_DEPLOY_REF="${BNK_DEPLOY_REF:-main}"
-TARGET_MANIFEST="${TARGET_MANIFEST:-2.4.1}"
+# 2.4.2 is a critical release (PHP CVE fixes on top of 2.4.1, no feature change per its release notes) and is in the registry
+TARGET_MANIFEST="${TARGET_MANIFEST:-2.4.2}"
 
 step "installer"
 if [ -d "$DEPLOY/.git" ]; then git -C "$DEPLOY" fetch -q origin "$BNK_DEPLOY_REF" && git -C "$DEPLOY" checkout -q FETCH_HEAD
