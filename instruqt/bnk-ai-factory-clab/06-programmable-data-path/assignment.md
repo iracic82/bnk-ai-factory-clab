@@ -76,7 +76,7 @@ document is that NetPolicy with two `extensionRefs`:
 sed -n '/kind: NetPolicy/,$p' $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml
 sleep 8
-kubectl -n tenant-a get f5bigcneirule tenant-stamp -o custom-columns='NAME:.metadata.name,READY:.status.conditions[-1].status,MESSAGE:.status.conditions[-1].message'
+kubectl -n tenant-a get f5-big-cne-irules tenant-stamp -o custom-columns='NAME:.metadata.name,READY:.status.conditions[-1].status,MESSAGE:.status.conditions[-1].message'
 kubectl -n tenant-a get netpolicy tenant-mcp-sessions -o jsonpath='{range .spec.extensionRefs[*]}{.kind}/{.name}{"\n"}{end}'
 ```
 
@@ -115,7 +115,7 @@ without a restart and without a gap for the sessions on the listener:
 ```bash,run
 sed 's/before any pod/before any pod, revision 2/' $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml | kubectl apply -f -
 sleep 8; docker exec client curl -s -m 5 http://172.16.100.23/factory/whoami; echo
-kubectl -n tenant-a get f5bigcneirule tenant-stamp -o jsonpath='{.metadata.generation} {.status.conditions[-1].status}{"\n"}'
+kubectl -n tenant-a get f5-big-cne-irules tenant-stamp -o jsonpath='{.metadata.generation} {.status.conditions[-1].status}{"\n"}'
 ```
 
 The generation went up by one, the condition is still `True`, and the body changed. Put the original back the same

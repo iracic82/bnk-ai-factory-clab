@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig
-[ "$(kubectl -n tenant-a get f5bigcneirule tenant-stamp -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] \
+[ "$(kubectl -n tenant-a get f5-big-cne-irules tenant-stamp -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] \
   || fail-message "F5BigCneIrule tenant-a/tenant-stamp is missing or not Ready (apply manifests/chapters/06-stamp-irule.yaml)."
 kubectl -n tenant-a get netpolicy tenant-mcp-sessions -o jsonpath='{range .spec.extensionRefs[*]}{.name} {end}' 2>/dev/null | grep -q tenant-stamp \
   || fail-message "NetPolicy tenant-a/tenant-mcp-sessions does not list the iRule tenant-stamp in its extensionRefs."

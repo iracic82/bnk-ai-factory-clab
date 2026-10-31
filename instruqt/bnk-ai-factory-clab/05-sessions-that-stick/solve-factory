@@ -8,5 +8,5 @@ kubectl -n kagent create secret generic a2a-passphrase --from-literal=primary-pa
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-a2a-persistence.yaml >/dev/null
 kubectl -n tenant-a wait --for=condition=Programmed gateway/tenant-mcp --timeout=240s >/dev/null 2>&1
 kubectl -n tenant-a rollout status deploy/agent --timeout=240s >/dev/null 2>&1
-for _ in $(seq 1 30); do [ "$(kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] && break; sleep 5; done
+for _ in $(seq 1 30); do [ "$(kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] && break; sleep 5; done
 exit 0

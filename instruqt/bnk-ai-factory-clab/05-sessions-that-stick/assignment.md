@@ -71,7 +71,7 @@ NetPolicy that attaches it, which stay unprogrammed until a passphrase Secret ex
 grep -nE '^kind:|^  name:|destinationAddress|value: 172|type: MODEL|passphrase|targetRef|extensionRef' $LAB_ROOT/manifests/chapters/05-mcp-route.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-mcp-route.yaml 2>&1 | grep -v persistence
 kubectl -n tenant-a wait --for=condition=Programmed gateway/tenant-mcp --timeout=180s
-kubectl -n tenant-a get gateway tenant-mcp httproute tenant-mcp
+kubectl -n tenant-a get gateway/tenant-mcp httproute/tenant-mcp
 ```
 
 `Programmed=True` means TMM has the listener. From the client, behind r5, the route answers an MCP `initialize` with a
@@ -120,15 +120,15 @@ the profile within seconds, and its condition tells you when:
 ```bash,run
 kubectl -n tenant-a create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
 sleep 10
-kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions netpolicy tenant-mcp-sessions
-kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions netpolicy tenant-mcp-sessions
+kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
 
 Read the two objects you just made live. The profile is the behaviour. The NetPolicy is the attachment, with the
 Gateway and its listener on one side and the profile on the other:
 
 ```bash,run
-kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
+kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
 kubectl -n tenant-a get netpolicy tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
 ```
 
@@ -161,7 +161,7 @@ in the `kagent` namespace where that Gateway lives:
 ```bash,run
 kubectl -n kagent create secret generic a2a-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-a2a-persistence.yaml
-sleep 10; kubectl -n kagent get f5bigpersistenceprofile agents-a2a-sessions netpolicy agents-a2a-sessions
+sleep 10; kubectl -n kagent get f5-big-persistence-profiles agents-a2a-sessions netpolicy agents-a2a-sessions
 docker exec client curl -s -m 10 http://172.16.100.14/api/a2a/tenant-a/assistant/.well-known/agent-card.json | python3 -m json.tool | head -20
 ```
 

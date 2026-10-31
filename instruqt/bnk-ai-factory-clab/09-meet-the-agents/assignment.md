@@ -119,7 +119,7 @@ Through the tenant's own published app, which is how Aurora's users will reach i
 tenant-a on `172.16.100.16` fronts a small web app that calls the assistant:
 
 ```bash,run
-kubectl -n tenant-a get gateway tenant-gw httproute -o wide 2>/dev/null | head -4
+kubectl -n tenant-a get gateway/tenant-gw httproute 2>/dev/null | head -4
 docker exec client curl -s -m 180 http://172.16.100.16/api/ask -H 'Content-Type: application/json' -d '{"question":"Where do I run, and how does my traffic leave the factory?"}' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("answer", d))'
 ```
 

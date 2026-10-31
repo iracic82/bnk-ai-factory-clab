@@ -71,7 +71,7 @@ The iRule was created at track start and is Ready, attached to nothing. Read wha
 to:
 
 ```bash,run
-kubectl -n f5-bnk get f5bigcneirule guardrails -o custom-columns='NAME:.metadata.name,READY:.status.conditions[-1].status'
+kubectl -n f5-bnk get f5-big-cne-irules guardrails -o custom-columns='NAME:.metadata.name,READY:.status.conditions[-1].status'
 cat $LAB_ROOT/manifests/guardrails/.mode | sed 's/^/scanner mode: /'
 kubectl -n guardrails get svc,deploy
 sed -n '/when HTTP_REQUEST_DATA/,/HTTP::release/p' $LAB_ROOT/manifests/guardrails/20-guardrails-irule.yaml | sed -n '1,40p'

@@ -3,7 +3,7 @@ set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig
 kubectl -n tenant-a get gateway tenant-mcp >/dev/null 2>&1 || fail-message "Gateway tenant-a/tenant-mcp does not exist yet (apply manifests/chapters/05-mcp-route.yaml)."
 kubectl -n tenant-a get secret mcp-passphrase >/dev/null 2>&1 || fail-message "Secret tenant-a/mcp-passphrase is missing; the persistence profile stays unprogrammed without it."
-[ "$(kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] \
+[ "$(kubectl -n tenant-a get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null)" = True ] \
   || fail-message "F5BigPersistenceProfile tenant-a/tenant-mcp-sessions is not programmed yet; check its conditions."
 [ "$(kubectl -n tenant-a get deploy agent -o jsonpath='{.status.readyReplicas}' 2>/dev/null)" -ge 3 ] 2>/dev/null \
   || fail-message "deploy/agent in tenant-a has fewer than 3 ready replicas; scale it to 3."
