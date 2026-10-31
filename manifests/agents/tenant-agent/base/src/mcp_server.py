@@ -27,10 +27,6 @@ except ValueError:
     pass
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *a, **k):
-        return None
-
 TENANT = os.environ.get("TENANT", "a")
 PORT = int(os.environ.get("MCP_PORT", "8001"))
 MAX_BODY = 16384
