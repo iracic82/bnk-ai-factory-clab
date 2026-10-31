@@ -34,7 +34,7 @@ tabs:
   title: Lab Topology
   type: service
   hostname: factory
-  path: /topology
+  path: /topology#aigw
   port: 5050
 - id: t5vukbrijkye
   title: kagent
@@ -42,25 +42,40 @@ tabs:
   hostname: factory
   port: 30808
 difficulty: intermediate
-timelimit: 1500
+timelimit: 1800
 enhanced_loading: false
 ---
 
-![07-agent-substrate](../assets/07-agent-substrate.svg)
+# Agent Substrate
+
+Northlight wants a front desk: an agent any customer can ask "what do I get here?", cheap enough to run many of,
+and locked away from the cluster network. The kagent team has a shape for that which is not a Deployment. Agent
+Substrate gives agents a scheduler of their own: worker pools, a golden snapshot with the runtime already loaded,
+actors forked from it in a moment, and an identity per actor from Kubernetes' certificate API. kagent declares a
+`SandboxAgent`; Substrate runs it as an actor.
+
+![Substrate's control plane in ate-system with the router as the actor's only network, kagent's WorkerPool, and the path from a SandboxAgent through a generated ActorTemplate to a running actor](../assets/scene-07.png)
+
+[button label="Open the Lab Topology" variant="outline"](tab-2)
+
+In the **Lab Topology** tab the Substrate box sits under kagent; the model path for an actor is the **An agent calls
+its model** flow, entered through the router instead of the pod network.
 
 ## The pieces
 
-Substrate's control plane lives in `ate-system`. Every node runs an `atelet`; the API server, the controller and
-the router (an agentgateway) run as deployments; every pod identity is a certificate issued through Kubernetes'
-PodCertificateRequest API, which this cluster has switched on.
+Substrate's control plane lives in `ate-system`. Every node runs an `atelet`; the API server, the controller and the
+router run as deployments. Every pod identity is a certificate issued through the `PodCertificateRequest` API, which
+this cluster has switched on at the API server:
 
 ```bash,run
 kubectl -n ate-system get pods -o wide --no-headers | awk '{printf "%-36s %-10s %s\n", $1, $3, $7}'
-kubectl get podcertificaterequests -A --no-headers | wc -l | sed 's/^/pod certificates issued: /'
+kubectl get podcertificaterequests -A --no-headers 2>/dev/null | wc -l | sed 's/^/pod certificates issued: /'
 kubectl api-resources --api-group=ate.dev
+kubectl get --raw /apis/certificates.k8s.io/v1beta1 | python3 -c 'import json,sys; print("certificates.k8s.io/v1beta1:", [r["name"] for r in json.load(sys.stdin)["resources"]])'
 ```
 
-The WorkerPool the kagent chart created, and the workers it runs:
+Five kinds under `ate.dev`. The one you declare against is `WorkerPool`; the one Substrate generates is
+`ActorTemplate`. The one the kagent chart created, and the workers it runs:
 
 ```bash,run
 kubectl -n kagent get workerpools.ate.dev -o wide
@@ -68,30 +83,52 @@ kubectl -n kagent get workerpools.ate.dev kagent-default -o jsonpath='{.spec}' |
 kubectl -n kagent get pods -l ate.dev/worker-pool=kagent-default -o wide --no-headers 2>/dev/null || kubectl -n kagent get pods --no-headers | grep -iE 'worker|pool'
 ```
 
-## Put an agent on it
+Two workers on `ateom-gvisor`, which is the isolation layer each actor runs under. Keep **Terminal 2** on
+`ate-system` for the rest of the chapter; you will see the controller react to what you apply:
+
+```
+kubectl -n ate-system logs -f --tail=5 $(kubectl -n ate-system get deploy -o name | grep -i controller | head -1)
+```
+
+## The declaration
 
 A `SandboxAgent` is a kagent agent with a `substrate` block. This one is Northlight's front desk: no tools, the lab
-tenant's model, a WorkerPool reference.
+tenant's model, a WorkerPool reference. Read it before applying it:
 
 ```bash,run
 cat $LAB_ROOT/manifests/chapters/07-concierge-sandboxagent.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/07-concierge-sandboxagent.yaml
 ```
 
-kagent turns it into an ActorTemplate, Substrate builds the golden snapshot once, and the actor starts from it:
+kagent turns it into an `ActorTemplate`, Substrate builds the golden snapshot once (that is the slow part, a minute
+or two the first time), and the actor starts from it. Watch both arrive:
 
 ```bash,run
 for i in $(seq 1 24); do
   t=$(kubectl -n kagent get actortemplates.ate.dev --no-headers 2>/dev/null | grep -c concierge)
   r=$(kubectl -n kagent get sandboxagent concierge -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null)
-  echo "actortemplates: $t   SandboxAgent Ready: ${r:-unknown}"; [ "$r" = True ] && break; sleep 10
+  echo "$(date +%T)  actortemplates: $t   SandboxAgent Ready: ${r:-unknown}"; [ "$r" = True ] && break; sleep 10
 done
 kubectl -n kagent get actortemplates.ate.dev -o wide 2>/dev/null
 kubectl -n kagent get sandboxagent concierge -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
 
-Open the **kagent** tab: `concierge` is listed next to `factory-operator`, and a question to it is answered from a
-worker, through the AI Gateway's lab tenant. From the terminal, the same through A2A on the agents gateway:
+Terminal 2 shows the controller picking up the template and placing the actor on one of the two workers. No
+Deployment, no ReplicaSet, no pod of its own:
+
+```bash,run
+kubectl -n kagent get deploy,rs --no-headers | grep -c concierge | sed 's/^/Deployments or ReplicaSets named concierge: /'
+kubectl -n kagent get actortemplates.ate.dev -o jsonpath='{range .items[*]}{.metadata.name}: {.status}{"\n"}{end}' 2>/dev/null | head -5
+```
+
+## Talk to it
+
+Open the **kagent** tab: `concierge` is listed next to `factory-operator`. Ask it what a tenant gets at Northlight.
+The answer comes from a worker, through the AI Gateway's lab tenant.
+
+[button label="Open kagent" variant="success"](tab-3)
+
+From the terminal, the same question through A2A on the agents gateway:
 
 ```bash,run
 docker exec client curl -s -m 120 http://172.16.100.14/api/a2a/kagent/concierge/ -H 'Content-Type: application/json' -d '{
@@ -99,18 +136,31 @@ docker exec client curl -s -m 120 http://172.16.100.14/api/a2a/kagent/concierge/
   "parts":[{"kind":"text","text":"What does a tenant get at Northlight?"}]}}}' | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",d); print(json.dumps(r, indent=1)[:900])'
 ```
 
-(The agents gateway publishes only the tenant assistants' paths; if the call above is refused, that is the policy
-from chapter 5 doing its job. Use the kagent tab for the front desk.)
+If that call is refused, read the refusal: the agents gateway publishes only the three tenant assistants' paths,
+which is the policy from chapter 5 doing its job, and the front desk is reached through the kagent tab instead. Either
+answer is the right one.
+
+## Where the model call went
+
+The actor has no cluster network. Its model calls go through Substrate's router, which is the only thing it can
+reach, and the router talks to the AI Gateway route of the lab tenant. Polaris records the call under that tenant:
+
+```bash,run
+kubectl -n ate-system get svc api atenet-router
+kubectl -n ate-system logs --since=5m $(kubectl -n ate-system get deploy -o name | grep -i router | head -1) 2>/dev/null | grep -iE 'chat/completions|172.16.100' | tail -3
+kubectl -n kagent get sandboxagent concierge -o jsonpath='{.spec.declarative.modelConfig}{"\n"}'
+```
 
 ## What it changes
 
 - A pod is scheduled, pulled, started and torn down by the kubelet. An actor is forked from a snapshot that already
-  has the runtime loaded; a second one costs almost nothing.
-- The actor does not have the cluster network. Its model calls go through Substrate's router, which is the only
-  thing it can reach, and the router talks to the AI Gateway route of its tenant.
+  has the runtime loaded; a second one costs almost nothing. Apply the same file under another name and watch how
+  fast the second actor is Ready.
+- The actor does not have the cluster network. Its model calls go through the router, which is the only thing it can
+  reach, and the router talks to the AI Gateway route of its tenant.
 - kagent owns the agent, Substrate owns the worker and the snapshot. Neither has to know the other's images.
 
-## What you saw
+## Checkpoint
 
-Substrate's components and their certificates, the WorkerPool with its workers, and one SandboxAgent going from a
-YAML file to a running actor without a Deployment in between.
+The check expects Substrate installed in `ate-system`, the WorkerPool `kagent-default`, the SandboxAgent
+`concierge`, and at least one ActorTemplate generated for it.

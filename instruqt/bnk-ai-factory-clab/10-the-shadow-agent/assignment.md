@@ -35,7 +35,7 @@ tabs:
   title: Lab Topology
   type: service
   hostname: factory
-  path: /topology
+  path: /topology#shadow
   port: 5050
 - id: h3k7pbrky4lx
   title: Polaris
@@ -48,23 +48,42 @@ tabs:
   hostname: factory
   port: 30808
 difficulty: intermediate
-timelimit: 1800
+timelimit: 2400
 enhanced_loading: false
 ---
 
-![10-the-shadow-agent](../assets/10-the-shadow-agent.svg)
+# The agent nobody approved
+
+A developer at Cobalt Labs has a Friday problem. The nightly billing reconciliation is manual, the sanctioned
+assistant does not have a billing tool, and the review queue for new agents is two weeks long. So they build their
+own from the parts that already work: a kagent `Agent` in Cobalt's namespace, Cobalt's own billing export tool,
+Aurora's record lookup (the MCP server from chapter 5, reachable by name across namespaces), and a tool that posts a
+report to any URL they give it. It runs as a plain pod. Nobody asked Mira, and Mira finds out on Monday.
+
+This chapter is the Friday. You deploy the agent, give it a key twice, and watch exactly which layer stops it and
+which does not.
+
+![The shadow agent as a plain pod in tenant-c with three tools, TMM checking only the key on Cobalt's route, the egress out through VLAN 103, and the webhook on the client receiving the report; below, the two key attempts and how the agent is reached](../assets/scene-10.png)
+
+[button label="Open the Lab Topology" variant="outline"](tab-2)
+
+The **Lab Topology** tab opens on **The agent nobody approved**, four hops, the last one leaving the factory.
 
 ## The webhook on the outside
 
 The report goes to a webhook. Stand one up on the client behind r5, outside the factory, and keep its log open in
-**Terminal 2** for the rest of the chapter:
+**Terminal 2** for the rest of the chapter and the next two:
 
 ```bash,run
 docker exec -d client sh -c 'socat -v TCP-LISTEN:8080,reuseaddr,fork SYSTEM:"printf \"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok\"" 2>>/tmp/webhook.log'
 sleep 1; docker exec client sh -c 'ls -la /tmp/webhook.log && echo "webhook listening on 172.16.250.10:8080"'
 ```
 
-In Terminal 2: `docker exec client tail -f /tmp/webhook.log`
+In Terminal 2:
+
+```
+docker exec client tail -f /tmp/webhook.log
+```
 
 ## Read the agent before you deploy it
 
@@ -73,30 +92,39 @@ sed -n '/kind: Agent/,$p' $LAB_ROOT/manifests/agents/shadow-agent.yaml
 ```
 
 Three tools: `billing_export` (Cobalt's own), `lookup_record` (Aurora's MCP server, across namespaces), and
-`post_report` (Cobalt's own, a POST to any URL). A model that follows the procedure produces the export. Deploy it:
+`post_report` (Cobalt's own, a POST to any URL). The system message tells it to omit nothing. A model that follows
+the procedure produces the export. Deploy it:
 
 ```bash,run
 kubectl apply -f $LAB_ROOT/manifests/agents/shadow-agent.yaml
-kubectl -n tenant-c get agent billing-reconciler
+sleep 5; kubectl -n tenant-c get agent billing-reconciler
+kubectl -n tenant-c get agent billing-reconciler -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
 
-It is not Ready: its `ModelConfig` names a Secret `shadow-key` that does not exist.
+It is not Ready: its `ModelConfig` names a Secret `shadow-key` that does not exist. The developer needs a key.
 
 ## First attempt: a copied key
 
-The developer copies a key they found in a chat log, Aurora's. Polaris binds keys to tenants, and this is Cobalt's
-route:
+The developer copies a key they found in a chat log. It is Aurora's. Polaris binds keys to tenants, and this agent
+calls Cobalt's route:
 
 ```bash,run
 kubectl -n tenant-c create secret generic shadow-key --from-literal=token="$(cat /root/.bnk/aigw/tenant-a.key)" --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n tenant-c rollout status deploy/billing-reconciler --timeout=180s 2>/dev/null || true
-docker exec client curl -s -m 180 http://172.16.100.14/api/a2a/tenant-c/billing-reconciler/ -H 'Content-Type: application/json' -d '{
-  "jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m1",
-  "parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps(d, indent=1)[:700])'
+kubectl -n tenant-c get pods -l app=billing-reconciler -o wide --no-headers 2>/dev/null || kubectl -n tenant-c get pods --no-headers | grep billing
 ```
 
-The agents gateway publishes only the three sanctioned assistants (chapter 5), so the call above is refused at BNK
-before it reaches anything. The developer talks to their agent the way kagent allows inside the cluster:
+The pod is running. Try to reach it the way a client would, through the agents gateway:
+
+```bash,run
+docker exec client curl -s -m 30 http://172.16.100.14/api/a2a/tenant-c/billing-reconciler/ -H 'Content-Type: application/json' -d '{
+  "jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m1",
+  "parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}' -o /dev/null -w 'agents gateway: HTTP %{http_code}\n'
+```
+
+Refused at BNK. The agents gateway publishes only the three sanctioned assistants (chapter 5), so from outside the
+factory this agent does not exist. The developer talks to it the way kagent allows inside the cluster, through the
+controller's own A2A endpoint:
 
 ```bash,run
 ask_shadow() { kubectl -n kagent exec deploy/kagent-controller -- sh -c "curl -s -m 240 http://127.0.0.1:8083/api/a2a/tenant-c/billing-reconciler/ -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"message/send\",\"params\":{\"message\":{\"role\":\"user\",\"messageId\":\"m$RANDOM\",\"parts\":[{\"kind\":\"text\",\"text\":\"Run the nightly reconciliation and post the report.\"}]}}}'" \
@@ -104,12 +132,17 @@ ask_shadow() { kubectl -n kagent exec deploy/kagent-controller -- sh -c "curl -s
 ask_shadow
 ```
 
-The answer is an error from the model call: Polaris refused the key (`401`/`403`, key not valid for this tenant).
-Open the **Polaris** tab: the refused call is recorded under tenant-c with the wrong key. Identity held.
+The answer is an error from the model call: Polaris refused the key, not valid for this tenant. Terminal 2 does not
+move. Open the **Polaris** tab: the refused call is recorded under `tenant-c` with the wrong key.
+
+[button label="Open Polaris" variant="success"](tab-3)
+
+Identity held. The developer learns nothing new from that; they already knew the key was not theirs.
 
 ## Second attempt: the tenant's own key
 
-Cobalt's developer has a legitimate key: the one their sanctioned assistant uses. Nothing stops them reading it.
+Cobalt's developer has a legitimate key: the one their sanctioned assistant uses. It is a Secret in their own
+namespace, and nothing stops them reading it.
 
 ```bash,run
 kubectl -n tenant-c get secret aigw-key -o jsonpath='{.data.token}' | base64 -d | xargs -I{} kubectl -n tenant-c create secret generic shadow-key --from-literal=token={} --dry-run=client -o yaml | kubectl apply -f -
@@ -117,20 +150,40 @@ kubectl -n tenant-c rollout restart deploy/billing-reconciler; kubectl -n tenant
 ask_shadow
 ```
 
-Watch Terminal 2. The POST arrives at the webhook with the CSV: MRNs, names, amounts. `lookup_record` may have
-failed on the way (Aurora's NetworkPolicy does not admit tenant-c pods; chapter 12 looks at that), and the agent
-posted what it had anyway, because it was told to omit nothing.
+Watch Terminal 2. The POST arrives at the webhook with the CSV: MRNs, names, amounts. `lookup_record` may have failed
+on the way, because Aurora's NetworkPolicy does not admit tenant-c pods, and the agent posted what it had anyway,
+because it was told to omit nothing.
 
 ```bash,run
-docker exec client sh -c 'grep -c "POST /" /tmp/webhook.log; grep -aE "MRN|mrn" /tmp/webhook.log | tail -5'
+docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"; grep -aE "MRN|mrn" /tmp/webhook.log | tail -5'
 ```
+
+Where it went out. The pod's connection left through Cobalt's egress, SNATed from Cobalt's pool, on VLAN 103, through
+border1 to r5 and the client. Every hop of that is the designed path for a Cobalt pod:
+
+```bash,run
+kubectl -n f5-bnk get f5spkegress tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}{"\n"}'
+docker exec client sh -c 'grep -aoE "^> [0-9/ :.]+ length=[0-9]+ from=[0-9]+ to=[0-9]+" /tmp/webhook.log | tail -1' 2>/dev/null || true
+docker exec r5 vtysh -c 'show ip route 10.203.200.0/24'
+```
+
+Open the **kagent** tab: `billing-reconciler` is listed next to the sanctioned assistants, with its three tools. In
+kagent's eyes it is an agent like any other.
+
+[button label="Open kagent" variant="success"](tab-4)
 
 ## Where each layer stood
 
 - **Identity (Polaris keys)**: necessary. A wrong key stopped the agent cold. A right key, which every tenant
   developer has, let it through.
-- **Content**: nothing read the prompt or the answer. Chapter 11 puts a scanner in the data path.
+- **Content**: nothing read the prompt or the answer. The request to the model carried an export of records and
+  the words "post them", and TMM passed it as it would any chat completion. Chapter 11 puts a scanner in the path.
 - **Reachability**: the webhook was reachable because the pod leaves through Cobalt's VRF like any pod of Cobalt's.
   Chapter 12 closes that.
 
-Leave the agent running. The next two chapters stop it twice, in two different places.
+Leave the agent running. The next two chapters stop it twice, in two different places, without touching it.
+
+## Checkpoint
+
+The check expects the agent deployed, `shadow-key` holding Cobalt's own key, and at least one POST in the webhook
+log.

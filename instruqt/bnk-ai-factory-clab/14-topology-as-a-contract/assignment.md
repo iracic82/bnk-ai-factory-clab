@@ -31,7 +31,7 @@ tabs:
   title: Lab Topology
   type: service
   hostname: factory
-  path: /topology
+  path: /topology#picker
   port: 5050
 - id: tpbwuaxmeror
   title: Prometheus
@@ -39,11 +39,24 @@ tabs:
   hostname: factory
   port: 30909
 difficulty: basic
-timelimit: 900
+timelimit: 1200
 enhanced_loading: false
 ---
 
-![14-topology-as-a-contract](../assets/14-topology-as-a-contract.svg)
+# Topology as a contract
+
+Planning for next quarter. Northlight's GPU team has read llm-d's argument that topology is an end-to-end contract:
+the router must know where workers sit, which rack and which rail, to pair prefill and decode well on a real
+fabric. They ask Mira whether the factory's picker does that. The short answer is that it scores the things it can
+see on the workers themselves, prefix cache, prefill load, queue depth and KV usage, and it does not score where a
+worker sits, because nothing tells it. This chapter puts the labels on, reads what the picker is configured to
+read, and leaves the design question on the table where it belongs. It is optional and short.
+
+![The picker's plugin list on the left, the workers you label with rack and rail in the middle, and the boundary on the right: cache state and load cross into the router, rack and rail do not](../assets/scene-14.png)
+
+[button label="Open the Lab Topology" variant="outline"](tab-2)
+
+The **Lab Topology** tab opens on **The pool VIP and the picker**, the flow from chapter 4.
 
 ## What the picker reads
 
@@ -52,15 +65,22 @@ saturation detector, and the scorers:
 
 ```bash,run
 kubectl -n aigw-models get f5epp model-pool-epp -o jsonpath='{.spec.eppConfig.config.plugins[*].type}{"\n"}' | tr ' ' '\n' | sed 's/^/  plugin: /'
-kubectl -n aigw-models get f5epp model-pool-epp -o jsonpath='{.spec.engine} {.spec.natsURL}{"\n"}'
+kubectl -n aigw-models get f5epp model-pool-epp -o jsonpath='{.spec.engine} {.spec.natsURL} mode={.spec.mode}{"\n"}'
 ```
 
-Nothing in that list is a topology scorer. The picker sees two workers and their state, not their place.
+Nothing in that list is a topology scorer. The picker sees two workers and their state, not their place. The
+signals that do cross the boundary into the router, and how:
+
+```bash,run
+kubectl -n aigw-models get cm model-pool-epp-config -o jsonpath='{.data.pool\.yaml}' | sed -n '/plugins:/,/schedulingProfiles:/p' | head -30
+P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1)
+kubectl -n aigw-models logs $P --since=1h | grep -iE 'nats|kv.?event|metric' | tail -4
+```
 
 ## Put the place on the workers
 
-llm-d's contract is carried by labels: which rack, which rail (the NIC path to the switch). Label the mocker pods
-as if they sat in two racks on two rails:
+llm-d's contract is carried by labels: which rack, which rail (the NIC path to the switch). Label the mocker's
+decode pods as if they sat in two racks on two rails:
 
 ```bash,run
 i=0; for p in $(kubectl -n aigw-models get pods -l nvidia.com/dynamo-component-type=decode -o name 2>/dev/null || kubectl -n aigw-models get pods -o name | grep decode); do
@@ -68,13 +88,24 @@ i=0; for p in $(kubectl -n aigw-models get pods -l nvidia.com/dynamo-component-t
 kubectl -n aigw-models get pods -L topology.kubernetes.io/rack,factory.lab/rail --no-headers | grep decode | awk '{print $1, $(NF-1), $NF}'
 ```
 
-## Send the same request twice
-
-Two identical prompts: the second lands where the cache is. That is the picker honouring a contract it can see
-(the prefix cache), with nothing about rack or rail involved:
+The labels exist. Nothing reads them. The `InferencePool`'s selector still matches the pods, so the picker's view is
+unchanged:
 
 ```bash,run
-P=$(kubectl -n aigw-models get pod -l app=model-pool-epp -o jsonpath='{.items[0].metadata.name}')
+kubectl -n aigw-models get inferencepool model-pool -o jsonpath='{.spec.selector}{"\n"}'
+kubectl -n aigw-models get inferencepool model-pool -o jsonpath='{.status}' | python3 -c 'import json,sys; s=json.load(sys.stdin); print(json.dumps(s, indent=1)[:600])'
+```
+
+## Send the same request twice
+
+Two identical prompts: the second lands where the cache is. That is the picker honouring a contract it can see,
+the prefix cache, with nothing about rack or rail involved. Keep **Terminal 2** on the picker's log:
+
+```
+P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1); kubectl -n aigw-models logs -f $P | grep -iE 'pick|select|endpoint|score'
+```
+
+```bash,run
 K=$(cat /root/.bnk/aigw/lab.key)
 for n in 1 2; do docker exec client curl -s -m 120 http://172.16.100.13/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
   -d '{"model":"qwen3-0.6b-dynamo","messages":[{"role":"user","content":"Explain in two sentences why a rail-aligned fabric matters for prefill and decode."}],"max_tokens":40}' >/dev/null; done
@@ -82,11 +113,30 @@ unset K
 kubectl -n aigw-models logs $P --since=2m | grep -iE 'pick|select|endpoint|score' | tail -6
 ```
 
+This time the request went through the lab tenant's Polaris route on `172.16.100.13`, whose model `qwen3-0.6b-dynamo`
+is the Dynamo pool behind the pool VIP. Same picker, one more layer in front of it, same choice.
+
+## Disaggregated, on paper
+
+The `F5EPP` can split the pool into prefill and decode workers by label and pick one of each. Read the field and the
+label it keys on; that is the closest thing in this factory to a topology-aware decision, and it is still about role,
+not place:
+
+```bash,run
+kubectl explain f5epp.spec.mode | sed -n '1,20p'
+kubectl -n aigw-models get pods -L nvidia.com/dynamo-component-type --no-headers | awk '{print $1, $NF}' | grep -vE '<none>' | head
+```
+
 ## The question for next quarter
 
 - Which signals cross the boundary into the router today: cache state and load, over NATS and metrics.
 - Which do not: rack, rail, link utilisation. They exist on the pods now as labels and nothing reads them.
-- Where it would go: a scorer plugin next to the ones above, fed by those labels, for P/D pairing on a real fabric.
+- Where it would go: a scorer plugin next to the ones above, fed by those labels, for prefill and decode pairing on
+  a real fabric. The labels are the easy half; the plugin that reads them is the work.
 
 Nothing here is a verdict on either project. It is the list of what reaches the picker in this factory and what
-does not.
+does not, which is what the GPU team asked for.
+
+## Checkpoint
+
+This chapter has no check beyond the labels being present on the decode pods.

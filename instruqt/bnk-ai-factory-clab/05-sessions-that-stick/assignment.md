@@ -34,7 +34,7 @@ tabs:
   title: Lab Topology
   type: service
   hostname: factory
-  path: /topology
+  path: /topology#mcp
   port: 5050
 - id: rvd5wber65hb
   title: Polaris
@@ -42,31 +42,53 @@ tabs:
   hostname: factory
   port: 30443
 difficulty: intermediate
-timelimit: 1500
+timelimit: 1800
 enhanced_loading: false
 ---
 
-![05-sessions-that-stick](../assets/05-sessions-that-stick.svg)
+# Sessions that stick
+
+Aurora's developers have put their clinical tools behind an MCP server, a sidecar on port 8001 next to the
+assistant. It works with one replica. The night they scale to three, every third tool call starts failing with
+"session not found", because an MCP session lives in the memory of the pod that created it, and a plain load
+balancer has no idea which pod that was. Their ticket to Mira is short: "Make the sessions stick." BNK's answer is
+not a cookie. It is a persistence profile that reads the protocol itself.
+
+![The client opens an MCP session on Aurora's gateway, the listener carries a persistence profile of type MODEL_CONTEXT_PROTOCOL through a NetPolicy, and all six calls land on the one agent pod that created the session](../assets/scene-05.png)
+
+[button label="Open the Lab Topology" variant="outline"](tab-2)
+
+The **Lab Topology** tab opens on **MCP and A2A sessions stick**. The first two hops are this chapter; the third is
+the same idea on the agents gateway.
 
 ## Publish Aurora's MCP server on BNK
 
-Aurora's app has an MCP sidecar on port 8001 (the tools its assistant uses). It is reachable inside the cluster only.
-Give it a BNK Gateway of its own in Aurora's namespace, on `172.16.100.23`, with an HTTPRoute for `/mcp`:
+The MCP sidecar is reachable inside the cluster only. Give it a BNK Gateway of its own, in Aurora's namespace, on an
+address from the pool, with an HTTPRoute for `/mcp`. The manifest also carries the persistence profile and the
+NetPolicy that attaches it, which stay unprogrammed until a passphrase Secret exists. Read it before you apply it:
 
 ```bash,run
-sed -n '/kind: Gateway/,/kind: HTTPRoute/p' $LAB_ROOT/manifests/chapters/05-mcp-route.yaml | head -20
+grep -nE '^kind:|^  name:|destinationAddress|value: 172|type: MODEL|passphrase|targetRef|extensionRef' $LAB_ROOT/manifests/chapters/05-mcp-route.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-mcp-route.yaml 2>&1 | grep -v persistence
 kubectl -n tenant-a wait --for=condition=Programmed gateway/tenant-mcp --timeout=180s
 kubectl -n tenant-a get gateway tenant-mcp httproute tenant-mcp
 ```
 
-The apply also created the persistence profile and its NetPolicy, which stay unprogrammed until the passphrase
-Secret exists. First, the problem they solve.
+`Programmed=True` means TMM has the listener. From the client, behind r5, the route answers an MCP `initialize` with a
+session id in a response header:
+
+```bash,run
+docker exec client curl -s -m 10 -D - -o /dev/null http://172.16.100.23/mcp -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"lab","version":"1"}}}' | grep -iE '^HTTP|^Mcp-Session-Id'
+```
+
+That header, `Mcp-Session-Id`, is what the client sends back on every later call, and what the profile will read.
 
 ## Scale, then watch sessions scatter
 
-An MCP client starts with `initialize` and gets a session id back. Every later call carries it. Three replicas, one
-session, six tool calls, and the pod that answers each time:
+Reproduce Aurora's night. Three replicas, one session, six tool calls, and the name of the pod that answered each
+time. The MCP server in this lab answers a `tenant_identity` tool with its own pod name, which is the whole
+measurement:
 
 ```bash,run
 kubectl -n tenant-a scale deploy/agent --replicas=3 && kubectl -n tenant-a rollout status deploy/agent --timeout=180s
@@ -82,19 +104,32 @@ for i in 1 2 3 4 5 6; do
 done | sort | uniq -c
 ```
 
-Without persistence, the six calls spread over two or three pods. The MCP server in this lab is tolerant of that; a
-real one that keeps session state in memory answers `404 session not found` for every call that lands elsewhere.
+Two or three pod names. The lab's MCP server tolerates that; a real one that keeps session state in memory answers
+`404 session not found` for every call that lands on the wrong pod. Keep **Terminal 2** on the pods so you can see
+there are three and all are Ready:
+
+```
+kubectl -n tenant-a get pods -l app=agent -w
+```
 
 ## Turn the profile on
 
-The profile encrypts the session cookie it issues with a passphrase from a Secret. Create the Secret; BNK programs
-the profile within seconds:
+The profile encrypts the session cookie it issues with a passphrase from a Secret. Create the Secret, and BNK programs
+the profile within seconds; its condition tells you when:
 
 ```bash,run
 kubectl -n tenant-a create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
 sleep 10
 kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions netpolicy tenant-mcp-sessions
-kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].message}{"\n"}'
+kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+```
+
+Read the two objects you just made live. The profile is the behaviour; the NetPolicy is the attachment, with the
+Gateway and its listener on one side and the profile on the other:
+
+```bash,run
+kubectl -n tenant-a get f5bigpersistenceprofile tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
+kubectl -n tenant-a get netpolicy tenant-mcp-sessions -o jsonpath='{.spec}' | python3 -m json.tool
 ```
 
 Same measurement, new session:
@@ -107,12 +142,21 @@ for i in 1 2 3 4 5 6; do
 done | sort | uniq -c
 ```
 
-One pod, six times. TMM read the session id from the protocol, not from a cookie the app had to set.
+One pod, six times. TMM read the session id out of the protocol and pinned the session to the pod that issued it.
+The application did not set a cookie and nobody rewrote a header. A second session, started now, may land on a
+different pod, and stays there:
+
+```bash,run
+SID2=$(mcp "" '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"lab","version":"2"}}}' | grep -i '^Mcp-Session-Id' | awk '{print $2}' | tr -d '\r')
+for i in 1 2 3; do mcp "$SID2" '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tenant_identity","arguments":{}}}' | grep -oE 'agent-[0-9a-f]+-[0-9a-z]+' | head -1; done | sort | uniq -c
+```
 
 ## The same for A2A
 
-The tenant assistants answer A2A on the agents gateway (`172.16.100.14`, chapter 9 uses it in anger). A2A has the
-same shape of problem: a `message/send` creates a task, `tasks/get` must find it. The profile type is `AGENT2AGENT`:
+The tenant assistants answer the Agent2Agent protocol on the agents gateway, `172.16.100.14`, which chapter 9 uses in
+anger. A2A has the same shape of problem: `message/send` creates a task on one pod, and `tasks/get` for that task
+must find the same pod. The profile type is `AGENT2AGENT`, and the attachment is the same NetPolicy shape, this time
+in the `kagent` namespace where that Gateway lives:
 
 ```bash,run
 kubectl -n kagent create secret generic a2a-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
@@ -121,13 +165,20 @@ sleep 10; kubectl -n kagent get f5bigpersistenceprofile agents-a2a-sessions netp
 docker exec client curl -s -m 10 http://172.16.100.14/api/a2a/tenant-a/assistant/.well-known/agent-card.json | python3 -m json.tool | head -20
 ```
 
-The kagent controller runs as one replica here, so there is nothing to scatter yet; the profile is in place for when
-there are more, and chapter 9's calls already go through it.
+The agent card is Aurora's assistant describing itself over the published front. The kagent controller runs as one
+replica here, so there is nothing to scatter yet; the profile is in place for when there are more, and every A2A
+call in chapters 7, 9 and 10 already goes through it.
 
-## What you saw
+## What Mira writes back to Aurora
 
-- A Gateway per tenant service, in the tenant's namespace, on an address from BNK's pool.
-- `NetPolicy` is the attachment: the Gateway listener on one side, a BNK extension on the other. Chapter 6 attaches
-  an iRule the same way; chapter 11 attaches the guardrail.
+- A Gateway per tenant service, in the tenant's namespace, on an address from BNK's pool. The tenant's team can
+  own that object.
+- `NetPolicy` is the attachment: the Gateway listener on one side, a BNK extension on the other, same namespace, one
+  per listener. Chapter 6 adds an iRule to this same NetPolicy; chapter 11 attaches a guardrail with another.
 - Two persistence types that read the protocol. The Polaris routes do not need them (one request, one answer); MCP
   servers and A2A agents do.
+
+## Checkpoint
+
+The check expects the Gateway `tenant-mcp`, the Secret `mcp-passphrase`, the profile programmed, three ready
+replicas of `agent`, the A2A NetPolicy applied, and six calls on one MCP session reaching one pod.
