@@ -11,6 +11,7 @@ export KIND_NODE_IMAGE="kindest/node:v1.35.5@sha256:ce977ae6d65918d0b58a5f8b5e94
 export CALICO_VERSION="v3.32.2"
 export FRR_IMAGE="quay.io/frrouting/frr:10.6.2"
 export NR_HUGEPAGES=2048            # 4 GiB of 2 Mi pages: TMM asks for 2 Gi, kubelet keeps the rest in reserve
+export GAIE_VERSION="v1.4.0"        # Gateway API Inference Extension; its CRDs must exist before BNK's controller starts
 SECRETS_DIR="${SECRETS_DIR:-$HOME/bnk-secrets}"
 
 # LAB_FAST=1 (set by the bake with BAKE_FAST=1) caps every long wait: the image needs the pulls, not the Ready

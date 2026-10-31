@@ -14,7 +14,7 @@ kubectl -n $NS get cneinstance f5-bnk-instance >/dev/null || fail "no CNEInstanc
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
 KIND_GW=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Gateway}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+$' | head -1)
 [ -n "$KIND_SUBNET" ] && [ -n "$KIND_GW" ] || fail "cannot read the kind network"
-GAIE=v1.4.0; DYNAMO=1.5.1; FGO=0.2.1; KAI=v0.18.6; OLLAMA_IMG=ollama/ollama:0.6.8
+GAIE=$GAIE_VERSION; DYNAMO=1.5.1; FGO=0.2.1; KAI=v0.18.6; OLLAMA_IMG=ollama/ollama:0.6.8
 
 step "Gateway API Inference Extension CRDs $GAIE"
 kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$GAIE/manifests.yaml" >/dev/null

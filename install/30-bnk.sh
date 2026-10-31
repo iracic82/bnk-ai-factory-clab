@@ -53,6 +53,12 @@ for p in 00 05 10 20 30 40; do "$DEPLOY/install.sh" --env lab --profile host --p
 # has to exist before phase 50 (40-ai.sh fills it later)
 kubectl create ns aigw-models --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl label ns aigw-models aigw.lab/engine=dynamo --overwrite >/dev/null
+# ... and with EPP namespaces set, the controller also starts an informer on InferencePool at boot and exits when the
+# CRD is absent ("failed to wait for f5epp caches to sync kind source: *v1.InferencePool", bake of 2026-10-31). It
+# then never configures TMM, F5TmmAvailable stays false and phase 50 times out. So the inference CRDs go in here.
+step "Gateway API Inference Extension CRDs $GAIE_VERSION (the controller watches InferencePool from its first start)"
+kubectl apply -f "https://github.com/kubernetes-sigs/gateway-api-inference-extension/releases/download/$GAIE_VERSION/manifests.yaml" >/dev/null
+kubectl wait --for=condition=Established crd/inferencepools.inference.networking.k8s.io --timeout=60s >/dev/null
 step "NetworkAttachmentDefinitions for TMM's legs (order = TMM interface number)"
 kubectl apply -f - <<'EOF'
 apiVersion: k8s.cni.cncf.io/v1
