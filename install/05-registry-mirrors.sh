@@ -50,12 +50,13 @@ EOF
   docker rm -f "$name" >/dev/null 2>&1 || true
   docker run -d --name "$name" --restart unless-stopped \
     -p "$BIND_IP:$port:5000" -p "127.0.0.1:$port:5000" "${mounts[@]}" "${env[@]}" registry:2.8.3 >/dev/null
-  [ -n "$cfg" ] && { sleep 1; shred -u "$cfg" 2>/dev/null || rm -f "$cfg"; }
-  ok "$up -> $BIND_IP:$port"
-done
-sleep 2
-for up in "${!MIRRORS[@]}"; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${MIRRORS[$up]}/v2/" || true)
-  [ "$code" = 200 ] || warn "$up mirror answered $code"
+  # the registry reads its config once at start; only after it answers may the file with the credential go
+  code=000
+  for _ in $(seq 1 30); do code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/v2/" || true); [ "$code" = 200 ] && break; sleep 1; done
+  if [ "$code" != 200 ]; then
+    warn "$up mirror answered $code after 30 s; its log:"; docker logs --tail 5 "$name" 2>&1 | sed 's/^/      /'
+  fi
+  [ -n "$cfg" ] && { shred -u "$cfg" 2>/dev/null || rm -f "$cfg"; }
+  ok "$up -> $BIND_IP:$port ($code)"
 done
 du -sh "$MIRROR_DIR" 2>/dev/null | sed 's/^/   cache: /'
