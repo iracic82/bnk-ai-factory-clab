@@ -1,0 +1,36 @@
+version: "3"
+# One VM is the whole factory: containerlab runs the FRR fabric, r5, a client and the kind cluster on it.
+#
+# Sizing is BNK's, not kind's: BNK requests 22.55 vCPU, TMM alone 4.6 vCPU plus 2 Gi of 2 Mi hugepages, and on
+# kind every node is a container on this one kernel. 32 vCPU leaves room for the agents, the simulators, the
+# fabric and the learner. See SIZING.md.
+#
+# A custom image is required (build/bake-image.sh): stock images have a 10 GB disk that cannot be changed, and the
+# BNK image set alone is about 4 GB per node. The baked image also carries pull-through registry mirrors with every
+# image the lab needs, so track start is containerlab + kind + applying manifests, not downloading.
+virtualmachines:
+- name: factory
+  image: f5/bnk-clab
+  machine_type: n2-standard-32
+  shell: /bin/bash
+  ports:
+  - 30443   # Polaris console (AI Gateway)
+  - 30300   # Grafana
+  - 30909   # Prometheus
+  - 30808   # kagent UI
+  environment:
+    KUBECONFIG: /root/lab/clab/kubeconfig
+    LAB_ROOT: /root/lab
+    LICENSE_FILE: license.jwt
+    SECRETS_DIR: /root/.bnk
+secrets:
+# Team secrets on the f5 team, write only. key = name on the team, name = env var in the sandbox.
+- name: FAR_PULL_B64
+  key: FAR_PULL_B64
+- name: BNK_LICENSE_JWT
+  key: BNK_LICENSE_JWT
+- name: GH_READ_TOKEN
+  key: GH_READ_TOKEN
+# Optional. With it, chapter 10 scans through the real CalypsoAI; without it the mock answers.
+- name: CALYPSO_API_KEY
+  key: CALYPSO_API_KEY

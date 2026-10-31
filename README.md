@@ -47,14 +47,15 @@ One TMM, on `bnk-worker`. Labelling a second node sends the lifecycle operator i
 | `clab/kind-config.yaml` | kind: one control plane, two workers, no default CNI (Calico), pod CIDR 192.168.0.0/16 |
 | `fabric/gen.py` | writes `fabric/nodes/<node>/{frr.conf,daemons,setup.sh}` from `fabric/nodes.csv` (ASNs, loopbacks, VRFs, VNIs) |
 | `install/00-host-prep.sh` | hugepages, inotify limits, docker and tool checks. The only step that needs root on the host |
-| `install/10-fabric.sh` | `gen.py`, then `containerlab deploy`; brings up the fabric and the kind cluster together |
-| `install/20-cluster.sh` | Calico via the Tigera operator, kubelet restart so nodes advertise hugepages, taints, storage |
+| `install/05-registry-mirrors.sh` | one pull-through registry per upstream (repo.f5.com with the FAR credential, docker.io, quay.io, ghcr.io, registry.k8s.io, nvcr.io, gcr.io); the baked Instruqt image carries their cache, so track start pulls nothing |
+| `install/10-fabric.sh` | `gen.py`, `containerlab deploy` in the background, Calico as soon as the API answers (containerlab waits for Ready), mirrors wired into every node's containerd |
+| `install/20-cluster.sh` | kubelet restart so nodes advertise hugepages, taints, node labels |
 | `install/30-bnk.sh` | clones `iracic82/bnk-deploy` and runs it unmodified (`--env lab --profile host`), then patches on the AI features |
 | `install/40-ai.sh` | AI Gateway tenants; NVIDIA's simulators for the GPU side: Dynamo mocker workers (real `vllm:*` metrics, KV events over NATS, F5EPP engine `dynamo`) and the fake GPU operator (4 x H100 per worker, `nvidia-smi` and DCGM metrics inside pods) with KAI queues |
 | `install/50-agents.sh` | kagent 0.10.4 with CPU qwen through the AI Gateway, the per-tenant agents, NVIDIA OpenShell (gateway + Agent Sandbox controller; the sanctioned agents run in sandboxes, the key is injected only toward the AI Gateway), Agent Substrate v0.0.11 (the release kagent 0.10.4 accepts), and the shadow agent for the story |
 | `install/60-guardrails.sh` | CalypsoAI: the iRule sideband on the tenant Gateway, real service when a key is present, the mock otherwise |
 | `docs/storyline.md` | the lab's story and the chapter plan |
-| `instruqt/` | the track, once the build is proven here |
+| `instruqt/bnk-ai-factory-clab/` | the track: `config.yml` (one n2-standard-32 VM, image `f5/bnk-clab`, team secrets), `track.yml`, `track_scripts/setup-factory` (runs `install/*` in order), `build/bake-image.sh` + `finalise-image.sh` (the custom image), `SIZING.md` |
 
 Secrets never live here. Locally they come from `~/bnk-secrets`; on Instruqt from team secrets
 (`FAR_PULL_B64`, `BNK_LICENSE_JWT`, `GH_READ_TOKEN`, optionally `CALYPSO_API_KEY`).

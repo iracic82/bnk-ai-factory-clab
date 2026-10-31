@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Builds the whole lab on the one VM at track start. The custom image already carries the tooling and the
+# registry mirrors full of images, so this is: clone the lab, write secrets to disk, fabric + kind, BNK, AI
+# layer, agents, guardrails. Every install step is idempotent, and Instruqt re-runs this script from the top if
+# the host is unreachable part way through.
+#
+# Secrets arrive as team secrets in the environment (config.yml). None lives in the repository.
+set -euo pipefail
+exec > >(tee -a /var/log/setup-factory.log) 2>&1
+fail() { echo; echo "FAILED: $*" >&2; exit 1; }
+step() { echo; echo "### $(date -u +%H:%M:%S) $*"; }
+
+LAB_ROOT="${LAB_ROOT:-/root/lab}"
+SECRETS_DIR="${SECRETS_DIR:-/root/.bnk}"
+LAB_REPO="${LAB_REPO:-github.com/iracic82/bnk-ai-factory-clab.git}"
+LAB_REF="${LAB_REF:-main}"
+
+step "secrets present"
+for s in FAR_PULL_B64 BNK_LICENSE_JWT GH_READ_TOKEN; do
+  [ -n "${!s:-}" ] || fail "$s is not set. Add it as a team secret and list it in config.yml."
+done
+umask 077; mkdir -p "$SECRETS_DIR"
+printf '%s' "$FAR_PULL_B64" > "$SECRETS_DIR/cne_pull_64.json"
+printf '%s' "$BNK_LICENSE_JWT" > "$SECRETS_DIR/license.jwt"
+[ -n "${CALYPSO_API_KEY:-}" ] && printf '%s' "$CALYPSO_API_KEY" > "$SECRETS_DIR/calypso-api-key"
+umask 022
+
+step "lab repository"
+if [ -d "$LAB_ROOT/.git" ]; then git -C "$LAB_ROOT" fetch -q origin "$LAB_REF" && git -C "$LAB_ROOT" checkout -q FETCH_HEAD
+else git clone -q --depth 1 --branch "$LAB_REF" "https://x-access-token:${GH_READ_TOKEN}@${LAB_REPO}" "$LAB_ROOT"; fi
+git -C "$LAB_ROOT" remote set-url origin "https://${LAB_REPO}"     # the token stays out of .git/config
+export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig"
+cd "$LAB_ROOT"
+
+step "host (hugepages, limits; already baked, this re-asserts after boot)"
+bash install/00-host-prep.sh
+step "registry mirrors"
+bash install/05-registry-mirrors.sh
+step "fabric + kind"
+bash install/10-fabric.sh
+step "cluster"
+bash install/20-cluster.sh
+step "BNK"
+bash install/30-bnk.sh
+for s in 40-ai 50-agents 60-guardrails; do
+  [ -x "install/$s.sh" ] && { step "$s"; bash "install/$s.sh"; }
+done
+
+step "learner shell"
+cat > /etc/profile.d/factory.sh <<EOF
+export KUBECONFIG=$LAB_ROOT/clab/kubeconfig LAB_ROOT=$LAB_ROOT
+cd $LAB_ROOT 2>/dev/null || true
+EOF
+echo "READY $(date -u +%H:%M:%S)"

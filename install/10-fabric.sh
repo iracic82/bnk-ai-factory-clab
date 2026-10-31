@@ -31,6 +31,22 @@ done
 kubectl config use-context kind-bnk >/dev/null
 ok "kind cluster bnk is answering; kubeconfig at $KUBECONFIG"
 
+# Point every node's containerd at the pull-through mirrors from 05-registry-mirrors.sh (hosts.toml per upstream,
+# the layout kind's own local-registry guide uses). Without mirrors running this is skipped and nodes pull direct.
+MIRROR_DIR="${MIRROR_DIR:-/var/lib/bnk-mirrors}"
+if [ -r "$MIRROR_DIR/.bind" ]; then
+  BIND_IP=$(cat "$MIRROR_DIR/.bind")
+  declare -A MIRRORS=( [docker.io]=5001 [quay.io]=5002 [ghcr.io]=5003 [registry.k8s.io]=5004 [nvcr.io]=5005 [repo.f5.com]=5006 [gcr.io]=5007 )
+  for n in bnk-control-plane bnk-worker bnk-worker2; do
+    for up in "${!MIRRORS[@]}"; do
+      docker exec "$n" sh -c "mkdir -p /etc/containerd/certs.d/$up && printf 'server = \"https://%s\"\n\n[host.\"http://%s:%s\"]\n  capabilities = [\"pull\", \"resolve\"]\n' '$up' '$BIND_IP' '${MIRRORS[$up]}' > /etc/containerd/certs.d/$up/hosts.toml"
+    done
+  done
+  ok "containerd on every node reads images through the mirrors at $BIND_IP"
+else
+  warn "no registry mirrors (run 05-registry-mirrors.sh first); nodes pull from the internet"
+fi
+
 step "Calico $CALICO_VERSION (nodes stay NotReady without a CNI, and containerlab waits for Ready)"
 kubectl get ns tigera-operator >/dev/null 2>&1 || \
   kubectl create -f "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/tigera-operator.yaml" >/dev/null
