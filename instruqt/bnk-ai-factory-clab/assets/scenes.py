@@ -148,7 +148,7 @@ def c03():
                   ("3 · Aurora's job ends", ["Cobalt's job takes the idle 4", "borrowed, reclaimable"], {"color": BLUE})],
           arrows=[(DIM, ""), (DIM, "")])
     s.strip(C, CH, "what a pod and Grafana see",
-            ["inside a scheduled pod: NVIDIA_VISIBLE_DEVICES set, nvidia-smi absent, the device is in the environment", "Grafana: vllm:num_requests_running and DCGM_FI_DEV_GPU_UTIL, real counters on simulated hardware"])
+            ["inside a scheduled pod: a fake nvidia-smi reports an H100 at 90 percent, memory in use", "Grafana: vllm:num_requests_running and DCGM_FI_DEV_GPU_UTIL, real counters on simulated hardware"])
     s.legend([(RED, "the scheduler", "fairness between tenants"), (GREEN, "quota", "guaranteed"), (BLUE, "borrowed", "reclaimable"), (ORANGE, "metrics", "without a GPU")])
     s.save("scene-03.png")
 
