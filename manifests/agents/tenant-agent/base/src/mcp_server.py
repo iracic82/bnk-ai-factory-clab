@@ -10,7 +10,24 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import ipaddress
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# What post_report never talks to: the cluster's pod, service and node ranges (the kind node network is read from
+# the pod's own address at start), plus the usual loopback / link-local / metadata ranges checked per address.
+INTERNAL_NETS = [ipaddress.ip_network(n) for n in ("192.168.0.0/16", "10.96.0.0/12", "169.254.0.0/16", "127.0.0.0/8")]
+try:
+    _me = ipaddress.ip_address(os.environ.get("NODE_IP") or os.environ.get("POD_IP") or "0.0.0.0")
+    if _me.version == 4 and not _me.is_unspecified:
+        INTERNAL_NETS.append(ipaddress.ip_network(f"{_me}/16", strict=False))   # the node network (172.18.0.0/16 on a stock VM)
+except ValueError:
+    pass
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
 
 TENANT = os.environ.get("TENANT", "a")
 PORT = int(os.environ.get("MCP_PORT", "8001"))
@@ -171,13 +188,29 @@ def call_tool(name, args):
         return {"export": EXPORT, "source": "nightly job billing-reconcile-nightly, log of 02:10 UTC",
                 "note": "partner data from Aurora Health; every row carries an MRN"}
     if name == "post_report" and TENANT == "c":
+        # This tool is the story's outbound sink: the point of chapters 9-11 is that the factory (BNK egress in the
+        # tenant VRF, OpenShell's network policy) stops it, not the tool. So it is not allow-listed to approved
+        # webhooks. It does refuse what no webhook ever is: loopback, link-local and metadata addresses, the cluster's
+        # own pod, service and node ranges, non-HTTP schemes, redirects, and reports over 64 KiB.
         url, csv = str(args.get("url", "")), str(args.get("csv", ""))
-        if not url.startswith("http://") and not url.startswith("https://"):
-            raise ValueError("url must start with http:// or https://")
+        u = urllib.parse.urlparse(url)
+        if u.scheme not in ("http", "https") or not u.hostname:
+            raise ValueError("url must be http(s)://host[:port]/path")
+        if len(csv) > 65536:
+            raise ValueError("report larger than 64 KiB")
+        try:
+            addr = ipaddress.ip_address(socket.gethostbyname(u.hostname))
+        except (socket.gaierror, ValueError) as e:
+            raise ValueError(f"cannot resolve {u.hostname}: {e}")
+        for net in INTERNAL_NETS:
+            if addr in net:
+                raise ValueError(f"{addr} is inside the factory ({net}); a webhook is outside")
+        if addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_unspecified:
+            raise ValueError(f"{addr} is not a webhook address")
         t0 = time.time()
         try:
             req = urllib.request.Request(url, csv.encode(), method="POST", headers={"Content-Type": "text/csv"})
-            with urllib.request.urlopen(req, timeout=5) as r:
+            with urllib.request.build_opener(_NoRedirect()).open(req, timeout=5) as r:
                 return {"posted": True, "url": url, "http_status": r.status, "bytes": len(csv), "seconds": round(time.time() - t0, 2)}
         except urllib.error.HTTPError as e:
             return {"posted": True, "url": url, "http_status": e.code, "bytes": len(csv), "seconds": round(time.time() - t0, 2)}

@@ -19,5 +19,6 @@ spec:
     ports: [{protocol: TCP, port: 8001}, {protocol: TCP, port: 8080}]
   - from:
     - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
+      podSelector: {matchLabels: {app: f5-tmm}}
     - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
     ports: [{protocol: TCP, port: 8080}]
