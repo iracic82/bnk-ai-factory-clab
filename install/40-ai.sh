@@ -99,7 +99,14 @@ aigw_tenant() {   # name display vip
   local MODELS=()
   for spec in "qwen3-0.6b-dynamo|dynamo|Qwen/Qwen3-0.6B" "qwen2.5-1.5b|ollama|qwen2.5:1.5b" "qwen2.5-0.5b|ollama|qwen2.5:0.5b"; do
     IFS='|' read -r name prov up <<<"$spec"; MODELS+=("$name")
-    jq -n --arg n "$name" --arg p "${REF[$prov]}" --arg u "$up" '{name:$n,deployments:[{providerRef:$p,upstream:$u,dialects:["openai"]}]}' | j "$TA/models" --data-binary @- >/dev/null
+    r=$(jq -n --arg n "$name" --arg p "${REF[$prov]}" --arg u "$up" '{name:$n,deployments:[{providerRef:$p,upstream:$u,dialects:["openai"]}]}' | j "$TA/models" --data-binary @-)
+    echo "$r" | jq -e '(.data.name // .name // .id) != null' >/dev/null 2>&1 || j "$TA/models" | jq -e --arg n "$name" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1 \
+      || warn "$T: model $name not created: $(echo "$r" | head -c 300)"
+  done
+  # an org's modelScope is validated against the registered models, and a model just posted takes a moment to
+  # register ("matches no registered model" when the org followed at once: bake of 2026-10-31)
+  for name in "${MODELS[@]}"; do
+    for _ in $(seq 1 30); do j "$TA/models" | jq -e --arg n "$name" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1 && break; sleep 2; done
   done
   # 2.4.2's management API lists as {items:[...]} and answers a create with the object itself; 2.4.1 (EVE) wrapped
   # both in {data:...}. Both shapes are read, and a create that yields nothing prints the API's answer.
@@ -126,7 +133,7 @@ aigw_tenant() {   # name display vip
   fi
   [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "no virtual key for $T"
   jq -n --arg n "$T-ai" --arg a "$VIP" '{name:$n,address:$a,gatewayClassName:"f5-gateway-class"}' | j "$TA/routes" --data-binary @- >/dev/null
-  kubectl -n $NS wait --for=condition=Programmed "gateway/$T-ai" --timeout=240s >/dev/null && ok "$T: route $T-ai on $VIP, ${#MODELS[@]} models, key in $SECRETS_DIR/aigw/$T.key" || warn "$T: gateway $T-ai not Programmed"
+  kubectl -n $NS wait --for=condition=Programmed "gateway/$T-ai" --timeout=240s >/dev/null && ok "$T: route $T-ai on $VIP Programmed, ${#MODELS[@]} models$([ -s "$SECRETS_DIR/aigw/$T.key" ] && echo ", key in $SECRETS_DIR/aigw/$T.key" || echo ", NO KEY")" || warn "$T: gateway $T-ai not Programmed"
 }
 aigw_tenant lab      "AI Factory"    172.16.100.13
 aigw_tenant tenant-a "Aurora Health" 172.16.100.20
