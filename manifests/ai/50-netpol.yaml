@@ -11,9 +11,14 @@ spec:
     matchExpressions: [{key: trust.lab/state, operator: NotIn, values: [quarantined]}]
   policyTypes: [Ingress]
   ingress:
+  # Dynamo's own traffic (frontend -> worker on the worker's shared TCP endpoint, KV queries, NATS clients) uses
+  # ports that are not the pod's declared ones; restricting it to 8000/9090 killed every chat completion with the
+  # frontend's five second timeout (first full play, 2026-10-31). Pods of the model and Dynamo namespaces may talk
+  # to the model pods on any port; BNK and TMM get the OpenAI port, the picker's gRPC and the metrics port only.
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: aigw-models}}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: dynamo-system}}
   - from:
     - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
     - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
-    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: aigw-models}}
-    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: dynamo-system}}
-    ports: [{port: 8000, protocol: TCP}, {port: 9090, protocol: TCP}]
+    ports: [{port: 8000, protocol: TCP}, {port: 9002, protocol: TCP}, {port: 9090, protocol: TCP}]
