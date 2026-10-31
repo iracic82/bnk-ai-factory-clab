@@ -38,7 +38,10 @@ export BNK_TMM_NODES=bnk-worker BNK_TMM_MANAGE_LABELS=true
 export BNK_STORAGECLASS=standard
 export BNK_NETWORK_ATTACHMENTS="external-net,internal-net"   # TMM 1.1 = macvlan on eth1 (leaf1 eth3), 1.2 = macvlan on eth0 (node net)
 export BNK_TMM_MAPRES=true                      # maps the extra leg onto TMM's data plane
-export BNK_DYNAMIC_ROUTING=true                 # BGP to the fabric
+# Dynamic routing stays OFF for the install: with it on, TMM's init-f5-tmm-routing container waits for a routing
+# configuration (GlobalRoutingConfig) that 35-bnk-network.sh can only apply once BNK is up, and the installer waits
+# for TMM: a deadlock (bake of 2026-10-31). The patch below switches it on; step 35 applies the configs first thing.
+export BNK_DYNAMIC_ROUTING=false
 export BNK_EPP_NAMESPACES="aigw-models"
 export BNK_WAIT_TIMEOUT="${BNK_WAIT_TIMEOUT:-$(tmo 1800 600)}"
 export BNK_REQUIRE_LICENSE=true
@@ -84,6 +87,7 @@ kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{"a
 kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{
   "aiGateway":{"enabled":true,"aiMetrics":true},
   "intelligentLB":{"enabled":true},
+  "dynamicRouting":{"enabled":true},
   "advanced":{
     "demoMode":{"enabled":true},
     "envDiscovery":{"stopOnFail":true,"runAfterSuccess":true},

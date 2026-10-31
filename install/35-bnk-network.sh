@@ -23,6 +23,10 @@ apply_immutable() {   # $1 file: delete + recreate the routing CRs in it if the 
   done
 }
 
+# Routing first: 30-bnk.sh switched dynamicRouting on, so TMM is restarting and its init-f5-tmm-routing container is
+# waiting for exactly these objects. Everything else can follow while TMM comes back.
+step "global routing (TMM's routing init waits for this)"
+apply_immutable "$M/bnk/20-routing-global.yaml"
 step "tenant namespaces and hello apps"
 kubectl apply -f "$M/tenants/hello.yaml" >/dev/null
 step "TMM legs and VIP pool"
@@ -32,8 +36,8 @@ KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gatewa
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"; INTERNAL_PLEN="${KIND_SUBNET#*/}"
 sed -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|" -e "s|__INTERNAL_PLEN__|$INTERNAL_PLEN|" "$M/bnk/10-network.yaml" | kubectl apply -f -
 ok "internal self IP $INTERNAL_SELFIP/$INTERNAL_PLEN on the kind network $KIND_SUBNET"
-step "global routing"
-apply_immutable "$M/bnk/20-routing-global.yaml"
+step "TMM back with routing"
+kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || kubectl -n f5-bnk wait --for=condition=Ready pod -l app=f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || warn "TMM not Ready yet"
 step "tenant VRFs, routing, first VIPs"
 kubectl apply -f "$M/bnk/40-tenants.yaml"
 apply_immutable "$M/bnk/40-tenants.yaml"
