@@ -86,16 +86,25 @@ TOK=$(jq -n --arg u "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath=
       | curl -sS "$API/api/v1/auth/login" -H 'Content-Type: application/json' --data-binary @- | jq -er .access_token) || fail "admin login failed"
 j() { curl -sS "$@" -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json'; }
 aigw_tenant() {   # name display vip
-  local T=$1 D=$2 VIP=$3 TA="$API/api/v1/tenants/$1" r ref
-  jq -n --arg n "$T" --arg d "$D" '{name:$n,displayName:$d}' | j "$API/api/v1/tenants" --data-binary @- >/dev/null
+  local T=$1 D=$2 VIP=$3 TA="$API/api/v1/tenants/$1" r ref n url name prov up id
+  # Every create is preceded by a lookup. A second run that posted the same objects again left a second provider key
+  # with the same name, and a virtual key created later named that duplicate while the models' deployments named the
+  # first: "Model not allowed for this virtual key" (bake of 2026-10-31). Nothing here creates what already exists.
+  j "$API/api/v1/tenants" | jq -e --arg n "$T" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1 \
+    || jq -n --arg n "$T" --arg d "$D" '{name:$n,displayName:$d}' | j "$API/api/v1/tenants" --data-binary @- >/dev/null
   kubectl -n $NS wait --for=condition=Ready "aitenants.inference.k8s.f5.com/$T" --timeout=180s >/dev/null || warn "tenant $T not Ready"
+  pk_ref() { j "$TA/provider-keys" | jq -r --arg n "$1" '(.data // .items)[]? | select(.name==$n) | .ref' | head -1; }
   declare -A REF=()
   for spec in "dynamo|http://mocker-frontend.aigw-models.svc.cluster.local:8000/v1" "ollama|http://$KIND_GW:11434/v1"; do
-    local n=${spec%%|*} url=${spec#*|}
-    r=$(jq -n --arg n "$T-$n" --arg u "$url" '{name:$n,vendor:"Generic",value:"not-needed",enabled:true,generic:{baseURL:$u}}' | j "$TA/provider-keys" --data-binary @-)
-    ref=$(echo "$r" | jq -r '.data.ref // empty'); [ -z "$ref" ] && ref=$(j "$TA/provider-keys" | jq -r --arg n "$T-$n" '(.data // .items)[]? | select(.name==$n) | .ref' | head -1)
+    n=${spec%%|*}; url=${spec#*|}; ref=$(pk_ref "$T-$n")
+    if [ -z "$ref" ]; then
+      r=$(jq -n --arg n "$T-$n" --arg u "$url" '{name:$n,vendor:"Generic",value:"not-needed",enabled:true,generic:{baseURL:$u}}' | j "$TA/provider-keys" --data-binary @-)
+      ref=$(echo "$r" | jq -r '.data.ref // .ref // empty'); [ -n "$ref" ] || ref=$(pk_ref "$T-$n")
+      [ -n "$ref" ] || warn "$T: provider key $T-$n not created: $(echo "$r" | head -c 300)"
+    fi
     REF[$n]=$ref
   done
+  has_model() { j "$TA/models" | jq -e --arg n "$1" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1; }
   local MODELS=()
   for spec in "qwen3-0.6b-dynamo|dynamo|Qwen/Qwen3-0.6B" "qwen2.5-1.5b|ollama|qwen2.5:1.5b" "qwen2.5-0.5b|ollama|qwen2.5:0.5b"; do
     IFS='|' read -r name prov up <<<"$spec"
@@ -103,18 +112,20 @@ aigw_tenant() {   # name display vip
     # name ("already exists", bake of 2026-10-31). The EVE lab prefixes tenant models with the tenant; so does this.
     [ "$T" = lab ] || name="$T-$name"
     MODELS+=("$name")
-    r=$(jq -n --arg n "$name" --arg p "${REF[$prov]}" --arg u "$up" '{name:$n,deployments:[{providerRef:$p,upstream:$u,dialects:["openai"]}]}' | j "$TA/models" --data-binary @-)
-    echo "$r" | jq -e '(.data.name // .name // .id) != null' >/dev/null 2>&1 || j "$TA/models" | jq -e --arg n "$name" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1 \
-      || warn "$T: model $name not created: $(echo "$r" | head -c 300)"
+    if ! has_model "$name"; then
+      r=$(jq -n --arg n "$name" --arg p "${REF[$prov]}" --arg u "$up" '{name:$n,deployments:[{providerRef:$p,upstream:$u,dialects:["openai"]}]}' | j "$TA/models" --data-binary @-)
+      # an org's modelScope is validated against the registered models, and a model just posted takes a moment
+      for _ in $(seq 1 30); do has_model "$name" && break; sleep 2; done
+      has_model "$name" || warn "$T: model $name not created: $(echo "$r" | head -c 300)"
+    fi
   done
-  # an org's modelScope is validated against the registered models, and a model just posted takes a moment to
-  # register ("matches no registered model" when the org followed at once: bake of 2026-10-31)
-  for name in "${MODELS[@]}"; do
-    for _ in $(seq 1 30); do j "$TA/models" | jq -e --arg n "$name" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1 && break; sleep 2; done
+  # provider keys that no model uses and that duplicate a used name are leftovers of an earlier double post
+  local used; used=$(j "$TA/models" | jq -c '[(.data // .items)[]? | .deployments[]? | .provider] | unique')
+  for id in $(j "$TA/provider-keys" | jq -r --argjson u "$used" '(.data // .items) as $all | $all[]? | select((.ref as $r | $u | index($r) | not) and (.name as $n | [$all[] | select(.name==$n and (.ref as $r | $u | index($r)))] | length > 0)) | .ref'); do
+    j -X DELETE "$TA/provider-keys/$id" >/dev/null 2>&1 && warn "$T: removed duplicate provider key $id"
   done
-  # 2.4.2's management API lists as {items:[...]} and answers a create with the object itself; 2.4.1 (EVE) wrapped
-  # both in {data:...}. Both shapes are read, and a create that yields nothing prints the API's answer.
-  local SCOPE PKEYS TEAM r; SCOPE=$(printf '%s\n' "${MODELS[@]}" | jq -R . | jq -sc .); PKEYS=$(printf '%s\n' "${REF[@]}" | jq -R . | jq -sc .)
+  local SCOPE PKEYS TEAM; SCOPE=$(printf '%s\n' "${MODELS[@]}" | jq -R . | jq -sc .)
+  PKEYS=$used     # the virtual key must name the provider keys the models' deployments use, not a duplicate
   if ! j "$TA/governance/orgs" | jq -e --arg i "$T-org" '(.data // .items)[]? | select(.id==$i)' >/dev/null 2>&1; then
     r=$(jq -n --arg i "$T-org" --arg d "$D" --argjson s "$SCOPE" '{id:$i,name:$i,displayName:$d,modelScope:$s}' | j "$TA/governance/orgs" --data-binary @-)
     echo "$r" | jq -e '(.data.id // .id) != null' >/dev/null 2>&1 || warn "$T: org $T-org not created: $(echo "$r" | head -c 300)"
@@ -127,16 +138,22 @@ aigw_tenant() {   # name display vip
     TEAM=$(echo "$r" | jq -r '.data.id // .id // empty'); [ -n "$TEAM" ] || TEAM=$(team_id)
     [ -n "$TEAM" ] || warn "$T: team not created: $(echo "$r" | head -c 300)"
   fi
-  r=$(jq -n --arg i "$T-app" --arg t "$TEAM" --argjson s "$SCOPE" '{id:$i,name:$i,kind:"service",teamId:$t,role:"member",active:true,modelScope:$s}' | j "$TA/governance/principals" --data-binary @-)
-  echo "$r" | jq -e '(.data.id // .id) != null' >/dev/null 2>&1 || j "$TA/governance/principals" | jq -e --arg i "$T-app" '(.data // .items)[]? | select(.id==$i)' >/dev/null 2>&1 \
-    || warn "$T: principal $T-app not created: $(echo "$r" | head -c 300)"
+  if ! j "$TA/governance/principals" | jq -e --arg i "$T-app" '(.data // .items)[]? | select(.id==$i)' >/dev/null 2>&1; then
+    r=$(jq -n --arg i "$T-app" --arg t "$TEAM" --argjson s "$SCOPE" '{id:$i,name:$i,kind:"service",teamId:$t,role:"member",active:true,modelScope:$s}' | j "$TA/governance/principals" --data-binary @-)
+    echo "$r" | jq -e '(.data.id // .id) != null' >/dev/null 2>&1 || warn "$T: principal $T-app not created: $(echo "$r" | head -c 300)"
+  fi
   if [ ! -s "$SECRETS_DIR/aigw/$T.key" ]; then
+    # a key's token is shown once; a key of this name with no file is useless, so it goes before a new one is made
+    for id in $(j "$TA/virtual-keys" | jq -r --arg n "$T-app-key" '(.data // .items)[]? | select(.name==$n) | (.id // .ref // empty)'); do
+      j -X DELETE "$TA/virtual-keys/$id" >/dev/null 2>&1 || true
+    done
     r=$(jq -n --arg n "$T-app-key" --arg p "$T-app" --argjson k "$PKEYS" --argjson s "$SCOPE" '{name:$n,principalId:$p,providerKeys:$k,modelScope:$s}' | j "$TA/virtual-keys" --data-binary @-)
     echo "$r" | jq -r '.data.token // .token // empty' > "$SECRETS_DIR/aigw/$T.key"; chmod 600 "$SECRETS_DIR/aigw/$T.key"
     [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "$T: virtual key not created: $(echo "$r" | head -c 300)"
   fi
   [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "no virtual key for $T"
-  jq -n --arg n "$T-ai" --arg a "$VIP" '{name:$n,address:$a,gatewayClassName:"f5-gateway-class"}' | j "$TA/routes" --data-binary @- >/dev/null
+  kubectl -n $NS get gateway "$T-ai" >/dev/null 2>&1 \
+    || jq -n --arg n "$T-ai" --arg a "$VIP" '{name:$n,address:$a,gatewayClassName:"f5-gateway-class"}' | j "$TA/routes" --data-binary @- >/dev/null
   kubectl -n $NS wait --for=condition=Programmed "gateway/$T-ai" --timeout=240s >/dev/null && ok "$T: route $T-ai on $VIP Programmed, ${#MODELS[@]} models$([ -s "$SECRETS_DIR/aigw/$T.key" ] && echo ", key in $SECRETS_DIR/aigw/$T.key" || echo ", NO KEY")" || warn "$T: gateway $T-ai not Programmed"
 }
 aigw_tenant lab      "AI Factory"    172.16.100.13
