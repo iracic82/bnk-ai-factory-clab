@@ -46,6 +46,10 @@ export BNK_REQUIRE_LICENSE=true
 step "phases 00-40 (preflight, nodes, Multus, cert-manager, registry, FLO, certificates)"
 for p in 00 05 10 20 30 40; do "$DEPLOY/install.sh" --env lab --profile host --phase "$p"; done
 
+# the CNEInstance names eppNamespaces=aigw-models; the controller watches that namespace from its first start, so it
+# has to exist before phase 50 (40-ai.sh fills it later)
+kubectl create ns aigw-models --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+kubectl label ns aigw-models aigw.lab/engine=dynamo --overwrite >/dev/null
 step "NetworkAttachmentDefinitions for TMM's legs (order = TMM interface number)"
 kubectl apply -f - <<'EOF'
 apiVersion: k8s.cni.cncf.io/v1
