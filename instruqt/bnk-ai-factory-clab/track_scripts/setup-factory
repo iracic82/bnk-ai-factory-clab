@@ -29,10 +29,21 @@ unset AI_CALYPSO_API AI_CALYPSO_PROJECT
 umask 022
 
 step "lab repository"
-if [ -d "$LAB_ROOT/.git" ]; then git -C "$LAB_ROOT" fetch -q origin "$LAB_REF" && git -C "$LAB_ROOT" checkout -q FETCH_HEAD
-else git clone -q --depth 1 --branch "$LAB_REF" "https://x-access-token:${GH_READ_TOKEN}@${LAB_REPO}" "$LAB_ROOT"; fi
+# The repo is private, so the fetch needs the token on the URL (origin is kept token-free). A baked image may
+# carry /root/lab in any state, so the checkout is forced and the result is asserted before anything runs.
+auth="https://x-access-token:${GH_READ_TOKEN}@${LAB_REPO}"
+if [ -d "$LAB_ROOT/.git" ]; then
+  echo "$LAB_ROOT exists at $(git -C "$LAB_ROOT" rev-parse --short HEAD 2>/dev/null || echo '?'); fetching $LAB_REF"
+  git -C "$LAB_ROOT" fetch -q --depth 1 "$auth" "$LAB_REF" || fail "git fetch $LAB_REF failed"
+  git -C "$LAB_ROOT" checkout -q -f FETCH_HEAD || fail "git checkout FETCH_HEAD failed"
+else
+  if [ -e "$LAB_ROOT" ]; then echo "$LAB_ROOT exists without .git; moving it aside"; mv "$LAB_ROOT" "$LAB_ROOT.old.$(date +%s)"; fi
+  git clone -q --depth 1 --branch "$LAB_REF" "$auth" "$LAB_ROOT" || fail "git clone of $LAB_REPO ($LAB_REF) failed"
+fi
 git -C "$LAB_ROOT" remote set-url origin "https://${LAB_REPO}"     # the token stays out of .git/config
-unset GH_READ_TOKEN
+unset GH_READ_TOKEN auth
+echo "lab at $(git -C "$LAB_ROOT" rev-parse --short HEAD), $(git -C "$LAB_ROOT" ls-files | wc -l) tracked files"
+[ -f "$LAB_ROOT/install/00-host-prep.sh" ] || { ls -la "$LAB_ROOT"; git -C "$LAB_ROOT" status --short | head; fail "$LAB_ROOT has no install/00-host-prep.sh after checkout"; }
 # LAB_PUBLIC=1: the UIs (Polaris, Grafana, Prometheus, kagent) bind the VM's address, which is what the Instruqt
 # tabs on ports 30443/30300/30909/30808 connect to; the sandbox network is private to the learner
 export SECRETS_DIR LICENSE_FILE=license.jwt KUBECONFIG="$LAB_ROOT/clab/kubeconfig" LAB_PUBLIC=1
