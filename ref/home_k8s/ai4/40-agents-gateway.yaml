@@ -1,0 +1,33 @@
+# BNK entry for kagent A2A: Gateway agents-gw (VIP 172.16.100.14, outside 10.10.12.34) and the /api/a2a/ route.
+# Manual sync (Argo app agents) because it is BNK config. The agents themselves live in agents/ (Argo app kagent-agents).
+# External access through BNK: VIP 172.16.100.14 (outside 10.10.12.34). Only the A2A path is published;
+# the kagent UI (no auth) stays ClusterIP: kubectl -n kagent port-forward svc/kagent-ui 8080:8080
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: agents-gw
+  namespace: kagent
+spec:
+  gatewayClassName: f5-gateway-class
+  infrastructure:
+    parametersRef: {group: k8s.f5net.com, kind: F5BnkGateway, name: f5-bnkgateway}
+  addresses:
+  - {type: IPAddress, value: 172.16.100.14}
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces: {from: Same}
+      kinds: [{group: gateway.networking.k8s.io, kind: HTTPRoute}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: kagent
+  namespace: kagent
+spec:
+  parentRefs: [{name: agents-gw, sectionName: http}]
+  rules:
+  - matches: [{path: {type: PathPrefix, value: /api/a2a/}}]
+    backendRefs: [{name: kagent-controller, port: 8083}]

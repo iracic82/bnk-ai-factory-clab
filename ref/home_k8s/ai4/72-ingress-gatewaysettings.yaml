@@ -1,0 +1,64 @@
+# BNK 2.4.1 ingress: one GatewaySettings per Gateway (must live in the Gateway's namespace).
+# Each points its listener at a single-address IPAM pool from Infra bnk-infra, so VIPs do not move,
+# listens on Infra network "external" and SNATs to the TMM self IP (Automap), as F5BnkGateway did.
+# Gateways are switched to these by 73-migrate.sh (spec.infrastructure.parametersRef).
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata:
+  name: demo-gw-settings
+  namespace: demo
+spec:
+  ingressConfig:
+    defaultListenerNetwork:
+      ipamRefs: [{name: vip-demo}]
+      networkRefs: [{name: external}]
+      sourceNATConfig: {type: Automap}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata:
+  name: bnk-vip-settings
+  namespace: lab-local
+spec:
+  ingressConfig:
+    defaultListenerNetwork:
+      ipamRefs: [{name: vip-gpu-sim}]
+      networkRefs: [{name: external}]
+      sourceNATConfig: {type: Automap}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata:
+  name: pool-vip-settings
+  namespace: default
+spec:
+  ingressConfig:
+    defaultListenerNetwork:
+      ipamRefs: [{name: vip-dynamo}]
+      networkRefs: [{name: external}]
+      sourceNATConfig: {type: Automap}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata:
+  name: lab-ai-settings
+  namespace: default
+spec:
+  ingressConfig:
+    defaultListenerNetwork:
+      ipamRefs: [{name: vip-aigw}]
+      networkRefs: [{name: external}]
+      sourceNATConfig: {type: Automap}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata:
+  name: agents-gw-settings
+  namespace: kagent
+spec:
+  ingressConfig:
+    defaultListenerNetwork:
+      ipamRefs: [{name: vip-agents}]
+      networkRefs: [{name: external}]
+      sourceNATConfig: {type: Automap}

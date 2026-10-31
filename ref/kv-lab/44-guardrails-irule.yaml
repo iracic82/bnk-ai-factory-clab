@@ -1,0 +1,86 @@
+# The guardrail. On each request TMM opens a sideband connection to the mock Calypso service, sends the
+# whole request body to /backend/v1/scans, and reads the verdict. A flagged prompt is answered right here with a
+# block message and never reaches the model. A clean prompt is released to the model. The sideband rides
+# the same pcie data path TMM uses, which is the point: enforcement happens inline, in the data path.
+# CALYPSO_IP_PLACEHOLDER is substituted with the mock-calypso ClusterIP at apply time, because a BNK
+# iRule cannot resolve DNS.
+apiVersion: k8s.f5net.com/v1
+kind: F5BigCneIrule
+metadata:
+  name: guardrails
+  namespace: f5-bnk
+spec:
+  iRule: |
+    # The whole request body is scanned, not a best-effort extract of one field: every message the model
+    # would read goes to the guardrail. Anything the iRule cannot read reliably fails closed: a POST with no
+    # Content-Length (chunked), a body over 1 MiB or one that arrives incomplete, and JSON \u escapes, which
+    # could spell a flagged word the scanner would not see.
+    when HTTP_REQUEST {
+      set gr_clen 0
+      # One way to frame the body, one way to read it: a request with Transfer-Encoding (alone or next to
+      # Content-Length, the request-smuggling case) or a compressed body is refused, because the scanner and
+      # the model server could read different bytes. Every method is checked, not only POST.
+      if { [HTTP::header exists "Transfer-Encoding"] } {
+        HTTP::respond 411 content {{"guardrail":"blocked","reason":"Transfer-Encoding is not accepted; send a Content-Length"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
+        return
+      }
+      if { [HTTP::header exists "Content-Encoding"] && [string tolower [HTTP::header value "Content-Encoding"]] ne "identity" } {
+        HTTP::respond 415 content {{"guardrail":"blocked","reason":"compressed request bodies are not accepted"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
+        return
+      }
+      if { [HTTP::method] ne "GET" && [HTTP::method] ne "HEAD" } {
+        if { ![HTTP::header exists "Content-Length"] } {
+          HTTP::respond 411 content {{"guardrail":"blocked","reason":"the request body must carry a Content-Length"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
+          return
+        }
+        set gr_clen [HTTP::header value "Content-Length"]
+        if { ![string is integer -strict $gr_clen] || $gr_clen > 1048576 } {
+          HTTP::respond 413 content {{"guardrail":"blocked","reason":"request body missing or larger than 1 MiB"}} "Content-Type" "application/json" "X-Guardrail" "blocked"
+          return
+        }
+        if { $gr_clen > 0 } { HTTP::collect $gr_clen }
+      }
+    }
+
+    when HTTP_REQUEST_DATA {
+      set body [HTTP::payload]
+      set verdict "pass"
+      if { [string length $body] < $gr_clen } {
+        set verdict "error"
+      } elseif { [string first {\u} $body] >= 0 } {
+        set verdict "error"
+      } else {
+        # JSON-escape the body so it travels intact as the scan input
+        set esc [string map [list "\\" "\\\\" "\"" "\\\"" "\n" "\\n" "\r" "\\r" "\t" "\\t"] $body]
+        if { [catch {
+          set scan "{\"input\":\"$esc\"}"
+          set slen [string length $scan]
+          set sreq "POST /backend/v1/scans HTTP/1.1\r\nHost: calypso\r\nContent-Type: application/json\r\nContent-Length: $slen\r\nConnection: close\r\n\r\n$scan"
+          set cconn [connect -protocol TCP "CALYPSO_IP_PLACEHOLDER:8080"]
+          send -timeout 3000 $cconn $sreq
+          set cresp [recv -timeout 3000 $cconn]
+          close $cconn
+          if { [string match {*"outcome":"flagged"*} $cresp] || [string match {*"outcome": "flagged"*} $cresp] } {
+            set verdict "flagged"
+          } elseif { ![string match {*"outcome"*} $cresp] } {
+            set verdict "error"
+          }
+        } err] } { set verdict "error" }
+      }
+
+      if { $verdict ne "pass" } {
+        # The JSON sits in braces: inside a double-quoted Tcl string the [ ] of "choices":[...] would be
+        # command substitution, and the f5validate webhook rejects the whole iRule ("undefined procedure").
+        set blocked {{"guardrail":"blocked","reason":"flagged by policy or not scannable","choices":[{"message":{"role":"assistant","content":"This request was blocked by the BNK guardrail policy before it reached the model."}}]}}
+        HTTP::respond 200 content $blocked "Content-Type" "application/json" "X-Guardrail" "blocked"
+        return
+      }
+
+      HTTP::header insert X-Guardrail allowed
+      set gr_allowed 1
+      HTTP::release
+    }
+    when HTTP_RESPONSE {
+      # tag the model's answer too, so the client sees the verdict on allowed prompts as well
+      if { [info exists gr_allowed] } { HTTP::header insert X-Guardrail allowed }
+    }

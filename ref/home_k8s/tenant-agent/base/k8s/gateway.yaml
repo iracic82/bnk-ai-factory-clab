@@ -1,0 +1,31 @@
+# The tenant publishes its own agent, the F5 way (f5devcentral/f5-bnk-udf red/blue tenants): a BNK Gateway and an
+# L4Route in the tenant namespace, backend in the same namespace. The overlay sets the VIP (172.16.100.16-18), which
+# the fabric carries like every published VIP (TMM -> DPU VRF external -> border1 -> R5) and R5 NATs to 10.10.12.36-38.
+# A legacy Pool can't be used here: the controller doesn't index endpoints in F5SPKEgress namespaces.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: tenant-gw
+spec:
+  gatewayClassName: f5-gateway-class
+  infrastructure:
+    parametersRef: {group: k8s.f5net.com, kind: F5BnkGateway, name: f5-bnkgateway}
+  addresses:
+  - {type: IPAddress, value: 0.0.0.0}   # set by the overlay
+  listeners:
+  - name: tcp80
+    protocol: TCP
+    port: 80
+    allowedRoutes:
+      namespaces: {from: Same}
+      kinds: [{kind: L4Route, group: gateway.k8s.f5.com}]
+---
+apiVersion: gateway.k8s.f5.com/v1
+kind: L4Route
+metadata:
+  name: agent
+spec:
+  protocol: TCP
+  parentRefs: [{name: tenant-gw, sectionName: tcp80}]
+  rules:
+  - backendRefs: [{name: agent-web, port: 80}]

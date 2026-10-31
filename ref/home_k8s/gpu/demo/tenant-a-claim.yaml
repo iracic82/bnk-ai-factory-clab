@@ -1,0 +1,19 @@
+# tenant-a asks for its guaranteed 4 GPUs while tenant-b holds 6 of the 8. Only 2 are free, so KAI reclaims
+# tenant-b's over-quota pods until tenant-a has its 4 and tenant-b is back to its quota of 2.
+apiVersion: batch/v1
+kind: Job
+metadata: {name: train, namespace: tenant-a}
+spec:
+  parallelism: 4
+  completions: 4
+  template:
+    metadata: {labels: {kai.scheduler/queue: tenant-a, app: gpu-demo}}
+    spec:
+      schedulerName: kai-scheduler
+      terminationGracePeriodSeconds: 1  # sleep ignores SIGTERM
+      restartPolicy: Never
+      containers:
+      - name: train
+        image: busybox:1.36
+        command: [sh, -c, 'echo "training on $NVIDIA_VISIBLE_DEVICES"; sleep 3600']
+        resources: {limits: {nvidia.com/gpu: 1}}

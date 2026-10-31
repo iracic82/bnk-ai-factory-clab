@@ -1,0 +1,20 @@
+# tenant-c (Driftline Logistics): the tenant agent in namespace tenant-c. Argo CD app tenant-c-agent.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: tenant-c
+resources: [../../base, assistant.yaml]
+patches:
+- target: {kind: Deployment, name: agent}
+  patch: |-
+    - {op: replace, path: /spec/template/spec/containers/0/env/0/value, value: "c"}
+    - {op: replace, path: /spec/template/spec/containers/0/env/1/value, value: "http://172.16.100.22/v1"}   # AI Gateway tenant tenant-c
+    - {op: replace, path: /spec/template/spec/containers/1/env/0/value, value: "c"}
+- target: {kind: Gateway, name: tenant-gw}
+  patch: |-
+    - {op: replace, path: /spec/addresses/0/value, value: 172.16.100.18}   # outside: 10.10.12.38
+- target: {kind: RemoteMCPServer, name: tenant-tools}
+  patch: |-
+    - {op: replace, path: /spec/url, value: "http://agent.tenant-c.svc.cluster.local:8001/mcp"}
+- target: {kind: ModelConfig, name: tenant-model}
+  patch: |-
+    - {op: replace, path: /spec/openAI/baseUrl, value: "http://172.16.100.22/v1"}

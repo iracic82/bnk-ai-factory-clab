@@ -1,0 +1,104 @@
+# The model pool behind its own BNK VIP, with F5's Endpoint Picker choosing the Dynamo worker.
+# Shapes copied from the BNK x Run:ai lab's renderer (controller/internal/bnk/objects.go at eed49e5), which
+# runs on BNK 2.4 with NVIDIA Dynamo 1.5.1; written out here as plain YAML under this lab's own names.
+#
+#   Gateway pool-vip (f5-bnk)      VIP 172.16.100.12:8000 on TMM, routes only from aigw-models
+#   HTTPRoute model-route          /v1 -> InferencePool model-pool
+#   InferencePool model-pool       the two Mocker decode workers; each has a Dynamo frontend sidecar in
+#                                  direct mode on :8000 that serves exactly the worker the picker named
+#   F5EPP model-pool-epp           engine dynamo: reads Dynamo's KV-cache events from NATS and picks the
+#                                  worker that already holds the prompt's prefix
+#
+# Hardening status (security review 2026-10-21):
+#  - DONE: the pool VIP is created behind a deny-all iRule (install.sh); challenge 6 swaps it for a lock only
+#    the gateway's pool-vip provider passes (lock-pool-vip.sh, SHA-256 digest of its bearer secret). Not by
+#    source IP: TMM SNATs hairpinned traffic, known issue 2290393. Direct calls get 401 (proven live).
+#  - OPEN: secureServing/metricsEndpointAuth are false, copied from the working Run:ai config to keep the first
+#    data-path test to one variable. Turn both on, then add a NetworkPolicy for the EPP's 9002/9090 once the
+#    real client addresses are observed.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: pool-vip, namespace: default}
+spec:
+  gatewayClassName: f5-gateway-class
+  addresses: [{type: IPAddress, value: 172.16.100.12}]
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 8000
+    allowedRoutes:
+      namespaces:
+        from: Selector
+        selector: {matchLabels: {kubernetes.io/metadata.name: aigw-models}}
+---
+apiVersion: inference.k8s.f5.com/v1alpha1
+kind: F5EPP
+metadata: {name: model-pool-epp, namespace: aigw-models}
+spec:
+  poolRef: {name: model-pool}
+  engine: dynamo
+  natsURL: nats://dynamo-platform-nats.dynamo-system.svc.cluster.local:4222
+  server: {modelServerMetricsPort: 9090, secureServing: false, metricsEndpointAuth: false}
+  tokenizer: {name: Qwen/Qwen3-0.6B}
+  # BNK 2.4 subscribes to namespace.*.component.backend.kv-events by default; Dynamo 1.5.1 publishes per
+  # endpoint (seen live in the Run:ai lab with nats sub ">"). Without this the picker gets no KV events.
+  eppConfig:
+    config:
+      plugins:
+      - name: dynamo-wire
+        type: dynamo-wire
+        parameters:
+          kv_events_topic: component.backend.endpoint.generate.kv-events
+          kv_metrics_topic: component.backend.endpoint.generate.kv_metrics
+      # The generated extractor expects the real Dynamo vLLM labels (dynamo_component="backend",
+      # dynamo_endpoint="generate"). The mocker publishes vllm:* with engine/model_name labels instead, so the
+      # picker found no load metrics: its queue and KV scorers ran blind and its saturation detector called the
+      # pool saturated even at idle, dropping every sheddable (priority < 0) request. Match the mocker's labels.
+      # The mocker has no vllm:cache_config_info, so that spec is empty (like loraSpec).
+      - name: core-metrics-extractor
+        type: core-metrics-extractor
+        parameters:
+          defaultEngine: vllm
+          engineLabelKey: inference.networking.k8s.io/engine-type
+          engineConfigs:
+          - name: vllm
+            kvUsageSpec: vllm:kv_cache_usage_perc{model_name="Qwen/Qwen3-0.6B"}
+            queuedRequestsSpec: vllm:num_requests_waiting{model_name="Qwen/Qwen3-0.6B"}
+            runningRequestsSpec: vllm:num_requests_running{model_name="Qwen/Qwen3-0.6B"}
+            cacheInfoSpec: ""
+            loraSpec: ""
+      # Demo threshold for runtime trust (docs/runtime-trust-priority.md). The picker calls the pool saturated
+      # above 5% KV-cache use instead of the generated 99%, which a mocker never reaches (~10-14% under a
+      # 24-stream load, 0% idle). Only sheddable requests (InferenceObjective priority < 0, e.g. traffic tagged
+      # suspect) are refused while saturated; normal requests are always admitted.
+      - name: utilization-detector
+        type: utilization-detector
+        parameters:
+          headroom: 20
+          kvCacheUtilThreshold: 0.05
+          metricsStalenessThreshold: 30s
+          queueDepthThreshold: 200000
+---
+apiVersion: inference.networking.k8s.io/v1
+kind: InferencePool
+metadata: {name: model-pool, namespace: aigw-models}
+spec:
+  selector:
+    matchLabels:
+      nvidia.com/dynamo-graph-deployment-name: mocker
+      nvidia.com/dynamo-component-type: decode
+      # Runtime trust: a worker relabelled quarantined leaves the candidate set and the Endpoint Picker
+      # stops choosing it within ~5 s (proven 2026-10-27, docs/runtime-trust.md). Pods start trusted (dgd.yaml).
+      trust.lab/state: trusted
+  targetPorts: [{number: 8000}]
+  # FailClose: if the picker is down the request fails; FailOpen would fall back to round-robin silently.
+  endpointPickerRef: {name: model-pool-epp, port: {number: 9002}, failureMode: FailClose}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: model-route, namespace: aigw-models}
+spec:
+  parentRefs: [{name: pool-vip, namespace: default, sectionName: http}]
+  rules:
+  - matches: [{path: {type: PathPrefix, value: /v1}}]
+    backendRefs: [{group: inference.networking.k8s.io, kind: InferencePool, name: model-pool, port: 8000}]

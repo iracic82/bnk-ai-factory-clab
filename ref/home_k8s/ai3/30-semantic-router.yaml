@@ -1,0 +1,218 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: semantic-router-config
+  namespace: default
+  labels:
+    app: semantic-router
+data:
+  tools_db.json: '[]'
+  config.yaml: |
+    version: v0.3
+    listeners:
+      - {name: grpc-50051, address: 0.0.0.0, port: 50051, timeout: 300s}
+      - {name: http-8080, address: 0.0.0.0, port: 8080, timeout: 300s}
+    providers:
+      defaults: {model: qwen2.5-0.5b}
+      models:
+        - name: qwen2.5-0.5b
+          provider_model_id: qwen2.5-0.5b
+          backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]
+        - name: llama3.2-1b
+          provider_model_id: llama3.2-1b
+          backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]
+        - name: smollm2-360m
+          provider_model_id: smollm2-360m
+          backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]
+    routing:
+      modelCards: [{name: qwen2.5-0.5b}, {name: llama3.2-1b}, {name: smollm2-360m}]
+      signals:
+        keywords:
+          - {name: reasoning, operator: OR, case_sensitive: false, keywords: ["prove","step by step","derive","explain why","analyze","compare","trade-off"]}
+        domains:
+          - {name: math, description: "Mathematics", mmlu_categories: [math]}
+          - {name: physics, description: "Physics", mmlu_categories: [physics]}
+          - {name: chemistry, description: "Chemistry", mmlu_categories: [chemistry]}
+          - {name: biology, description: "Biology", mmlu_categories: [biology]}
+          - {name: engineering, description: "Engineering", mmlu_categories: [engineering]}
+          - {name: "computer science", description: "Code and computer science", mmlu_categories: ["computer science"]}
+          - {name: other, description: "General fallback", mmlu_categories: [other]}
+        embeddings:
+          - name: creative_writing
+            threshold: 0.65
+            aggregation_method: max
+            candidates:
+              - write a short story
+              - write a poem
+              - creative writing prompt
+              - tell me a fairy tale
+              - write a story about a dragon
+              - compose song lyrics
+      decisions:
+        - name: creative-to-smollm
+          priority: 30
+          rules: {operator: OR, conditions: [{type: embedding, name: creative_writing}]}
+          modelRefs: [{model: smollm2-360m, use_reasoning: false}]
+        - name: stem-code-reasoning-to-llama
+          priority: 20
+          rules:
+            operator: OR
+            conditions:
+              - {type: domain, name: math}
+              - {type: domain, name: physics}
+              - {type: domain, name: chemistry}
+              - {type: domain, name: biology}
+              - {type: domain, name: engineering}
+              - {type: domain, name: "computer science"}
+              - {type: keyword, name: reasoning}
+          modelRefs: [{model: llama3.2-1b, use_reasoning: false}]
+        - name: everything-else-small-model
+          priority: 1
+          rules: {operator: AND, conditions: []}
+          modelRefs: [{model: qwen2.5-0.5b, use_reasoning: false}]
+    global:
+      router: {strategy: priority}
+      services: {response_api: {enabled: false, store_backend: memory}}
+      stores: {response_cache: {enabled: false, backend_type: memory}}
+      integrations: {tools: {enabled: false, tools_db_path: config/tools_db.json, fallback_to_empty: true}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semantic-router
+  namespace: default
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: semantic-router
+  namespace: default
+  labels:
+    app: semantic-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: semantic-router
+  template:
+    metadata:
+      labels:
+        app: semantic-router
+    spec:
+      serviceAccountName: semantic-router
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: router
+        image: ghcr.io/vllm-project/semantic-router/extproc:v0.4.0@sha256:295a7da1ac432c950667083208a5a227e695efdc7b53502139d4c80c0b18b061
+        args:
+        - --secure=false
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - name: grpc
+          containerPort: 50051
+        - name: classify-api
+          containerPort: 8080
+        - name: metrics
+          containerPort: 9190
+        env:
+        - name: LD_LIBRARY_PATH
+          value: /app/lib
+        - name: HOME
+          value: /tmp
+        - name: TMPDIR
+          value: /tmp
+        - name: HF_HOME
+          value: /app/models/.cache/huggingface
+        - name: VLLM_SR_CONFIG_BACKUP_DIR
+          value: /app/models/.vllm-sr/config-backups
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /app/config/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        - name: config
+          mountPath: /app/config/tools_db.json
+          subPath: tools_db.json
+          readOnly: true
+        - name: models
+          mountPath: /app/models
+        startupProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 180
+        readinessProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 50051
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: '4'
+            memory: 6Gi
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: models
+        persistentVolumeClaim:
+          claimName: semantic-router-models
+      - name: config
+        configMap:
+          name: semantic-router-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: semantic-router
+  namespace: default
+  labels:
+    app: semantic-router
+spec:
+  selector:
+    app: semantic-router
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: semantic-router-models
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: nfs
+  resources:
+    requests:
+      storage: 10Gi

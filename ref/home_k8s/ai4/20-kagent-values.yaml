@@ -1,0 +1,42 @@
+# kagent 0.10.4 for the BNK EVE lab. Models come from the F5 AI Gateway (tenant "lab"), not a public API.
+providers:
+  default: openAI
+  openAI:
+    provider: OpenAI
+    model: qwen2.5-1.5b                     # smallest model that still calls tools right on CPU (11-aigw-small-model.sh)
+    apiKeySecretRef: kagent-openai          # holds the AI Gateway virtual key (created by 30-kagent.sh)
+    apiKeySecretKey: OPENAI_API_KEY
+    config:
+      baseUrl: http://10.10.12.33/v1        # AI Gateway route lab-ai (BNK VIP 172.16.100.13 via R5 NAT)
+# Only our own agent; no built-in agents
+k8s-agent: {enabled: false}
+kgateway-agent: {enabled: false}
+istio-agent: {enabled: false}
+promql-agent: {enabled: false}
+observability-agent: {enabled: false}
+argo-rollouts-agent: {enabled: false}
+helm-agent: {enabled: false}
+cilium-policy-agent: {enabled: false}
+cilium-manager-agent: {enabled: false}
+cilium-debug-agent: {enabled: false}
+grafana-mcp: {enabled: false}
+kagent-tools:
+  enabled: true
+  tools:
+    loglevel: info
+    enabledTools: [k8s]
+    args: ["--read-only"]                   # tool server refuses write operations
+  rbac:
+    readOnly: true                          # get/list/watch ClusterRole instead of cluster-admin; no Secrets
+    allowSecrets: false
+    additionalRules:                        # read the lab's CRDs (Gateway API, BNK, AI Gateway, Dynamo, Argo, kagent)
+    - apiGroups: [gateway.networking.k8s.io, gateway.networking.x-k8s.io, gateway.k8s.f5.com, k8s.f5net.com,
+                  k8s.f5.com, inference.k8s.f5.com, inference.networking.k8s.io, inference.networking.x-k8s.io,
+                  nvidia.com, argoproj.io, kagent.dev, cert-manager.io, k8s.cni.cncf.io, metrics.f5.com]
+      resources: ["*"]
+      verbs: [get, list, watch]
+controller:
+  a2aClientTimeout: "300s"                  # CPU models are slow
+  a2aBaseUrl: http://10.10.12.34            # agent cards advertise the BNK VIP (R5 NAT), not the ClusterIP
+  substrate: {enabled: false}               # Agent Substrate parked: see README known issues (kagent 0.10.4 <-> Substrate API skew)
+substrateWorkerPool: {create: false}

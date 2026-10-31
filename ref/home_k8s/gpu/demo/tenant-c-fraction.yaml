@@ -1,0 +1,19 @@
+# tenant-c runs two small inference pods on half a GPU each: KAI packs both onto one H100 (GPU sharing, the
+# gpu-fraction annotation). No nvidia.com/gpu limit here; the annotation is the request.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: infer-half, namespace: tenant-c}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: gpu-demo-half}}
+  template:
+    metadata:
+      labels: {app: gpu-demo-half, kai.scheduler/queue: tenant-c}
+      annotations: {gpu-fraction: "0.5"}
+    spec:
+      schedulerName: kai-scheduler
+      terminationGracePeriodSeconds: 1  # sleep ignores SIGTERM
+      containers:
+      - name: infer
+        image: busybox:1.36
+        command: [sh, -c, 'echo "serving on $NVIDIA_VISIBLE_DEVICES"; sleep infinity']

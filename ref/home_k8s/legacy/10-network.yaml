@@ -1,0 +1,95 @@
+# BNK 2.4.1 legacy network model, needed for EVPN: F5 (2026-10-28): "EVPN support is not fully available via the Infra
+# CRD. It is only available via the legacy CRDs - Vrf, Vxlan, RoutingConfig, RoutingTemplate". The controller registers
+# its Vrf handler only with USE_GATEWAY_SETTINGS=false (with true, a RoutingConfig with vrf panics at
+# controller_routingconfig.go:562), so the whole data plane config moves back to the legacy CRs. They are ignored while
+# USE_GATEWAY_SETTINGS=true, so this file can be applied before the switch (20-switch.sh). Mirrors
+# install/ai4/70-infra-egress.yaml; TMM interfaces follow the pod's NAD order: 1.1 external-net (ens4), 1.2 internal-net.
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: external, namespace: default}
+spec:
+  name: external
+  interfaces: ["1.1"]
+  selfip_v4s: [172.16.10.11, 172.16.10.12, 172.16.10.13]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+# internal leg (3rd NIC, cabled to the node network): TMM self IPs for the node -> TMM egress tunnels
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: internal, namespace: default}
+spec:
+  name: internal
+  interfaces: ["1.2"]
+  internal: true
+  selfip_v4s: [10.10.12.41, 10.10.12.42, 10.10.12.43]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+# VLAN 100 to leaf1/leaf2 swp3.100: EVPN underlay (docs/fabric-evpn.md, step 2), default route domain
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: fab-ul, namespace: default}
+spec:
+  name: fab-ul
+  interfaces: ["1.1"]
+  tag: 100
+  selfip_v4s: [10.254.100.11, 10.254.100.12, 10.254.100.13]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+# VLAN 103 to the DPU in front of this worker (dpu<N> swp2.103, .<N>): tenant-c's leg, in its route domain. BGP to the
+# DPU needs TCP 179 in allowed_services; without it TMM drops the DPU's SYNs on this VLAN
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: fab-c, namespace: default}
+spec:
+  name: fab-c
+  interfaces: ["1.1"]
+  tag: 103
+  vrf: tenant-c
+  allowed_services: [{protocol: tcp, port: "179"}]
+  selfip_v4s: [10.254.103.11, 10.254.103.12, 10.254.103.13]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+# tenant-a's exit leg: TMM stays tenant-a's VTEP for the VIP, but learns R5's default from its DPU over this VLAN
+# (OcNOS keeps type-5 routes it learns inactive), and sends the tenant's SNAT pool back the same way
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: fab-a, namespace: default}
+spec:
+  name: fab-a
+  interfaces: ["1.1"]
+  tag: 101
+  vrf: tenant-a
+  allowed_services: [{protocol: tcp, port: "179"}]
+  selfip_v4s: [10.254.101.11, 10.254.101.12, 10.254.101.13]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+# tenant-b's exit leg: TMM stays tenant-b's VTEP for the VIP, but learns R5's default from its DPU over this VLAN
+# (OcNOS keeps type-5 routes it learns inactive), and sends the tenant's SNAT pool back the same way
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: fab-b, namespace: default}
+spec:
+  name: fab-b
+  interfaces: ["1.1"]
+  tag: 102
+  vrf: tenant-b
+  allowed_services: [{protocol: tcp, port: "179"}]
+  selfip_v4s: [10.254.102.11, 10.254.102.12, 10.254.102.13]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5BnkGateway
+metadata: {name: f5-bnkgateway, namespace: default}
+spec:
+  ingressConfig:
+    defaultListenerNetworks:
+    - name: default_ipv4
+      ipv4BaseCidr: 172.16.100.0/24
+      startAddress: 172.16.100.10
+      endAddress: 172.16.100.29   # .10-.18 published on R5 (10.10.12.30-38), .20-.22 tenant AI Gateways (unpublished)

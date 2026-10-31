@@ -1,0 +1,13 @@
+{
+  "spec": {
+    "aiGateway": {
+      "enabled": true,
+      "aiMetrics": true
+    },
+    "telemetry": {
+      "loggingSubsystem": {
+        "enabled": true
+      }
+    }
+  }
+}

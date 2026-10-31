@@ -1,0 +1,154 @@
+# BNK 2.4.1 CRD-based routing (OcNOS 6.6, ZEBOS_STATE=ocnos in install/bnk/cne-instance.yaml), legacy network model
+# (install/legacy): EVPN after F5 "Sample YAML files by use case", use cases 3/4, and "Configure global BGP routing".
+#   R5 172.16.10.1 (AS 65000): IPv4. Export filter: VIP pool 172.16.100.0/24 and tenant SNAT pools only.
+#   leaf1 10.254.100.1 (AS 65201), leaf2 10.254.100.2 (AS 65202) over VLAN 100 (F5SPKVlan fab-ul): L2VPN EVPN, and IPv4
+#   with only the TMM VTEP /32s exported (10.255.1.0/24, Vxlan localIpSubnet), so the leaves reach the VTEPs over
+#   VLAN 100. Each TMM reaches only its own leaf.
+#   VTEP = the TMM's address from the Vxlans' shared localIpSubnet. The controller fixes the DP slot -> address map
+#   when a Vxlan is created (pod order at that moment, not slot order) and keeps it per slot, so __VTEP_DP-n__ is
+#   filled in by 30-reapply-routing.sh from its state (ConfigMap secure-spk-tmmcnfmappings-default); apply via that script.
+#   Tenants: install/legacy/40-tenants-evpn.yaml (Vrf, Vxlan, RoutingConfig with vxlanRef + bnk-tenant template below;
+#   tenant-c: Vrf + RoutingConfig with vrf, peering with the DPUs).
+# Template data in 2.4.1 (dumped from a render): .global.spec.* with bgp.routerIdSource resolved to this TMM's pod IP,
+# .global.tmmAllocatedIPs {DP-n: pod IP}, .global.virtualIpTmmAssignment, .routeDomainID, .secrets; tenant renders add
+# .tenant.spec. The $routerId variable in F5's examples does not exist. Templates and routing CRs are immutable.
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingTemplate
+metadata:
+  name: bnk-routing
+  namespace: default
+spec:
+  body: |
+    nvo vxlan enable
+    nvo vxlan irb
+    {{- range $dp, $ip := .global.tmmAllocatedIPs }}
+    {{- if eq $dp "DP-0" }}
+    nvo vxlan vtep-ip-global __VTEP_DP-0__
+    {{- else if eq $dp "DP-1" }}
+    nvo vxlan vtep-ip-global __VTEP_DP-1__
+    {{- else if eq $dp "DP-2" }}
+    nvo vxlan vtep-ip-global __VTEP_DP-2__
+    {{- end }}
+    {{- end }}
+    ip prefix-list TO-R5 seq 5 permit 172.16.100.0/24 le 32
+    ip prefix-list TO-R5 seq 10 permit 172.16.201.0/24 le 32
+    ip prefix-list TO-R5 seq 15 permit 172.16.202.0/24 le 32
+    ip prefix-list TO-R5 seq 20 permit 172.16.203.0/24 le 32
+    route-map TO-R5 permit 10
+    match ip address prefix-list TO-R5
+    exit
+    ip prefix-list TO-FABRIC-V4 seq 5 permit 10.255.1.0/24 ge 32
+    route-map TO-FABRIC-V4 permit 10
+    match ip address prefix-list TO-FABRIC-V4
+    exit
+    router bgp {{ .global.spec.bgp.startASN }}
+    bgp router-id {{ .global.spec.bgp.routerIdSource }}
+    bgp log-neighbor-changes
+    {{- range $nbr := .global.spec.bgp.neighbors }}
+    neighbor {{ $nbr.ip }} remote-as {{ $nbr.remoteAs }}
+    {{- end }}
+    address-family ipv4 unicast
+    redistribute kernel
+    {{- range $nbr := .global.spec.bgp.neighbors }}
+    {{- range $fam := $nbr.families }}
+    {{- if eq $fam "ipv4-unicast" }}
+    neighbor {{ $nbr.ip }} activate
+    {{- if eq $nbr.ip "172.16.10.1" }}
+    neighbor {{ $nbr.ip }} route-map TO-R5 out
+    {{- else }}
+    neighbor {{ $nbr.ip }} route-map TO-FABRIC-V4 out
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    exit-address-family
+    address-family l2vpn evpn
+    {{- range $nbr := .global.spec.bgp.neighbors }}
+    {{- range $fam := $nbr.families }}
+    {{- if eq $fam "l2vpn-evpn" }}
+    neighbor {{ $nbr.ip }} activate
+    {{- end }}
+    {{- end }}
+    {{- end }}
+    exit-address-family
+    exit
+---
+# Tenant overlay, rendered once per RoutingConfig.
+#   vxlanRef vni<VNI> (tenant-a/b): the tenant VRF as an L3VNI with the route target the leaves use (65000:<VNI>);
+#   virtual addresses in the VRF (VIPs) leave as EVPN type-5.
+#   neighbors (tenant-a/b too): eBGP in the VRF to the DPUs over VLAN 101/102, the tenant's exit leg. TMM learns R5's
+#   default there (it never activates type-5 routes it learns) and sends the SNAT pool back.
+#   vrf (tenant-c, behind the DPUs): no L3VNI on TMM. eBGP in the VRF to the DPUs on VLAN 103 (F5SPKVlan fab-c), the
+#   VIPs go out as plain IPv4 and the DPU is the tenant's VTEP. OcNOS takes BGP in a VRF only once the VRF has an RD.
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingTemplate
+metadata:
+  name: bnk-tenant
+  namespace: default
+spec:
+  # plain Go templates: no Sprig functions (trimPrefix, dict, default) in the 2.4.1 controller; a field the
+  # RoutingConfig leaves out is a missing key, which "if" reads as false
+  body: |
+    {{- if .tenant.spec.vxlanRef }}
+    {{- if eq .tenant.spec.vxlanRef "vni10001" }}
+    ip vrf tenant-a
+    rd {{ .global.spec.bgp.routerIdSource }}:10001
+    route-target both 65000:10001
+    l3vni 10001
+    exit
+    router bgp {{ .global.spec.bgp.startASN }}
+    address-family ipv4 vrf tenant-a
+    redistribute kernel
+    {{- range $nbr := .tenant.spec.neighbors }}
+    neighbor {{ $nbr.ip }} remote-as {{ $nbr.remoteAs }}
+    neighbor {{ $nbr.ip }} activate
+    {{- end }}
+    exit-address-family
+    exit
+    {{- end }}
+    {{- if eq .tenant.spec.vxlanRef "vni10002" }}
+    ip vrf tenant-b
+    rd {{ .global.spec.bgp.routerIdSource }}:10002
+    route-target both 65000:10002
+    l3vni 10002
+    exit
+    router bgp {{ .global.spec.bgp.startASN }}
+    address-family ipv4 vrf tenant-b
+    redistribute kernel
+    {{- range $nbr := .tenant.spec.neighbors }}
+    neighbor {{ $nbr.ip }} remote-as {{ $nbr.remoteAs }}
+    neighbor {{ $nbr.ip }} activate
+    {{- end }}
+    exit-address-family
+    exit
+    {{- end }}
+    {{- else if eq .tenant.spec.vrf "tenant-c" }}
+    ip vrf tenant-c
+    rd {{ .global.spec.bgp.routerIdSource }}:10003
+    exit
+    router bgp {{ .global.spec.bgp.startASN }}
+    address-family ipv4 vrf tenant-c
+    redistribute kernel
+    {{- range $nbr := .tenant.spec.neighbors }}
+    neighbor {{ $nbr.ip }} remote-as {{ $nbr.remoteAs }}
+    neighbor {{ $nbr.ip }} activate
+    {{- end }}
+    exit-address-family
+    exit
+    {{- end }}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: GlobalRoutingConfig
+metadata:
+  name: global-config
+  namespace: default
+spec:
+  templateRef: {name: bnk-routing}
+  vxlanRef: vni10001
+  bgp:
+    startASN: 65100
+    routerIdSource: "%POD_IP%"
+    neighbors:
+    - {ip: 172.16.10.1, remoteAs: 65000, families: ["ipv4-unicast"]}
+    - {ip: 10.254.100.1, remoteAs: 65201, families: ["ipv4-unicast", "l2vpn-evpn"]}
+    - {ip: 10.254.100.2, remoteAs: 65202, families: ["ipv4-unicast", "l2vpn-evpn"]}

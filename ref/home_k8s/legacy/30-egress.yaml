@@ -1,0 +1,88 @@
+# Per-tenant egress SNAT on the legacy CRDs (phase 3 of the switch, install/legacy/20-switch.sh), after F5
+# "F5SPKEgress" and "F5SPKSnatpool" references: one F5SPKEgress per application namespace (pseudoCNIConfig.namespaces
+# takes exactly one), applied in the TMM namespace (default), each with its own snatpool, so a tenant's pods always
+# leave with that tenant's addresses (R5 sees tenant-a 172.16.201.x, tenant-b .202.x, tenant-c .203.x).
+# pseudoCNIConfig.vxlan.create builds the node -> TMM tunnel on the internal leg (F5SPKVlan internal, 3rd NIC).
+# addressList: one inner list per TMM replica (first list -> first TMM). The webhook wants the tunnel's IPv4 and IPv6
+# subnets together; the IPv6 one (ULA) is unused.
+# After switching from the Infra model: CSRC leaves the Infra EgressGateway tunnels (bnkvxlan9000-9002) and their policy
+# rules (priority 770, listed before the new ones) on the nodes, so tenant pods keep using the dead tunnels. A CSRC
+# restart does not remove them. On every node: ip rule del <the 770 rules that look up *_bnkvxlan900x_*>,
+# ip link del bnkvxlan9000/9001/9002. Check: install/ai4/76-tenant-egress-test.sh, R5 "show ip http server history".
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKSnatpool
+metadata: {name: tenant-a-snat, namespace: default}
+spec:
+  name: tenant-a-snat
+  vrf: tenant-a               # egress leaves through the tenant's VRF: DPU leg, fabric, border1, R5
+  addressList: [[172.16.201.10], [172.16.201.11], [172.16.201.12]]
+---
+apiVersion: k8s.f5net.com/v3
+kind: F5SPKEgress
+metadata: {name: tenant-a-egress, namespace: default}
+spec:
+  snatType: SRC_TRANS_SNATPOOL
+  egressSnatpool: tenant-a-snat
+  pseudoCNIConfig:
+    namespaces: [tenant-a]
+    appPodInterface: eth0
+    vxlan:
+      create: true
+      tmmInterfaceName: internal
+      vrf: tenant-a             # must match the snatpool's VRF; the tunnel's underlay stays on internal
+      ipv4Subnet: 10.0.0.0
+      ipv4PrefixLen: 18
+      ipv6Subnet: "fd00:10:0:0::"
+      ipv6PrefixLen: 112
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKSnatpool
+metadata: {name: tenant-b-snat, namespace: default}
+spec:
+  name: tenant-b-snat
+  vrf: tenant-b               # egress leaves through the tenant's VRF: DPU leg, fabric, border1, R5
+  addressList: [[172.16.202.10], [172.16.202.11], [172.16.202.12]]
+---
+apiVersion: k8s.f5net.com/v3
+kind: F5SPKEgress
+metadata: {name: tenant-b-egress, namespace: default}
+spec:
+  snatType: SRC_TRANS_SNATPOOL
+  egressSnatpool: tenant-b-snat
+  pseudoCNIConfig:
+    namespaces: [tenant-b]
+    appPodInterface: eth0
+    vxlan:
+      create: true
+      tmmInterfaceName: internal
+      vrf: tenant-b             # must match the snatpool's VRF; the tunnel's underlay stays on internal
+      ipv4Subnet: 10.0.64.0
+      ipv4PrefixLen: 18
+      ipv6Subnet: "fd00:10:0:1::"
+      ipv6PrefixLen: 112
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKSnatpool
+metadata: {name: tenant-c-snat, namespace: default}
+spec:
+  name: tenant-c-snat
+  vrf: tenant-c               # egress leaves through the tenant's VRF: EVPN to border1, then R5
+  addressList: [[172.16.203.10], [172.16.203.11], [172.16.203.12]]
+---
+apiVersion: k8s.f5net.com/v3
+kind: F5SPKEgress
+metadata: {name: tenant-c-egress, namespace: default}
+spec:
+  snatType: SRC_TRANS_SNATPOOL
+  egressSnatpool: tenant-c-snat
+  pseudoCNIConfig:
+    namespaces: [tenant-c]
+    appPodInterface: eth0
+    vxlan:
+      create: true
+      tmmInterfaceName: internal
+      vrf: tenant-c             # must match the snatpool's VRF; the tunnel's underlay stays on internal
+      ipv4Subnet: 10.0.128.0
+      ipv4PrefixLen: 18
+      ipv6Subnet: "fd00:10:0:2::"
+      ipv6PrefixLen: 112

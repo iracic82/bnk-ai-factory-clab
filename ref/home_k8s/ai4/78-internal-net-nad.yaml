@@ -1,0 +1,11 @@
+# TMM "internal" leg (F5 reference: internal-net, the TMM <-> server side; in UDF a gretap "pcie" bridge).
+# Here it is a real EVE NIC: ens5 on bnk-w1/w2, cabled to the node network 10.10.12.0/24 (EVE pnet1),
+# no host IP. TMM self IPs 10.10.12.41-43 live on it, so the CSRC egress VXLAN tunnels
+# (local <node IP> dev ens3) reach TMM directly on L2 instead of hairpinning through R5.
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: internal-net
+  namespace: default
+spec:
+  config: '{"cniVersion":"0.3.1","type":"macvlan","master":"ens5","mode":"bridge","ipam":{}}'

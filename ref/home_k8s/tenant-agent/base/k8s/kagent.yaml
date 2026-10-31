@@ -1,0 +1,25 @@
+# kagent objects in the tenant namespace: the tenant's model access (its own AI Gateway virtual key) and its MCP
+# server. The Agent itself is per tenant (../tenants/tenant-<x>/assistant.yaml). The overlay sets the tenant's AI Gateway
+# address (its own AI Gateway tenant, 172.16.100.2x) and the MCP url's namespace.
+apiVersion: kagent.dev/v1alpha2
+kind: ModelConfig
+metadata:
+  name: tenant-model
+spec:
+  provider: OpenAI
+  model: qwen2.5-1.5b
+  apiKeySecret: aigw-key
+  apiKeySecretKey: token
+  openAI:
+    baseUrl: http://x/v1
+    apiFormat: chatCompletions
+---
+apiVersion: kagent.dev/v1alpha2
+kind: RemoteMCPServer
+metadata:
+  name: tenant-tools
+spec:
+  description: This tenant's own tools (business data, identity, egress and isolation checks)
+  protocol: STREAMABLE_HTTP
+  url: http://agent.TENANT_NS.svc.cluster.local:8001/mcp
+  timeout: 30s

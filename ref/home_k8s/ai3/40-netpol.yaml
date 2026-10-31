@@ -1,0 +1,65 @@
+# Only the BNK namespace (TMM / AI Gateway / analyzer) and each service's own namespace may call the model backends.
+# TMM reaches pods through its internal network (node subnet, self IPs 10.10.12.41-43, SNAT automap), so its
+# server-side traffic arrives from those self IPs, not from a pod IP: allow exactly those three addresses.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: ollama-from-bnk-only, namespace: llm-light}
+spec:
+  podSelector: {matchLabels: {app: ollama}}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+    - ipBlock: {cidr: 10.10.12.41/32}
+    - ipBlock: {cidr: 10.10.12.42/32}
+    - ipBlock: {cidr: 10.10.12.43/32}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: llm-light}}
+    ports: [{port: 11434, protocol: TCP}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: gpusim-from-bnk-and-monitoring, namespace: nim}
+spec:
+  podSelector: {matchLabels: {app: aifactory-sim}}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+    - ipBlock: {cidr: 10.10.12.41/32}
+    - ipBlock: {cidr: 10.10.12.42/32}
+    - ipBlock: {cidr: 10.10.12.43/32}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: lab-local}}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: nim}}
+    ports: [{port: 8080, protocol: TCP}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: models-from-bnk-and-dynamo, namespace: aigw-models}
+spec:
+  # Every pod except a quarantined inference worker, which only install/runtime-trust/quarantine-netpol.yaml
+  # selects (NetworkPolicies only add allows, so this one must leave those pods alone).
+  podSelector:
+    matchExpressions: [{key: trust.lab/state, operator: NotIn, values: [quarantined]}]
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+    - ipBlock: {cidr: 10.10.12.41/32}
+    - ipBlock: {cidr: 10.10.12.42/32}
+    - ipBlock: {cidr: 10.10.12.43/32}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: aigw-models}}
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: dynamo-system}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: semantic-router-from-bnk-only, namespace: default}
+spec:
+  podSelector: {matchLabels: {app: semantic-router}}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: default}}
+    - ipBlock: {cidr: 10.10.12.41/32}
+    - ipBlock: {cidr: 10.10.12.42/32}
+    - ipBlock: {cidr: 10.10.12.43/32}
+    ports: [{port: 50051, protocol: TCP}]

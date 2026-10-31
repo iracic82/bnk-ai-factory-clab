@@ -1,0 +1,20 @@
+# tenant-a (Northpeak Retail): the tenant agent in namespace tenant-a. Argo CD app tenant-a-agent.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: tenant-a
+resources: [../../base, assistant.yaml]
+patches:
+- target: {kind: Deployment, name: agent}
+  patch: |-
+    - {op: replace, path: /spec/template/spec/containers/0/env/0/value, value: "a"}
+    - {op: replace, path: /spec/template/spec/containers/0/env/1/value, value: "http://172.16.100.20/v1"}   # AI Gateway tenant tenant-a
+    - {op: replace, path: /spec/template/spec/containers/1/env/0/value, value: "a"}
+- target: {kind: Gateway, name: tenant-gw}
+  patch: |-
+    - {op: replace, path: /spec/addresses/0/value, value: 172.16.100.16}   # outside: 10.10.12.36
+- target: {kind: RemoteMCPServer, name: tenant-tools}
+  patch: |-
+    - {op: replace, path: /spec/url, value: "http://agent.tenant-a.svc.cluster.local:8001/mcp"}
+- target: {kind: ModelConfig, name: tenant-model}
+  patch: |-
+    - {op: replace, path: /spec/openAI/baseUrl, value: "http://172.16.100.20/v1"}

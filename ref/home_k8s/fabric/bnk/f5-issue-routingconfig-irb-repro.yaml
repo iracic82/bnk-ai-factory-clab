@@ -1,0 +1,24 @@
+# Test: RoutingConfig for tenant-a with irbInterfaces (CRD field "List of IRB interfaces for this tenant"), VRF-direct,
+# no neighbors. OcNOS exports a VRF's routes as EVPN type-5 only when the VRF has an IRB bound to its L3VNI; this asks
+# the controller to create that IRB on TMM. The earlier RoutingConfig (vrf + neighbors, no IRB) crashed the controller.
+# The template only prints the tenant context, so nothing is pushed to OcNOS besides a comment.
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-a, namespace: default}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingTemplate
+metadata: {name: bnk-tenant-ctx, namespace: default}
+spec:
+  body: |
+    ! tenant ctx {{ printf "%v" . }}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-a, namespace: default}
+spec:
+  templateRef: {name: bnk-tenant-ctx}
+  vrf: tenant-a
+  irbInterfaces:
+  - {id: "10001", ipv4Address: 10.250.10.1, ipv4Prefix: 24}

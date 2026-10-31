@@ -1,0 +1,15 @@
+# Fake GPU Operator (run-ai/fake-gpu-operator, chart 0.2.1). The lab has no GPUs, so the device plugin advertises
+# nvidia.com/gpu on nodes labelled run.ai/simulated-gpu-node-pool=h100 (w1 and w2, 4 each = 8). Labels and the
+# nvidia.com/gpu.product value match what a real GPU Operator would set, so KAI and nodeSelectors see a normal GPU node.
+# aifactory-sim (install/ai) still fakes the inference traffic and DCGM metrics; this only fakes the scheduling side.
+environment:
+  # For a fractional GPU KAI starts a reservation pod and waits until it is handed a GPU id. With fake GPUs the
+  # status-updater does that, but it watches runai-reservation (commercial Run:ai); KAI uses this namespace.
+  resourceReservationNamespace: kai-resource-reservation
+topology:
+  nodePools:
+    h100:
+      gpuProduct: NVIDIA-H100-80GB-HBM3
+      gpuCount: 4
+      gpuMemory: 81559
+  nodePoolLabelKey: run.ai/simulated-gpu-node-pool

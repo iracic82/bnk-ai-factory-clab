@@ -1,0 +1,34 @@
+# Sandboxed copy of the lab agent, running as an Agent Substrate actor (gVisor) in WorkerPool kagent/kagent-default.
+apiVersion: kagent.dev/v1alpha2
+kind: SandboxAgent
+metadata:
+  name: bnk-lab-sandbox-agent
+  namespace: kagent
+spec:
+  description: Same read-only lab assistant as bnk-lab-agent, running as an Agent Substrate actor in a gVisor sandbox.
+  type: Declarative
+  substrate:
+    workerPoolRef: {name: kagent-default}
+  sandbox:
+    network:
+      allowedDomains: ["10.10.12.33", "kagent-tools.kagent"]
+  declarative:
+    runtime: go
+    modelConfig: default-model-config
+    systemMessage: |
+      You are a read-only operator assistant for a three-node Kubernetes lab running F5 BIG-IP Next for Kubernetes 2.4.1.
+      Use the tools to look at the live cluster before answering. Never guess. Keep answers short.
+    tools:
+    - type: McpServer
+      mcpServer:
+        name: kagent-tool-server
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames: [k8s_get_resources, k8s_describe_resource, k8s_get_events, k8s_get_pod_logs]
+    a2aConfig:
+      skills:
+      - id: cluster-status
+        name: Cluster status
+        description: Report node, pod and workload health in the BNK lab cluster.
+        tags: [kubernetes, status]
+        examples: ["Are all nodes Ready?"]

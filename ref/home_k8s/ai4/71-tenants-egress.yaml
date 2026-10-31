@@ -1,0 +1,146 @@
+# BNK 2.4.1 per-tenant egress, step 2: three tenants, each with its own namespace, SNAT pool and EgressGateway.
+# GatewaySettings must sit in the same namespace as its EgressGateway, so a tenant cannot use another tenant's pool.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-a
+  labels: {bnk.lab/tenant: tenant-a}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata: {name: tenant-a-settings, namespace: tenant-a}
+spec:
+  sourceNATPools:
+  - name: tenant-a-snat
+    ipamRefs: [{name: tenant-a-snat}]
+    shared: false
+  egressConfigs:
+  - name: egress
+    hardwareAcceleration: none
+    networkRef: {name: egress-v30}
+    sourceNATConfig:
+      type: Pool
+      sourceNATPoolRef: {name: tenant-a-snat}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: EgressGateway
+metadata: {name: tenant-a-egress, namespace: tenant-a}
+spec:
+  gatewayClassName: f5-gateway-class
+  infrastructure:
+    parametersRef: {name: tenant-a-settings, sectionName: egress}
+  sourceSelector:
+    selectionMode: NamespaceSelector
+    namespaces: {matchNames: [tenant-a]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: client, namespace: tenant-a}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: client}}
+  template:
+    metadata: {labels: {app: client}}
+    spec:
+      containers:
+      - name: curl
+        image: curlimages/curl:8.11.1
+        command: [sh, -c, "sleep infinity"]
+        resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {memory: 64Mi}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-b
+  labels: {bnk.lab/tenant: tenant-b}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata: {name: tenant-b-settings, namespace: tenant-b}
+spec:
+  sourceNATPools:
+  - name: tenant-b-snat
+    ipamRefs: [{name: tenant-b-snat}]
+    shared: false
+  egressConfigs:
+  - name: egress
+    hardwareAcceleration: none
+    networkRef: {name: egress-v30}
+    sourceNATConfig:
+      type: Pool
+      sourceNATPoolRef: {name: tenant-b-snat}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: EgressGateway
+metadata: {name: tenant-b-egress, namespace: tenant-b}
+spec:
+  gatewayClassName: f5-gateway-class
+  infrastructure:
+    parametersRef: {name: tenant-b-settings, sectionName: egress}
+  sourceSelector:
+    selectionMode: NamespaceSelector
+    namespaces: {matchNames: [tenant-b]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: client, namespace: tenant-b}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: client}}
+  template:
+    metadata: {labels: {app: client}}
+    spec:
+      containers:
+      - name: curl
+        image: curlimages/curl:8.11.1
+        command: [sh, -c, "sleep infinity"]
+        resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {memory: 64Mi}}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-c
+  labels: {bnk.lab/tenant: tenant-c}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: GatewaySettings
+metadata: {name: tenant-c-settings, namespace: tenant-c}
+spec:
+  sourceNATPools:
+  - name: tenant-c-snat
+    ipamRefs: [{name: tenant-c-snat}]
+    shared: false
+  egressConfigs:
+  - name: egress
+    hardwareAcceleration: none
+    networkRef: {name: egress-v30}
+    sourceNATConfig:
+      type: Pool
+      sourceNATPoolRef: {name: tenant-c-snat}
+---
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: EgressGateway
+metadata: {name: tenant-c-egress, namespace: tenant-c}
+spec:
+  gatewayClassName: f5-gateway-class
+  infrastructure:
+    parametersRef: {name: tenant-c-settings, sectionName: egress}
+  sourceSelector:
+    selectionMode: NamespaceSelector
+    namespaces: {matchNames: [tenant-c]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: client, namespace: tenant-c}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: client}}
+  template:
+    metadata: {labels: {app: client}}
+    spec:
+      containers:
+      - name: curl
+        image: curlimages/curl:8.11.1
+        command: [sh, -c, "sleep infinity"]
+        resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {memory: 64Mi}}

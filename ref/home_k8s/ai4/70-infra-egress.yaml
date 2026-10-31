@@ -1,0 +1,130 @@
+# BNK 2.4.1 network model: the Infra singleton in the BNK namespace (default).
+# Active only once the controller runs with USE_GATEWAY_SETTINGS=true (see 73-migrate.sh);
+# from then on the legacy F5SPKVlan "external" + F5BnkGateway are ignored (kept as rollback).
+#
+#   network "external" (untagged, ens4 via NAD external-net): TMM self IPs 172.16.10.11-13, BGP to R5 172.16.10.1
+#   network "internal" (untagged, ens5 via NAD internal-net, cabled to the node network): TMM self IPs 10.10.12.41-43,
+#     the egress tunnel endpoint (F5 reference internal-net; UDF fakes it with a gretap "pcie" bridge)
+#   network "egress-v30" (VLAN 30 tagged, SW4 trunk, R5 e0/1.30 = 172.16.30.1): TMM self IPs 172.16.30.11-13
+#   one single-address listener pool per Gateway, so every VIP keeps its address (R5 static NAT 10.10.12.3x -> .1x)
+#   per-tenant SNAT pools: tenant-a 172.16.201.10-13, tenant-b 172.16.202.10-13, tenant-c 172.16.203.10-13
+#   test "internet" 198.51.100.0/24 (R5 Loopback30) routed via VLAN 30, so tenant egress SNAT is visible on R5.
+apiVersion: gateway.k8s.f5.com/v1alpha1
+kind: Infra
+metadata:
+  name: bnk-infra
+  namespace: default
+spec:
+  networkAttachments:
+  - name: data-attach
+    networkAttachmentDefinitions:
+    - name: external-net
+  - name: internal-attach
+    networkAttachmentDefinitions:
+    - name: internal-net
+  ipams:
+  - name: external-self
+    ipPools: [{rangeStart: 172.16.10.11, rangeEnd: 172.16.10.13}]
+  - name: internal-self
+    ipPools: [{rangeStart: 10.10.12.41, rangeEnd: 10.10.12.43}]
+  - name: egress-self
+    ipPools: [{rangeStart: 172.16.30.11, rangeEnd: 172.16.30.13}]
+  - name: vip-demo
+    ipPools: [{rangeStart: 172.16.100.10, rangeEnd: 172.16.100.10}]
+  - name: vip-gpu-sim
+    ipPools: [{rangeStart: 172.16.100.11, rangeEnd: 172.16.100.11}]
+  - name: vip-dynamo
+    ipPools: [{rangeStart: 172.16.100.12, rangeEnd: 172.16.100.12}]
+  - name: vip-aigw
+    ipPools: [{rangeStart: 172.16.100.13, rangeEnd: 172.16.100.13}]
+  - name: vip-agents
+    ipPools: [{rangeStart: 172.16.100.14, rangeEnd: 172.16.100.14}]
+  - name: vip-apps
+    ipPools: [{rangeStart: 172.16.100.15, rangeEnd: 172.16.100.15}]
+  - name: tenant-a-snat
+    ipPools: [{rangeStart: 172.16.201.10, rangeEnd: 172.16.201.13}]
+  - name: tenant-b-snat
+    ipPools: [{rangeStart: 172.16.202.10, rangeEnd: 172.16.202.13}]
+  - name: tenant-c-snat
+    ipPools: [{rangeStart: 172.16.203.10, rangeEnd: 172.16.203.13}]
+  # EVPN fabric (docs/fabric-evpn.md, step 2): per tenant a VLAN on the data NIC, bound to the tenant VRF.
+  # ens4 of bnk-w1 / bnk-w2 is also cabled to leaf1 / leaf2 swp3; the leaf puts swp3.10X into the same tenant VRF.
+  - name: fab-a-self
+    ipPools: [{rangeStart: 10.254.101.11, rangeEnd: 10.254.101.13}]
+  - name: fab-b-self
+    ipPools: [{rangeStart: 10.254.102.11, rangeEnd: 10.254.102.13}]
+  - name: fab-c-self
+    ipPools: [{rangeStart: 10.254.103.11, rangeEnd: 10.254.103.13}]
+  - name: vip-tenant-a
+    ipPools: [{rangeStart: 10.201.100.10, rangeEnd: 10.201.100.10}]
+  - name: vip-tenant-b
+    ipPools: [{rangeStart: 10.202.100.10, rangeEnd: 10.202.100.10}]
+  - name: vip-tenant-c
+    ipPools: [{rangeStart: 10.203.100.10, rangeEnd: 10.203.100.10}]
+  # Dynamic EVPN (F5 "Configure network infrastructure with the Infra CRD", VXLAN example; "Sample YAML files by use
+  # case", use case 4 EVPN-only overlays): TMM is the VTEP. BGP IPv4 + L2VPN EVPN to the leaves runs in the default VRF
+  # over VLAN 100 (fab-ul); each tenant is an L3VNI (vxlan network in the tenant VRF) with VTEPs from vtep-pool.
+  - name: fab-ul-self
+    ipPools: [{rangeStart: 10.254.100.11, rangeEnd: 10.254.100.13}]
+  - name: vtep-pool
+    ipPools: [{rangeStart: 10.255.1.11, rangeEnd: 10.255.1.13}]
+  - name: vx-a-self
+    ipPools: [{rangeStart: 10.250.1.11, rangeEnd: 10.250.1.30}]
+  vrfs:
+  - {name: tenant-a, strictIsolation: true}
+  - {name: tenant-b, strictIsolation: true}
+  - {name: tenant-c, strictIsolation: true}
+  networks:
+  - name: fab-ul
+    type: vlan
+    vlan: {tag: 100, mtu: 1500, networkAttachmentRef: {name: data-attach}, ipamRefs: [{name: fab-ul-self}]}
+  # Named vni<VNI>: OcNOS calls the L3VNI's interface vni10001, and tmrouted maps it to the TMM interface of that
+  # name. With any other name tmrouted logs 'nexthop if=vni10001 ifi=-1', OcNOS gets no router MAC and never
+  # announces the tenant's type-5 routes (found with tmrouted debug, /tmos/tmrouted.debug).
+  - name: vni10001
+    type: vxlan
+    # VTEP from vtep-pool, not an underlay network: the controller programs the VXLAN listener (local_ip) in route
+    # domain 0 whatever the VRF, and Infra only allows networkRef to a VLAN in the VXLAN's own VRF (tenant-a), where
+    # incoming VXLAN would get "port 4789 unreachable". The VTEP /32 is a route-domain-0 virtual address; TMM
+    # advertises it to the leaves over IPv4 (template TO-FABRIC-V4) and they send VXLAN to it over fab-ul (VLAN 100).
+    vxlan: {vni: 10001, mtu: 1450, port: 4789, vtepIpamRefs: [{name: vtep-pool}], ipamRefs: [{name: vx-a-self}], vrfRef: {name: tenant-a}}
+  - name: fab-a
+    type: vlan
+    vlan: {tag: 101, mtu: 1500, networkAttachmentRef: {name: data-attach}, ipamRefs: [{name: fab-a-self}], vrfRef: {name: tenant-a}}
+  - name: fab-b
+    type: vlan
+    vlan: {tag: 102, mtu: 1500, networkAttachmentRef: {name: data-attach}, ipamRefs: [{name: fab-b-self}], vrfRef: {name: tenant-b}}
+  - name: fab-c
+    type: vlan
+    vlan: {tag: 103, mtu: 1500, networkAttachmentRef: {name: data-attach}, ipamRefs: [{name: fab-c-self}], vrfRef: {name: tenant-c}}
+  - name: external
+    type: vlan
+    vlan:
+      tag: 0
+      mtu: 1500
+      networkAttachmentRef: {name: data-attach}
+      ipamRefs: [{name: external-self}]
+  - name: internal
+    type: vlan
+    vlan:
+      tag: 0
+      mtu: 1500
+      networkAttachmentRef: {name: internal-attach}
+      ipamRefs: [{name: internal-self}]
+  - name: egress-v30
+    type: vlan
+    vlan:
+      tag: 30
+      mtu: 1500
+      networkAttachmentRef: {name: data-attach}
+      ipamRefs: [{name: egress-self}]
+  # Node -> TMM egress tunnel. CSRC on every node builds VXLAN (local <node IP> dev ens3) to TMM's self IPs on this
+  # network; pods selected by an EgressGateway are steered into it. Same L2 as the nodes, so no router in the path.
+  egressDefaults:
+    networkRef: {name: internal}
+    subnet: 10.0.0.0/16
+    port: 4789
+  staticRoutes:
+  - name: test-internet
+    destinations: [198.51.100.0/24]
+    nextHop: 172.16.30.1

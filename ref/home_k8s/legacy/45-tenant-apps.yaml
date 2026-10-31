@@ -1,0 +1,68 @@
+# Demo backends for the tenant VIPs (install/legacy/40-tenants-evpn.yaml: Pool tenant-<t>-hello -> F5VirtualServer
+# tenant-<t>-vip in VRF tenant-<t>). Namespace default, where the Vrf CRs are.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tenant-a-hello, namespace: default}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: tenant-a-hello}}
+  template:
+    metadata: {labels: {app: tenant-a-hello}}
+    spec:
+      containers:
+      - name: hello
+        image: nginxdemos/hello:plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {memory: 64Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tenant-a-hello, namespace: default}
+spec:
+  selector: {app: tenant-a-hello}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tenant-b-hello, namespace: default}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: tenant-b-hello}}
+  template:
+    metadata: {labels: {app: tenant-b-hello}}
+    spec:
+      containers:
+      - name: hello
+        image: nginxdemos/hello:plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {memory: 64Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tenant-b-hello, namespace: default}
+spec:
+  selector: {app: tenant-b-hello}
+  ports: [{port: 80, targetPort: 80}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: tenant-c-hello, namespace: default}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: tenant-c-hello}}
+  template:
+    metadata: {labels: {app: tenant-c-hello}}
+    spec:
+      containers:
+      - name: hello
+        image: nginxdemos/hello:plain-text
+        ports: [{containerPort: 80}]
+        resources: {requests: {cpu: 10m, memory: 16Mi}, limits: {memory: 64Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: tenant-c-hello, namespace: default}
+spec:
+  selector: {app: tenant-c-hello}
+  ports: [{port: 80, targetPort: 80}]

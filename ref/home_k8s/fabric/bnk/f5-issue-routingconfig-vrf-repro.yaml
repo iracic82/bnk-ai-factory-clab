@@ -1,0 +1,75 @@
+# Per-tenant BGP from TMM to the EVPN fabric (docs/fabric-evpn.md, step 2). Pattern "north-south BGP with tenant VRF
+# isolation": the tenant VRF (Infra vrfs) holds the fabric VLAN fab-<t> (101/102/103); TMM peers BGP in that VRF with
+# the leaf, which carries the tenant as an L3VNI on the EVPN overlay. Each TMM reaches only its own leaf
+# (bnk-w1 -> leaf1 .1, bnk-w2 -> leaf2 .2); the other neighbor stays idle.
+# OcNOS 6.6 needs an RD on the VRF before "address-family ipv4 vrf". The controller also opens BGP towards OcNOS in the
+# tenant route domain when it processes a RoutingConfig, so configuring OcNOS by hand is not enough.
+# RoutingConfig resolves its vrf through a Vrf CR (k8s.f5net.com), not Infra.spec.vrfs. Both derive the route domain
+# from the name, so the Vrf CRs below map onto the Infra VRFs (tenant-a = route domain 28934).
+# Immutable CRs: delete and recreate to change.
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-a, namespace: default}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-b, namespace: default}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1
+kind: Vrf
+metadata: {name: tenant-c, namespace: default}
+spec: {strictIsolation: true}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingTemplate
+metadata:
+  name: bnk-tenant-routing
+  namespace: default
+spec:
+  body: |
+    ! tenant ctx {{ printf "%v" . }}
+    ip vrf {{ .tenant.spec.vrf }}
+    rd {{ .global.spec.bgp.startASN }}:{{ .routeDomainID }}
+    exit
+    router bgp {{ .global.spec.bgp.startASN }}
+    address-family ipv4 vrf {{ .tenant.spec.vrf }}
+    redistribute kernel
+    redistribute connected
+    {{- range $nbr := .tenant.spec.neighbors }}
+    neighbor {{ $nbr.ip }} remote-as {{ $nbr.remoteAs }}
+    neighbor {{ $nbr.ip }} activate
+    {{- end }}
+    exit-address-family
+    exit
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-a, namespace: default}
+spec:
+  templateRef: {name: bnk-tenant-routing}
+  vrf: tenant-a
+  neighbors:
+  - {ip: 10.254.101.1, remoteAs: 65201, families: ["ipv4-unicast"]}
+  - {ip: 10.254.101.2, remoteAs: 65202, families: ["ipv4-unicast"]}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-b, namespace: default}
+spec:
+  templateRef: {name: bnk-tenant-routing}
+  vrf: tenant-b
+  neighbors:
+  - {ip: 10.254.102.1, remoteAs: 65201, families: ["ipv4-unicast"]}
+  - {ip: 10.254.102.2, remoteAs: 65202, families: ["ipv4-unicast"]}
+---
+apiVersion: k8s.f5net.com/v1alpha1
+kind: RoutingConfig
+metadata: {name: tenant-c, namespace: default}
+spec:
+  templateRef: {name: bnk-tenant-routing}
+  vrf: tenant-c
+  neighbors:
+  - {ip: 10.254.103.1, remoteAs: 65201, families: ["ipv4-unicast"]}
+  - {ip: 10.254.103.2, remoteAs: 65202, families: ["ipv4-unicast"]}

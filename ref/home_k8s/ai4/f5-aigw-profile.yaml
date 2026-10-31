@@ -1,0 +1,23 @@
+# OpenShell provider profile: the F5 AI Gateway route "lab-ai" (tenant lab), OpenAI-compatible.
+# The sandbox only ever sees a placeholder; the supervisor injects the real virtual key on this endpoint only.
+id: f5-aigw
+display_name: F5 AI Gateway (BNK lab)
+description: BNK AI Gateway tenant lab, OpenAI-compatible, VIP 172.16.100.13 via 10.10.12.33
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: AI Gateway virtual key
+    env_vars: [AIGW_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_key]
+endpoints:
+  - host: 10.10.12.33
+    port: 80
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries: [/usr/bin/curl, /usr/local/bin/curl, /usr/bin/python3*, /usr/local/bin/python3*]

@@ -1,0 +1,81 @@
+# kagent declarative agent "bnk-lab-agent" (auto-synced by Argo app kagent-agents; see agents/README.md).
+# Model: qwen2.5-1.5b on Ollama (CPU) through the F5 AI Gateway, tenant "lab" (ModelConfig default-model-config).
+# Tools: read-only subset of the kagent k8s MCP tool server, plus the AI factory MCP server from apps/agentic-app
+# (RemoteMCPServer ai-factory-mcp, defined in apps/platform/apps-gw.yaml): GPU metrics and BNK endpoints.
+# A2A: http://10.10.12.34/api/a2a/kagent/bnk-lab-agent/  (BNK VIP 172.16.100.14; Gateway in install/ai4/40-agents-gateway.yaml)
+apiVersion: kagent.dev/v1alpha2
+kind: Agent
+metadata:
+  name: bnk-lab-agent
+  namespace: kagent
+spec:
+  description: Read-only operator assistant for the BNK 2.4.1 AI lab cluster in EVE-NG. Answers questions about nodes, pods, BNK gateways and the AI stack.
+  type: Declarative
+  declarative:
+    runtime: go
+    modelConfig: default-model-config
+    stream: true
+    systemMessage: |
+      You are the operator assistant for a three-node Kubernetes lab running F5 BIG-IP Next for Kubernetes (BNK) 2.4.1.
+      Nodes: bnk-cp1 10.10.12.21 (control plane), bnk-w1 10.10.12.22 and bnk-w2 10.10.12.26 (TMM data plane).
+      Namespaces of interest: default (BNK controller, AI Gateway, Polaris console), f5-operators (lifecycle operator),
+      llm-light (Ollama models), aigw-models (NVIDIA Dynamo mocker and Endpoint Picker), dynamo-system, nim and lab-local
+      (GPU simulator, Prometheus, Grafana), semantic-router, kagent (this agent), argocd.
+      BNK VIPs 172.16.100.10-19 are reached from outside as 10.10.12.30-39 through router R5.
+
+      Rules:
+      - Use the tools to look at the live cluster before answering. Never guess resource names or states.
+      - For GPU questions (utilization, temperature, memory, inference queue, KV cache) use gpu_status or prom_query.
+        For which VIP serves what, use lab_endpoints.
+      - You are read-only. If asked to change something, explain the kubectl command a human should run instead.
+      - Keep answers short: a one-line verdict, then the facts you found.
+    tools:
+    - type: McpServer
+      mcpServer:
+        name: kagent-tool-server
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames:
+        - k8s_get_resources
+        - k8s_describe_resource
+        - k8s_get_events
+        - k8s_get_pod_logs
+        - k8s_get_resource_yaml
+        - k8s_check_service_connectivity
+    - type: McpServer
+      mcpServer:
+        name: ai-factory-mcp
+        kind: RemoteMCPServer
+        apiGroup: kagent.dev
+        toolNames:
+        - gpu_status
+        - lab_endpoints
+        - prom_query
+    a2aConfig:
+      skills:
+      - id: cluster-status
+        name: Cluster status
+        description: Report node, pod and workload health in the BNK lab cluster.
+        tags: [kubernetes, status]
+        examples:
+        - "Are all nodes Ready?"
+        - "Which pods are not running?"
+      - id: bnk-gateways
+        name: BNK gateways and VIPs
+        description: Explain which BNK Gateways, routes and VIPs exist and what they serve.
+        tags: [bnk, f5, gateway]
+        examples:
+        - "Which gateways are programmed in namespace default?"
+      - id: ai-stack
+        name: AI stack
+        description: Check the AI Gateway, Ollama models, Dynamo mocker and semantic router.
+        tags: [ai, llm, dynamo]
+        examples:
+        - "Is the Ollama pod healthy and what models does it run?"
+      - id: gpu-status
+        name: GPU status
+        description: Live state of the rack's GPUs (simulated H100, A100, L40S) from Prometheus.
+        tags: [gpu, dcgm, metrics]
+        examples:
+        - "Which GPU is busiest right now?"
+        - "How full is the KV cache on each GPU?"
