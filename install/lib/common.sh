@@ -8,7 +8,7 @@ export CLAB_TOPO="$REPO_ROOT/clab/bnk-factory.clab.yml"
 # Same pins as bnk-deploy/versions.env for K8S_MINOR 1.30, so the installer's preflight sees what its CI sees
 export KIND_NODE_IMAGE="kindest/node:v1.30.13"
 export CALICO_VERSION="v3.29.1"
-export FRR_IMAGE="frrouting/frr:10.2.1"
+export FRR_IMAGE="quay.io/frrouting/frr:10.6.2"
 export NR_HUGEPAGES=2048            # 4 GiB of 2 Mi pages: TMM asks for 2 Gi, kubelet keeps the rest in reserve
 SECRETS_DIR="${SECRETS_DIR:-$HOME/bnk-secrets}"
 

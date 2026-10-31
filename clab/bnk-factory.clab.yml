@@ -6,9 +6,10 @@
 name: bnk-factory
 prefix: ""                      # container names are the node names, so "leaf1" is leaf1
 
+# Own management network: the default clab one (172.20.20.0/24) may already carry another lab on the same host
 mgmt:
   network: bnk-factory-mgmt
-  ipv4-subnet: 172.20.20.0/24
+  ipv4-subnet: 172.20.30.0/24
 
 topology:
   defaults:
@@ -16,7 +17,7 @@ topology:
       CLAB_LAB: bnk-factory
   kinds:
     linux:
-      image: frrouting/frr:10.2.1
+      image: quay.io/frrouting/frr:10.6.2
       sysctls:
         net.ipv4.ip_forward: 1
         net.ipv6.conf.all.forwarding: 1

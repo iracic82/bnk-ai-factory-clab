@@ -41,8 +41,8 @@ That is the point the lab makes, in three layers, each shown failing to stop it 
 | 2 | Three tenants | Apply a tenant: namespace, Gateway, VRF, AI Gateway tenant, virtual key; curl its VIP from the client | isolation is per tenant at every layer |
 | 3 | GPUs without GPUs | NVIDIA's own simulators: fake GPU operator nodes (`nvidia-smi` works, DCGM metrics flow) and Dynamo mocker workers; KAI queues; submit a job per tenant; watch the queue share | scheduling is a tenant boundary too |
 | 4 | The picker | F5EPP in front of the Dynamo mocker; prefix-cache and load scoring; `disaggregated` mode | BNK picks pods, not just nodes |
-| 5 | Meet the agents | Each tenant's kagent agent, its tools, its model, its key; ask it something useful | agents are tenants' workloads |
-| 6 | The shadow agent | Deploy it; watch the copied key fail; borrow the real key; watch it start working | identity is necessary, not sufficient |
+| 5 | Meet the agents | Each tenant's kagent agent, its tools, its model, its key; the OpenShell sandbox it runs in (the key exists only inside the sandbox, and only toward the AI Gateway); Agent Substrate's view of them; ask one something useful | agents are tenants' workloads, with a runtime of their own |
+| 6 | The shadow agent | Deploy it outside any sandbox; watch the copied key fail; borrow the real key; watch it start working | identity is necessary, not sufficient |
 | 7 | Guardrails in the data path | Switch on the CalypsoAI iRule on Cobalt's Gateway; rerun; read the block and the console record | content is inspected where it flows |
 | 8 | Nowhere to send it | Clean prompt, same exfiltration target; BNK egress and NetworkPolicy; `tcpdump` on border1 | the packet never leaves |
 | 9 | On the record | Polaris console, Prometheus, TMM logs: reconstruct what the shadow agent tried, in order | one place to answer "who tried it" |
@@ -64,3 +64,5 @@ and the exfiltration verbs. The learner can tell which one is live: chapter 7 pr
   2 and 8 need the VRFs to be real.
 - The shadow agent is a kagent `Agent` resource, not a hand-written pod. The story is stronger when the
   rogue thing is made with the sanctioned tooling.
+- The sanctioned agents live in OpenShell sandboxes; the shadow one does not. That difference is what chapter 6
+  turns on: outside the sandbox there is no injected key, so the developer has to copy one.

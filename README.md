@@ -2,7 +2,7 @@
 
 The EVE-NG lab (`iracic82/Home_k8s`) rebuilt so it fits one Instruqt VM: BIG-IP Next for Kubernetes 2.4.1 in host
 mode on a kind cluster, with an FRR spine/leaf/border fabric around it, wired together by containerlab. Same
-address plan, same tenants, same agents. No NICo, no OpenShell, no semantic router.
+address plan, same tenants, same agents, OpenShell and Agent Substrate included. No NICo and no semantic router.
 
 This is a new lab in its own repository and its own Instruqt track. The earlier tracks in `bnk-ai-factory-lab`
 stay as they are.
@@ -51,7 +51,7 @@ One TMM, on `bnk-worker`. Labelling a second node sends the lifecycle operator i
 | `install/20-cluster.sh` | Calico via the Tigera operator, kubelet restart so nodes advertise hugepages, taints, storage |
 | `install/30-bnk.sh` | clones `iracic82/bnk-deploy` and runs it unmodified (`--env lab --profile host`), then patches on the AI features |
 | `install/40-ai.sh` | AI Gateway tenants; NVIDIA's simulators for the GPU side: Dynamo mocker workers (real `vllm:*` metrics, KV events over NATS, F5EPP engine `dynamo`) and the fake GPU operator (4 x H100 per worker, `nvidia-smi` and DCGM metrics inside pods) with KAI queues |
-| `install/50-agents.sh` | kagent, CPU qwen through the AI Gateway, the per-tenant agents, the shadow agent for the story |
+| `install/50-agents.sh` | kagent 0.10.4 with CPU qwen through the AI Gateway, the per-tenant agents, NVIDIA OpenShell (gateway + Agent Sandbox controller; the sanctioned agents run in sandboxes, the key is injected only toward the AI Gateway), Agent Substrate v0.0.11 (the release kagent 0.10.4 accepts), and the shadow agent for the story |
 | `install/60-guardrails.sh` | CalypsoAI: the iRule sideband on the tenant Gateway, real service when a key is present, the mock otherwise |
 | `docs/storyline.md` | the lab's story and the chapter plan |
 | `instruqt/` | the track, once the build is proven here |
