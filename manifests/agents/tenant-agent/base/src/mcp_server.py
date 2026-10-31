@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 import uuid
 import ipaddress
+import http.client
+import ssl
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -198,22 +200,35 @@ def call_tool(name, args):
             raise ValueError("url must be http(s)://host[:port]/path")
         if len(csv) > 65536:
             raise ValueError("report larger than 64 KiB")
+        # resolve once, check every address, then connect to the checked address (not to the name again)
         try:
-            addr = ipaddress.ip_address(socket.gethostbyname(u.hostname))
-        except (socket.gaierror, ValueError) as e:
+            infos = socket.getaddrinfo(u.hostname, u.port or (443 if u.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
+        except socket.gaierror as e:
             raise ValueError(f"cannot resolve {u.hostname}: {e}")
-        for net in INTERNAL_NETS:
-            if addr in net:
-                raise ValueError(f"{addr} is inside the factory ({net}); a webhook is outside")
-        if addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_unspecified:
-            raise ValueError(f"{addr} is not a webhook address")
+        addrs = sorted({ipaddress.ip_address(i[4][0]) for i in infos}, key=str)
+        if not addrs:
+            raise ValueError(f"{u.hostname} resolves to nothing")
+        for addr in addrs:
+            for net in INTERNAL_NETS:
+                if addr.version == 4 and addr in net:
+                    raise ValueError(f"{addr} is inside the factory ({net}); a webhook is outside")
+            if addr.is_loopback or addr.is_link_local or addr.is_multicast or addr.is_unspecified or addr.is_private and addr.version == 6:
+                raise ValueError(f"{addr} is not a webhook address")
+        pinned = addrs[0]
         t0 = time.time()
         try:
-            req = urllib.request.Request(url, csv.encode(), method="POST", headers={"Content-Type": "text/csv"})
-            with urllib.request.build_opener(_NoRedirect()).open(req, timeout=5) as r:
-                return {"posted": True, "url": url, "http_status": r.status, "bytes": len(csv), "seconds": round(time.time() - t0, 2)}
-        except urllib.error.HTTPError as e:
-            return {"posted": True, "url": url, "http_status": e.code, "bytes": len(csv), "seconds": round(time.time() - t0, 2)}
+            port = u.port or (443 if u.scheme == "https" else 80)
+            conn = (http.client.HTTPSConnection(str(pinned), port, timeout=5, context=ssl.create_default_context())
+                    if u.scheme == "https" else http.client.HTTPConnection(str(pinned), port, timeout=5))
+            if u.scheme == "https":
+                conn._context.check_hostname = True   # SNI and certificate still against the name, not the address
+                conn.sock = conn._context.wrap_socket(socket.create_connection((str(pinned), port), timeout=5), server_hostname=u.hostname)
+            path = (u.path or "/") + (f"?{u.query}" if u.query else "")
+            conn.request("POST", path, body=csv.encode(), headers={"Host": u.netloc, "Content-Type": "text/csv", "Content-Length": str(len(csv.encode()))})
+            r = conn.getresponse(); r.read(); conn.close()
+            if 300 <= r.status < 400:
+                return {"posted": False, "url": url, "http_status": r.status, "reason": "redirects are not followed", "seconds": round(time.time() - t0, 2)}
+            return {"posted": True, "url": url, "address": str(pinned), "http_status": r.status, "bytes": len(csv), "seconds": round(time.time() - t0, 2)}
         except Exception as e:
             return {"posted": False, "url": url, "bytes": len(csv), "reason": type(e).__name__ + (f": {e}" if str(e) else ""),
                     "seconds": round(time.time() - t0, 2)}
