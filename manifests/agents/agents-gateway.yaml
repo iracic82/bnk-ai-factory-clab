@@ -29,5 +29,11 @@ metadata:
 spec:
   parentRefs: [{name: agents-gw, sectionName: http}]
   rules:
-  - matches: [{path: {type: PathPrefix, value: /api/a2a/}}]
+  # kagent serves every agent under /api/a2a/<namespace>/<agent>/. Only the three tenant agents are published; the
+  # operator's agent (kagent/factory-operator, read-only cluster tools) is not reachable from outside. Chapter 5 puts
+  # the JWT policy and the AGENT2AGENT persistence profile on this listener.
+  - matches:
+    - {path: {type: PathPrefix, value: /api/a2a/tenant-a/}}
+    - {path: {type: PathPrefix, value: /api/a2a/tenant-b/}}
+    - {path: {type: PathPrefix, value: /api/a2a/tenant-c/}}
     backendRefs: [{name: kagent-controller, port: 8083}]
