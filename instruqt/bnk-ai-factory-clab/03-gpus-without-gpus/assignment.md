@@ -4,8 +4,8 @@ id: 8dv8o9oetqmn
 type: challenge
 title: 3. GPUs without GPUs
 teaser: NVIDIA's own simulators give the cluster eight H100s it does not have and
-  two model workers that behave like vLLM. KAI shares the GPUs between the tenants
-  by quota. Submit work for each tenant and watch who gets what.
+  two model workers that answer like a real engine. KAI shares the GPUs between the
+  tenants by quota. Submit work for each tenant and watch who gets what.
 notes:
 - type: text
   contents: |-
@@ -19,7 +19,7 @@ notes:
       operator would set (`nvidia.com/gpu.product: NVIDIA-H100-80GB-HBM3`), and runs a DCGM exporter with
       plausible metrics
     - the **Dynamo mocker** runs NVIDIA Dynamo's frontend and two decode workers that simulate vLLM: they publish
-      `vllm:*` metrics and KV-cache events to NATS, which is what F5's Endpoint Picker reads in the next chapter
+      `dynamo_component_*` metrics and KV-cache events to NATS, which is what F5's Endpoint Picker reads in the next chapter
 
     Scheduling is the tenant boundary here: the **KAI scheduler** (Run:ai's scheduler, open-sourced by NVIDIA) owns
     the eight GPUs through a parent queue and gives each tenant a quota it is guaranteed, with borrowing allowed
@@ -178,15 +178,15 @@ kubectl -n ${P%/*} logs ${P#*/} | head -2
 ## The model workers and their metrics
 
 The Dynamo mocker is a worker that loads a tokenizer and no weights. It answers with filler text, so token counts
-are real counts on simulated text, and it publishes vLLM's metrics, which Prometheus scrapes:
+are real counts on simulated text, and it publishes Dynamo's component metrics, which Prometheus scrapes:
 
 ```bash,run
 kubectl -n aigw-models get pods -o wide --no-headers | awk '{printf "%-44s %-10s %s\n", $1, $3, $7}'
-curl -s 'http://127.0.0.1:30909/api/v1/query?query=vllm:num_requests_running' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
+curl -s 'http://127.0.0.1:30909/api/v1/query?query=dynamo_component_inflight_requests' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
 curl -s 'http://127.0.0.1:30909/api/v1/query?query=DCGM_FI_DEV_GPU_UTIL' | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]["result"]; print("  DCGM series:", len(d))'
 ```
 
-Open the **Grafana** tab (user `admin`, password below), go to Explore, and query `vllm:num_requests_running` and
+Open the **Grafana** tab (user `admin`, password below), go to Explore, and query `dynamo_component_inflight_requests` and
 `DCGM_FI_DEV_GPU_UTIL`. Both exist without a GPU in the VM.
 
 ```bash,run

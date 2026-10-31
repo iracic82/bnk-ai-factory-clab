@@ -141,14 +141,14 @@ def c03():
               "The fake GPU operator advertises nvidia.com/gpu, KAI schedules tenants against it, and the Dynamo mocker publishes vLLM metrics.")
     s.row(A, AH, [("bnk-worker · bnk-worker2", ["nvidia.com/gpu: 4 + 4", "product H100, no driver, no card"], {}),
                   ("KAI queue ai-factory", ["tenant-a quota 4, weight 2", "tenant-b 2 · tenant-c 2 · limit -1"], {"hot": True}),
-                  ("Dynamo mocker x2", ["Qwen3-0.6B tokenizer, no weights", "vllm:num_requests_running"], {"color": ORANGE})])
+                  ("Dynamo mocker x2", ["Qwen3-0.6B tokenizer, no weights", "dynamo_component_inflight_requests"], {"color": ORANGE})])
     s.down(600, A + AH, B, RED)
     s.row(B, BH, [("1 · fill it", ["Aurora 4, Borealis 2, Cobalt 2", "all eight in use"], {"color": GREEN}),
                   ("2 · Cobalt asks for 4 more", ["Pending: over quota,", "nothing idle to borrow"], {"color": YELLOW}),
                   ("3 · Aurora's job ends", ["Cobalt's job takes the idle 4", "borrowed, reclaimable"], {"color": BLUE})],
           arrows=[(DIM, ""), (DIM, "")])
     s.strip(C, CH, "what a pod and Grafana see",
-            ["inside a scheduled pod: a fake nvidia-smi reports an H100 at 90 percent, memory in use", "Grafana: vllm:num_requests_running and DCGM_FI_DEV_GPU_UTIL, real counters on simulated hardware"])
+            ["inside a scheduled pod: a fake nvidia-smi reports an H100 at 90 percent, memory in use", "Grafana: dynamo_component_inflight_requests and DCGM_FI_DEV_GPU_UTIL, real counters on simulated hardware"])
     s.legend([(RED, "the scheduler", "fairness between tenants"), (GREEN, "quota", "guaranteed"), (BLUE, "borrowed", "reclaimable"), (ORANGE, "metrics", "without a GPU")])
     s.save("scene-03.png")
 
@@ -162,8 +162,8 @@ def c04():
                   ("NATS", ["KV cache events", "prefix -> worker map"], {})],
           arrows=[(GREEN, "1"), (PURPLE, "2 which one?"), (DIM, "")])
     s.down(432, A + AH, B, GREEN, "3 to the worker the picker named")
-    s.row(B, BH, [("Dynamo mocker-0", ["KV cache: prefixes it has seen", "vllm:num_requests_running"], {"color": ORANGE}),
-                  ("Dynamo mocker-1", ["KV cache: prefixes it has seen", "vllm:num_requests_running"], {"color": ORANGE})], x1=W / 2 + 80)
+    s.row(B, BH, [("Dynamo mocker-0", ["KV cache: prefixes it has seen", "dynamo_component_inflight_requests"], {"color": ORANGE}),
+                  ("Dynamo mocker-1", ["KV cache: prefixes it has seen", "dynamo_component_inflight_requests"], {"color": ORANGE})], x1=W / 2 + 80)
     s.card(W / 2 + 120, B, W - M - W / 2 - 120, BH, "F5EPP spec.mode", ["aggregated: one worker end to end", "disaggregated: prefill + decode", "chapter 14 comes back to this"])
     s.strip(C, CH, "what you watch",
             ["the picker's log names a worker per request · the same prompt twice lands on the same worker", "twelve long prompts in flight push the next short one to the other worker · Prometheus shows the load per pod"])
@@ -309,7 +309,7 @@ def c13():
     s.row(A, AH, [("Polaris · the calls", ["refused with Aurora's key", "passed with Cobalt's key", "management API :18443"], {"color": GREEN}),
                   ("TMM · the verdicts", ["NetPolicy guardrails-tenant-c", "X-Guardrail: blocked", "the egress that was removed"], {"color": RED}),
                   ("OpenShell · the refusals", ["DENIED curl -> .21 (ch 8)", "DENIED curl -> webhook (ch 12)", "per sandbox, with the binary"], {"color": PINK}),
-                  ("Prometheus · the load", ["vllm:num_requests_running", "kai_queue_allocated_gpus", "Grafana for the picture"], {"color": ORANGE})])
+                  ("Prometheus · the load", ["dynamo_component_inflight_requests", "kai_queue_allocated_gpus", "Grafana for the picture"], {"color": ORANGE})])
     for x in (166, 455, 744, 1033):
         s.down(x, A + AH, B, DIM)
     s.strip(B, 150, "/root/incident-timeline.md · five lines, each with its source",

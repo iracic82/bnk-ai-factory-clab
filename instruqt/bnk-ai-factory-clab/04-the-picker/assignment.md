@@ -15,7 +15,7 @@ notes:
 
     The Gateway API Inference Extension puts an **Endpoint Picker** between the gateway and the model pool. F5's
     picker (`F5EPP`) runs with the engine set to `dynamo`: it subscribes to the workers' KV-cache events on NATS,
-    scrapes their `vllm:*` metrics, and scores every candidate on prefix-cache hits, prefill load, queue depth and
+    scrapes their `dynamo_component_*` metrics, and scores every candidate on prefix-cache hits, prefill load, queue depth and
     KV usage before TMM forwards the request to the chosen worker.
 
     This is the layer the llm-d project calls "topology must reach the router". BNK's picker is cache- and
@@ -131,7 +131,7 @@ This is the answer to Aurora's engineer. The gateway did not hash on a header or
 ## Load-aware
 
 Cache is one signal. Load is the other. Put one worker under load with a burst of long prompts and send a short one
-behind them. Open the **Prometheus** tab and graph `vllm:num_requests_running` while this runs:
+behind them. Open the **Prometheus** tab and graph `dynamo_component_inflight_requests` while this runs:
 
 [button label="Open Prometheus" variant="success"](tab-2)
 
@@ -140,7 +140,7 @@ for i in $(seq 1 12); do ask "Write a 200 word story about a lighthouse keeper, 
 ask "What is the capital of Norway?"
 wait
 kubectl -n aigw-models logs $P --since=1m | grep -iE 'pick|select|endpoint' | tail -4
-curl -s 'http://127.0.0.1:30909/api/v1/query?query=vllm:num_requests_running' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
+curl -s 'http://127.0.0.1:30909/api/v1/query?query=dynamo_component_inflight_requests' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
 ```
 
 The short question went to the less loaded worker even though neither had its prefix. The prefill-load and queue

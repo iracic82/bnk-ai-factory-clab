@@ -142,14 +142,14 @@ expressions below over the last few hours. The burst from chapter 4 and the jobs
 [button label="Open Prometheus" variant="success"](tab-5)
 
 ```
-vllm:num_requests_running
+dynamo_component_inflight_requests
 sum by (queue) (kai_queue_allocated_gpus)
 ```
 
 From the terminal, the same numbers now, and the Grafana login for the picture:
 
 ```bash,run
-curl -s 'http://127.0.0.1:30909/api/v1/query?query=vllm:num_requests_running' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
+curl -s 'http://127.0.0.1:30909/api/v1/query?query=dynamo_component_inflight_requests' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
 curl -s 'http://127.0.0.1:30909/api/v1/query?query=sum(kai_queue_allocated_gpus)by(queue)' | python3 -c 'import json,sys; [print(" ", r["metric"].get("queue","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]] or print("  (no allocated GPUs right now)")'
 cat /root/.bnk/grafana-admin; echo
 ```
