@@ -19,6 +19,20 @@ for n in bnk-control-plane bnk-worker bnk-worker2; do
   ok "$n hugepages-2Mi $(kubectl get node "$n" -o jsonpath='{.status.allocatable.hugepages-2Mi}')"
 done
 
+step "CNI plugins into every node (kind ships only host-local, loopback, portmap, ptp; TMM's legs are macvlan)"
+CNI_PLUGINS=v1.9.1
+T=$(mktemp -d)
+curl -fsSL -o "$T/cni.tgz" "https://github.com/containernetworking/plugins/releases/download/$CNI_PLUGINS/cni-plugins-linux-amd64-$CNI_PLUGINS.tgz"
+curl -fsSL -o "$T/cni.tgz.sha256" "https://github.com/containernetworking/plugins/releases/download/$CNI_PLUGINS/cni-plugins-linux-amd64-$CNI_PLUGINS.tgz.sha256"
+( cd "$T" && sed 's/  .*/  cni.tgz/' cni.tgz.sha256 | sha256sum -c - >/dev/null ) || fail "CNI plugins tarball checksum mismatch"
+mkdir -p "$T/bin" && tar -xzf "$T/cni.tgz" -C "$T/bin"
+for n in bnk-control-plane bnk-worker bnk-worker2; do
+  # add what the node lacks; the four kind ships stay as they are
+  for b in "$T"/bin/*; do docker exec "$n" test -x "/opt/cni/bin/$(basename "$b")" 2>/dev/null || docker cp "$b" "$n:/opt/cni/bin/"; done
+  ok "$n: $(docker exec "$n" ls /opt/cni/bin | wc -l) CNI plugins ($(docker exec "$n" test -x /opt/cni/bin/macvlan && echo macvlan present))"
+done
+rm -rf "$T"
+
 step "node roles"
 kubectl label node bnk-worker app=f5-tmm --overwrite >/dev/null
 kubectl label node bnk-worker2 workload=ai --overwrite >/dev/null
