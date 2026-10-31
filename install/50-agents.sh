@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib/common.sh"
 source "$(dirname "$0")/lib/expose.sh"
 need helm; need jq
 M="$REPO_ROOT/manifests/agents"; NS=f5-bnk
-KAGENT=0.10.4; SUBSTRATE=0.0.11; OPENSHELL=0.1.5; SANDBOX=v1.0.7; GO=1.24.9
+KAGENT=0.10.4; SUBSTRATE=0.0.9; OPENSHELL=0.1.5; SANDBOX=v1.0.7; GO=1.24.9
 [ -s "$SECRETS_DIR/aigw/lab.key" ] || fail "no AI Gateway key for tenant lab; run 40-ai.sh"
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # TMM's internal self IP (35-bnk-network.sh)
@@ -99,15 +99,29 @@ if ! command -v go >/dev/null || ! go version | grep -q "go$GO"; then
   curl -sSfL "https://go.dev/dl/go$GO.linux-amd64.tar.gz" | sudo tar -xz -C /usr/local && export PATH=/usr/local/go/bin:$PATH
 fi
 export PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=auto
-helm upgrade --install substrate-crds oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds --version $SUBSTRATE -n ate-system --create-namespace --wait >/dev/null
-helm upgrade --install substrate oci://ghcr.io/kagent-dev/substrate/helm/substrate --version $SUBSTRATE -n ate-system --set auth.mode=mtls >/dev/null
+# 0.0.9 is the Substrate the kagent 0.10.4 chart declares as its dependency (Chart.yaml) and its Go module pins.
+# 0.0.11 was tried first: its router's agentgateway reads a servicedns credential bundle that the chart's volume never
+# writes (fixed upstream in 0.0.13, which also moves to Postgres and a different bootstrap); 0.0.9's router does not
+# use that bundle. mTLS mode, as on EVE: the CA and JWT pools come from the project's own bootstrap script, created
+# BEFORE the chart so the pod certificate controller and the API server find them at first start.
 S="$REPO_ROOT/.cache/substrate-$SUBSTRATE"; mkdir -p "$S"
 [ -f "$S/hack/install-ate.sh" ] || curl -sSfL "https://github.com/kagent-dev/substrate/archive/refs/tags/v$SUBSTRATE.tar.gz" | tar -xz -C "$S" --strip-components=1
-( cd "$S" && [ -d .git ] || git init -q . ; for f in --create-podcertificate-controller-cas --create-actor-id-ca-pool-secret --create-jwt-authority-pool-secret --create-valkey-ca-certs-secret; do
-    bash hack/install-ate.sh "$f" 2>&1 | grep -iE "created|error" | tail -1; done )
-kubectl -n ate-system rollout status deploy --timeout="$(tmo 600s 180s)" >/dev/null 2>&1 || warn "substrate pods not all up yet"
+for ns in ate-system podcertificate-controller-system; do kubectl create ns $ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null; done
+( cd "$S" && { [ -d .git ] || git init -q . ; }
+  for f in --create-podcertificate-controller-cas --create-session-id-ca-pool-secret --create-jwt-authority-pool-secret; do
+    kubectl -n ate-system get secret session-id-ca-pool >/dev/null 2>&1 && [ "$f" = --create-session-id-ca-pool-secret ] && continue
+    kubectl -n ate-system get secret session-id-jwt-pool >/dev/null 2>&1 && [ "$f" = --create-jwt-authority-pool-secret ] && continue
+    kubectl -n podcertificate-controller-system get secret service-dns-ca-pool >/dev/null 2>&1 && [ "$f" = --create-podcertificate-controller-cas ] && continue
+    bash hack/install-ate.sh "$f" 2>&1 | grep -iE "created|error" | tail -2
+  done
+  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || bash hack/install-ate.sh --create-valkey-ca-certs-secret 2>&1 | grep -iE "created|error" | tail -1 )
+helm upgrade --install substrate-crds oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds --version $SUBSTRATE -n ate-system --wait >/dev/null
+helm upgrade --install substrate oci://ghcr.io/kagent-dev/substrate/helm/substrate --version $SUBSTRATE -n ate-system --set auth.mode=mtls >/dev/null
+kubectl -n podcertificate-controller-system rollout status deploy --timeout=180s >/dev/null 2>&1 || warn "podcertificate controller not up yet"
+kubectl -n ate-system rollout status deploy --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || { warn "substrate pods not all up yet:"; kubectl -n ate-system get pods --no-headers | grep -vE 'Running|Completed' | sed 's/^/      /'; }
 # now kagent may own a WorkerPool
-helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" --wait --timeout "$(tmo 15m 6m)" >/dev/null
+helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" \
+  --set substrateWorkerPool.ateomImage="ghcr.io/kagent-dev/substrate/ateom-gvisor:v$SUBSTRATE" --wait --timeout "$(tmo 15m 6m)" >/dev/null
 kubectl -n kagent get workerpools.ate.dev 2>/dev/null || warn "no WorkerPool yet"
 ok "Substrate installed; kagent substrate integration on"
 

@@ -39,5 +39,10 @@ kagent-tools:
 controller:
   a2aClientTimeout: "300s"                  # CPU models are slow
   a2aBaseUrl: http://172.16.100.14          # agent cards advertise the BNK VIP of the agents gateway
-  substrate: {enabled: true}                # Agent Substrate v0.0.11 (install/50-agents.sh), the release this kagent accepts
-substrateWorkerPool: {create: true}
+  # Agent Substrate 0.0.9, the version this chart declares as its dependency (install/50-agents.sh installs it);
+  # endpoints as in kagent's own substrate example (examples/substrate-openclaw)
+  substrate:
+    enabled: true
+    ateApiEndpoint: dns:///api.ate-system.svc:443
+    atenetRouterURL: http://atenet-router.ate-system.svc:80
+substrateWorkerPool: {create: true, replicas: 2}   # 2: a spare worker builds the next golden while one serves
