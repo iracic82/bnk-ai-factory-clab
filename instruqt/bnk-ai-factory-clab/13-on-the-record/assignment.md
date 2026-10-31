@@ -111,7 +111,7 @@ was removed and restored:
 ```bash,run
 kubectl -n f5-bnk get netpolicy guardrails-tenant-c -o jsonpath='{.spec}' | python3 -m json.tool
 kubectl -n f5-bnk get f5bigcneirule guardrails -o jsonpath='{.spec.iRule}' | grep -oE 'HTTP::respond [0-9]+|X-Guardrail[^"]*' | sort | uniq -c
-kubectl -n f5-bnk get f5spkegress tenant-c-egress -o jsonpath='{.metadata.creationTimestamp}{"\n"}'
+kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='{.metadata.creationTimestamp}{"\n"}'
 ```
 
 That creation timestamp is from this session, not from track start: the egress object was deleted and re-created in

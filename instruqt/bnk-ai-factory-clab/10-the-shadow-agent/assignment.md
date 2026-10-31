@@ -162,7 +162,7 @@ Where it went out. The pod's connection left through Cobalt's egress, SNATed fro
 border1 to r5 and the client. Every hop of that is the designed path for a Cobalt pod:
 
 ```bash,run
-kubectl -n f5-bnk get f5spkegress tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}{"\n"}'
+kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}{"\n"}'
 docker exec client sh -c 'grep -aoE "^> [0-9/ :.]+ length=[0-9]+ from=[0-9]+ to=[0-9]+" /tmp/webhook.log | tail -1' 2>/dev/null || true
 docker exec r5 vtysh -c 'show ip route 10.203.200.0/24'
 ```

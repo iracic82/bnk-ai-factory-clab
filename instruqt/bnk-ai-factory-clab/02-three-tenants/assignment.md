@@ -72,7 +72,7 @@ Start with Aurora, `tenant-a`. Everything the tenant is on BNK fits in a short l
 that created them is in the lab repo:
 
 ```bash,run
-kubectl -n f5-bnk get vrf tenant-a f5spkvlan fab-a routingconfig tenant-a f5virtualserver tenant-a-vip f5spkegress tenant-a-egress f5spksnatpool tenant-a-snat
+kubectl -n f5-bnk get vrf tenant-a f5-spk-vlans fab-a routingconfig tenant-a f5virtualserver tenant-a-vip f5-spk-egresses tenant-a-egress f5-spk-snatpools tenant-a-snat
 sed -n '/name: tenant-a$/,/snat: {type: automap}/p' $LAB_ROOT/manifests/bnk/40-tenants.yaml
 ```
 

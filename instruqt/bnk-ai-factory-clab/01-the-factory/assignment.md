@@ -177,7 +177,7 @@ TMM's terms), untagged for `external` and tagged 101 to 103 for the tenants:
 ```bash,run
 docker exec bnk-worker ip -br link show eth1
 docker exec leaf1 ip -br addr show | grep -E '^eth3'
-kubectl -n f5-bnk get f5spkvlans -o custom-columns='VLAN:.metadata.name,IF:.spec.interfaces,TAG:.spec.tag,SELFIP:.spec.selfip_v4s'
+kubectl -n f5-bnk get f5-spk-vlans -o custom-columns='VLAN:.metadata.name,IF:.spec.interfaces,TAG:.spec.tag,SELFIP:.spec.selfip_v4s'
 ```
 
 leaf1 has learned TMM's MAC on that port, and it peers with TMM four times: once in the default domain and once

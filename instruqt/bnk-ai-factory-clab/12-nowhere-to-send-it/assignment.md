@@ -107,8 +107,8 @@ Egress for a namespace is one declaration on BNK. Read it: which namespaces it s
 how TMM sees the tunnel from the node:
 
 ```bash,run
-kubectl -n f5-bnk get f5spkegress tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}  vrf: {.spec.vrf}{"\n"}'
-kubectl -n f5-bnk get f5spkegress -o custom-columns='NAME:.metadata.name,NAMESPACES:.spec.pseudoCNIConfig.namespaces,SNAT:.spec.egressSnatpool'
+kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}  vrf: {.spec.vrf}{"\n"}'
+kubectl -n f5-bnk get f5-spk-egresses -o custom-columns='NAME:.metadata.name,NAMESPACES:.spec.pseudoCNIConfig.namespaces,SNAT:.spec.egressSnatpool'
 docker exec bnk-worker2 ip -br link show type vxlan 2>/dev/null | head -4
 ```
 
@@ -120,7 +120,7 @@ for tenant-c, pods of that namespace have no path through TMM at all.
 Restart the capture in Terminal 2 (the same tcpdump line), then delete the declaration and post again:
 
 ```bash,run
-kubectl -n f5-bnk delete f5spkegress tenant-c-egress
+kubectl -n f5-bnk delete f5-spk-egresses tenant-c-egress
 sleep 10
 kubectl -n tenant-c exec "$P" -- sh -c 'wget -q -O- -T 5 --post-data "status=ok" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed: no path"'
 docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"'
@@ -149,7 +149,7 @@ a sandbox in that namespace, which is a review question, not a routing one. Remo
 
 ```bash,run
 kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml
-sleep 8; kubectl -n f5-bnk get f5spkegress tenant-c-egress
+sleep 8; kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress
 kubectl -n tenant-c delete agent billing-reconciler --ignore-not-found
 kubectl -n tenant-c delete secret shadow-key --ignore-not-found
 kubectl -n tenant-c exec deploy/hello -- sh -c 'wget -q -O- -T 5 http://172.16.250.10/ >/dev/null 2>&1; echo "Cobalt egress restored: exit $? (non-zero is fine, the client has no web server)"'
