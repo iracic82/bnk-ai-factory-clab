@@ -92,7 +92,9 @@ for p in 50 70; do "$DEPLOY/install.sh" --env lab --profile host --phase "$p"; d
 cur=$(kubectl get cneinstance -n f5-bnk f5-bnk-instance -o jsonpath='{.spec.manifestVersion}')
 if [ "$cur" != "$TARGET_MANIFEST" ]; then
   step "upgrade $cur -> $TARGET_MANIFEST (installer's upgrade.sh)"
-  "$DEPLOY/upgrade.sh" --env lab --profile host --to "$TARGET_MANIFEST"
+  # the health gate covers the pull of every 2.4.2 image; a first (bake) run pulls them cold, and the fast cap
+  # would trip the automatic rollback. The installer's full timeout here, whatever LAB_FAST says.
+  BNK_WAIT_TIMEOUT=1800 "$DEPLOY/upgrade.sh" --env lab --profile host --to "$TARGET_MANIFEST"
 else ok "already on $TARGET_MANIFEST"; fi
 
 step "AI features and the EVE network model (patched on; the installer's template has no knob for them)"
