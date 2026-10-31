@@ -73,6 +73,7 @@ they stay unprogrammed until a passphrase Secret exists there. Read it before yo
 grep -nE '^kind:|^  name:|destinationAddress|value: 172|type: MODEL|passphrase|targetRef|extensionRef' $LAB_ROOT/manifests/chapters/05-mcp-route.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-mcp-route.yaml 2>&1 | grep -v persistence
 kubectl -n f5-bnk wait --for=condition=Programmed gateway/tenant-mcp --timeout=180s
+sleep 5; kubectl -n f5-bnk annotate netpolicy tenant-mcp-sessions factory.lab/resync=$(date +%s) --overwrite >/dev/null
 kubectl -n f5-bnk get gateway/tenant-mcp; kubectl -n tenant-a get httproute/tenant-mcp
 ```
 
@@ -121,7 +122,8 @@ the profile within seconds, and its condition tells you when:
 
 ```bash,run
 kubectl -n f5-bnk create secret generic mcp-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
-sleep 10
+sleep 5; kubectl -n f5-bnk annotate netpolicy tenant-mcp-sessions factory.lab/resync=$(date +%s) --overwrite >/dev/null
+for i in $(seq 1 18); do s=$(kubectl -n f5-bnk get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null); echo "$(date +%T) profile programmed: ${s:-not yet}"; [ "$s" = True ] && break; sleep 10; done
 kubectl -n f5-bnk get f5-big-persistence-profiles/tenant-mcp-sessions netpolicy/tenant-mcp-sessions
 kubectl -n f5-bnk get f5-big-persistence-profiles tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
@@ -163,7 +165,9 @@ that Gateway in `f5-bnk`:
 ```bash,run
 kubectl -n f5-bnk create secret generic a2a-passphrase --from-literal=primary-passphrase="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')" --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f $LAB_ROOT/manifests/chapters/05-a2a-persistence.yaml
-sleep 10; kubectl -n f5-bnk get f5-big-persistence-profiles/agents-a2a-sessions netpolicy/agents-a2a-sessions
+sleep 5; kubectl -n f5-bnk annotate netpolicy agents-a2a-sessions factory.lab/resync=$(date +%s) --overwrite >/dev/null
+for i in $(seq 1 12); do s=$(kubectl -n f5-bnk get f5-big-persistence-profiles agents-a2a-sessions -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null); [ "$s" = True ] && break; sleep 10; done
+kubectl -n f5-bnk get f5-big-persistence-profiles/agents-a2a-sessions netpolicy/agents-a2a-sessions
 docker exec client curl -s -m 10 http://172.16.100.14/api/a2a/tenant-a/assistant/.well-known/agent-card.json | python3 -m json.tool | head -20
 ```
 
