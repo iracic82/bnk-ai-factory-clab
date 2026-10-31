@@ -74,7 +74,7 @@ kubectl api-resources --api-group=ate.dev
 kubectl get --raw /apis/certificates.k8s.io/v1beta1 | python3 -c 'import json,sys; print("certificates.k8s.io/v1beta1:", [r["name"] for r in json.load(sys.stdin)["resources"]])'
 ```
 
-Five kinds under `ate.dev`. The one you declare against is `WorkerPool`. The one Substrate generates is
+Three kinds under `ate.dev`. The one you declare against is `WorkerPool`. The one Substrate generates is
 `ActorTemplate`. The one the kagent chart created, and the workers it runs:
 
 ```bash,run

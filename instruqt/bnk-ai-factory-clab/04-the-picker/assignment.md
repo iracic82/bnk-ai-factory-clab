@@ -153,7 +153,7 @@ whose pool members are chosen per request, and the picker's answer is honoured e
 built for the route and the pool behind it:
 
 ```bash,run
-kubectl -n f5-bnk get f5virtualservers,pools -A --no-headers 2>/dev/null | grep -iE 'model-pool|aigw-models' | head -6
+kubectl -n f5-bnk get f5-virtualservers,pools -A --no-headers 2>/dev/null | grep -iE 'model-pool|aigw-models' | head -6
 kubectl -n aigw-models get inferencepool model-pool -o jsonpath='{.status}' | python3 -m json.tool | head -20
 ```
 
