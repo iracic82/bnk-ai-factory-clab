@@ -67,8 +67,8 @@ Start with Aurora, `tenant-a`. Everything the tenant is on BNK fits in a short l
 that created them is in the lab repo:
 
 ```bash,run
-kubectl -n f5-bnk get vrf tenant-a f5-spk-vlans fab-a routingconfig tenant-a f5virtualserver tenant-a-vip f5-spk-egresses tenant-a-egress f5-spk-snatpools tenant-a-snat
-sed -n '/name: tenant-a$/,/snat: {type: automap}/p' $LAB_ROOT/manifests/bnk/40-tenants.yaml
+kubectl -n f5-bnk get vrf/tenant-a f5-spk-vlans/fab-a routingconfigs/tenant-a f5-virtualservers/tenant-a-vip f5-spk-egresses/tenant-a-egress f5-spk-snatpools/tenant-a-snat
+sed -n '/name: tenant-a, namespace/,/snat: {type: automap}/p' $LAB_ROOT/manifests/bnk/40-tenants.yaml; sed -n '/name: tenant-a-egress/,/^---/p' $LAB_ROOT/manifests/bnk/30-egress.yaml
 ```
 
 Read the manifest top to bottom: a `Vrf` with its own route domain id, a VLAN leg on interface 1.1 tagged 101 with
@@ -93,7 +93,7 @@ pool. Everything else TMM might announce into that session is dropped by a prefi
 
 ```bash,run
 docker exec leaf1 vtysh -c 'show bgp vrf tenant-a summary' | sed -n '/Neighbor/,$p'
-docker exec leaf1 vtysh -c 'show ip bgp vrf tenant-a' | grep -E '^\*|Network'
+docker exec leaf1 vtysh -c 'show ip bgp vrf tenant-a' | grep -E '\*|Network'
 docker exec leaf1 vtysh -c 'show running-config' | grep -A3 'prefix-list from-tmm-tenant-a'
 ```
 
@@ -102,7 +102,7 @@ sub-interface, so r5 sees Aurora only as those two prefixes, arriving on one lin
 
 ```bash,run
 docker exec border1 vtysh -c 'show running-config' | grep -A3 'prefix-list to-r5-tenant-a'
-docker exec r5 vtysh -c 'show ip bgp neighbors 172.16.201.1 routes' | grep -E '^\*|Network'
+docker exec r5 vtysh -c 'show ip bgp neighbors 172.16.201.1 routes' | grep -E '\*|Network'
 ```
 
 Open the **Lab Topology** tab and step through **A client reaches a tenant VIP**: the hop list is the list of tables
@@ -115,11 +115,11 @@ Aurora's pod cannot reach Cobalt's. Cobalt's pod cannot open anything into Auror
 
 ```bash,run
 docker exec client curl -s -m 5 http://10.201.100.10/ | head -3
-kubectl -n tenant-a exec deploy/hello -- sh -c 'wget -q -O- -T 3 http://hello.tenant-c.svc.cluster.local/ 2>&1 | head -2 || echo "tenant-a -> tenant-c: refused"'
-kubectl -n tenant-c exec deploy/hello -- sh -c 'wget -q -O- -T 3 http://hello.tenant-a.svc.cluster.local/ 2>&1 | head -2 || echo "tenant-c -> tenant-a: refused"'
+kubectl -n tenant-a exec deploy/hello -- sh -c 'wget -q -O- -T 3 http://hello.tenant-c.svc.cluster.local/ 2>&1 | tail -1' | sed 's/^/tenant-a -> tenant-c: /'
+kubectl -n tenant-c exec deploy/hello -- sh -c 'wget -q -O- -T 3 http://hello.tenant-a.svc.cluster.local/ 2>&1 | tail -1' | sed 's/^/tenant-c -> tenant-a: /'
 ```
 
-The cross-namespace calls are refused by Calico NetworkPolicy, which is the cluster's wall. The fabric's wall is the
+The cross-namespace calls time out: Calico's NetworkPolicy drops them without an answer, which is the cluster's wall. The fabric's wall is the
 VRF, and you see it when a pod leaves.
 
 ## Leaving the factory
@@ -171,12 +171,12 @@ spec:
 EOF
 ```
 
-`routeAdvertisement: true` is what makes the fabric learn it. Within a few seconds TMM announces the `/32` to leaf1
-inside VRF tenant-b, leaf1 exports it as an EVPN type-5, border1 imports it into its own VRF tenant-b and passes it
+`routeAdvertisement: true` is what makes the fabric learn it. Once the controller has programmed the virtual server
+(a few seconds to a couple of minutes) TMM announces the `/32` to leaf1 inside VRF tenant-b, leaf1 exports it as an EVPN type-5, border1 imports it into its own VRF tenant-b and passes it
 to r5 over the VLAN 102 sub-interface:
 
 ```bash,run
-sleep 10
+for i in $(seq 1 36); do docker exec r5 vtysh -c 'show ip route 10.202.100.11' 2>/dev/null | grep -q '10.202.100.11/32' && break; sleep 5; done; echo "r5 learned the /32 after about $((i*5)) s"
 docker exec leaf1 vtysh -c 'show ip bgp vrf tenant-b 10.202.100.11/32' | sed -n '1,10p'
 docker exec border1 vtysh -c 'show bgp l2vpn evpn route type prefix' | grep -B1 '10.202.100.11'
 docker exec r5 vtysh -c 'show ip route 10.202.100.11'
