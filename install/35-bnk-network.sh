@@ -165,10 +165,11 @@ resync_tmm_objects() {   # a no-op annotation makes the controller reconcile and
     kubectl -n f5-bnk annotate "$o" "factory.lab/resync=$(date +%s)" --overwrite >/dev/null 2>&1 || true
   done
 }
-if ! wait_sessions "$(tmo 300 180)"; then
+if ! wait_sessions "$(tmo 420 180)"; then
   warn "$(tmm_sessions) of 4 TMM sessions after the first wait (gates $(tmm_gates)); re-syncing VRFs, legs and routing to TMM"
   resync_tmm_objects
-  if ! wait_sessions "$(tmo 240 120)"; then
+  if ! wait_sessions "$(tmo 240 120)" && [ "$(tmm_sessions)" -lt 3 ]; then
+    # three of four means one slow peer, not a broken TMM; a restart costs ten minutes and is not worth it for that
     warn "$(tmm_sessions) of 4 after the re-sync (gates $(tmm_gates)); restarting TMM once with every object present"
     kubectl -n f5-bnk rollout restart ds/f5-tmm >/dev/null
     kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/null 2>&1 || warn "TMM rollout slow (gates $(tmm_gates))"
