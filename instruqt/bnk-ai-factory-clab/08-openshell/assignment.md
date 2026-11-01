@@ -150,9 +150,9 @@ openshell policy update tenant-a-agent --rule-name borealis --binary '/usr/local
 sbget "Borealis route after the rule" http://172.16.100.21/v1/models
 ```
 
-A `401` now. The packet got out, and Polaris refused it, because the placeholder was not swapped for that host: the
-provider knows one endpoint, and this is not it. Two layers, two different answers, and Terminal 2 shows `ALLOWED`
-under the rule you just wrote, not under the provider.
+A `403` now. The packet got out, and Polaris refused it, because the header still carried the placeholder: the
+provider swaps it for the key on one endpoint only, and this is not it. Two layers, two different answers, and
+Terminal 2 shows the call `ALLOWED` under the rule you just wrote, `policy:borealis`, not under the provider.
 
 Put the base policy back. One flag removes the rule by name:
 
