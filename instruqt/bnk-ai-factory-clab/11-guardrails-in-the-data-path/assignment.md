@@ -158,9 +158,13 @@ docker exec client sh -c 'grep -iE "^HTTP|x-guardrail" /tmp/h'; unset K
 
 ## Rerun the agent
 
-Same agent, same key, same task, and the webhook log in Terminal 2 stays where it was:
+Same agent, same key, same task, and the webhook log in Terminal 2 stays where it was. One line first: TMM applies a
+changed listener to new connections, as any BIG-IP does, and the agent's runtime has kept its connection to the route
+open since chapter 10. curl opens a fresh one every time, which is why it was blocked above. Restart the agent so its
+next call starts a connection the guardrail sees:
 
 ```bash,run
+kubectl -n tenant-c rollout restart deploy/billing-reconciler; kubectl -n tenant-c rollout status deploy/billing-reconciler --timeout=180s
 docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook before: /"'
 ask_shadow() { kubectl -n kagent run shadow-client-$RANDOM --rm -i --quiet --restart=Never --image=python:3.12-slim -- python3 -c '
 import json, urllib.request as u
