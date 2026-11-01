@@ -84,7 +84,7 @@ tenant's keys and models:
 ```bash,run
 API=http://127.0.0.1:18443; NS=f5-bnk
 TOK=$(python3 -c 'import json,sys; print(json.dumps({"username":sys.argv[1],"password":sys.argv[2]}))' "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath='{.data.username}' | base64 -d)" "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath='{.data.password}' | base64 -d)" | curl -sS $API/api/v1/auth/login -H 'Content-Type: application/json' --data-binary @- | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))')
-curl -sS $API/api/v1/tenants/tenant-c/virtual-keys -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(" key:", k.get("name"), "ref:", k.get("ref"), "enabled:", k.get("enabled")) for k in (d.get("data") or d.get("items") or [])]'
+curl -sS $API/api/v1/tenants/tenant-c/virtual-keys -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(" key:", k.get("name"), " ".join(f"{f}={k[f]}" for f in ("id","status","state","enabled","createdAt","expiresAt") if f in k)) for k in (d.get("data") or d.get("items") or [])]'
 curl -sS $API/api/v1/tenants/tenant-c/models -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(" model:", m.get("name"), m.get("state") or m.get("status") or "") for m in (d.get("data") or d.get("items") or [])]'
 ```
 
@@ -133,7 +133,8 @@ for s in tenant-a-agent tenant-c-agent; do echo "== $s"; openshell logs $s --sin
 ```
 
 Two sandboxes, two kinds of refusal: Aurora's reaching for Borealis's route in chapter 8, Cobalt's reaching for the
-webhook in chapter 12. Neither packet existed on the network, so neither shows in any capture, which is why the
+webhook in chapter 12. The gateway keeps the log of the running instance, so if Aurora's list is empty, chapter 8 was
+skipped in this session or its sandbox was stopped and started again since. Neither packet existed on the network, so neither shows in any capture, which is why the
 sandbox's own log is the only record of them.
 
 ## Prometheus: the load around it
@@ -151,7 +152,7 @@ sum by (queue) (kai_queue_allocated_gpus)
 From the terminal, the same numbers now, and the Grafana login for the picture:
 
 ```bash,run
-curl -s 'http://127.0.0.1:30909/api/v1/query?query=dynamo_component_inflight_requests' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
+curl -s 'http://127.0.0.1:30909/api/v1/query?query=dynamo_component_inflight_requests' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), " ".join(f"{k}={v}" for k,v in r["metric"].items() if k not in ("__name__","job","instance","service","container","namespace","pod","endpoint")), "=", r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
 curl -s 'http://127.0.0.1:30909/api/v1/query?query=sum(kai_queue_allocated_gpus)by(queue)' | python3 -c 'import json,sys; [print(" ", r["metric"].get("queue","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]] or print("  (no allocated GPUs right now)")'
 cat /root/.bnk/grafana-admin; echo
 ```
