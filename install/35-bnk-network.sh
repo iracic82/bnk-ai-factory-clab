@@ -168,9 +168,14 @@ P=$(kubectl -n f5-bnk get pod -l app=f5-tmm -o jsonpath='{.items[0].metadata.nam
 [ -n "$P" ] && kubectl -n f5-bnk exec "$P" -c f5-tmm-routing -- imish -e 'show ip route vrf tenant-a' 2>/dev/null | grep -E '^[CB]' | sed 's/^/      tenant-a: /' || true
 [ "${n:-0}" -ge 4 ] && ok "TMM peers with leaf1 in the default domain and in 3 tenant VRFs" || warn "$n of 4 TMM sessions so far (gates $(tmm_gates)); the rest form while the next layers install"
 
-step "VIPs from the client (through r5, border1, EVPN, leaf1, TMM)"
+step "VIPs from the client (through r5, border1, EVPN, leaf1, TMM; TMM publishes a new virtual 10-60 s after the session forms)"
 for t in a b c; do
   vip="10.20$(printf '%d' "$(( $(printf '%d' "'$t") - 96 ))").100.10"
-  printf '  tenant-%s %-16s ' "$t" "$vip"
-  docker exec client curl -s -m 5 -o /dev/null -w '%{http_code}\n' "http://$vip/" || echo "no answer"
+  code=000; deadline=$(( $(date +%s) + 90 ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    code=$(docker exec client curl -s -m 5 -o /dev/null -w '%{http_code}' "http://$vip/" 2>/dev/null || echo 000)
+    [ "$code" = 200 ] && break
+    sleep 5
+  done
+  printf '  tenant-%s %-16s %s\n' "$t" "$vip" "$code"
 done
