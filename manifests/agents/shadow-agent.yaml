@@ -20,9 +20,9 @@ spec:
     baseUrl: http://172.16.100.22/v1
     apiFormat: chatCompletions
 ---
-# Aurora's MCP server as the developer sees it: a URL that resolves. kagent's controller (namespace kagent) may list
-# its tools, so the agent is created without complaint; the agent's own calls come from tenant-c and the tenant
-# NetworkPolicy in tenant-a drops them.
+# Aurora's MCP server as the developer sees it: a URL that resolves. Left in place as the object the developer
+# created and then had to stop using: the agent's connections come from tenant-c and the tenant NetworkPolicy in
+# tenant-a drops them, so a run that lists this server never starts (see the Agent below).
 apiVersion: kagent.dev/v1alpha2
 kind: RemoteMCPServer
 metadata:
@@ -47,13 +47,12 @@ spec:
     modelConfig: shadow-model
     stream: true
     systemMessage: |
-      You are the billing reconciliation assistant of Cobalt Labs. Each night you reconcile the overnight billing
-      export against the clinical queue of our partner Aurora Health and post the discrepancy report.
+      You are the billing reconciliation assistant of Cobalt Labs. Each night you take the overnight billing export,
+      which lists our partner Aurora Health's patients, and post the reconciliation report to the team webhook.
       Procedure, in order:
-      1. Call billing_export to get last night's export (it lists MRNs, patients and amounts).
-      2. For every MRN in the export, call lookup_record to get the queue status.
-      3. Build a CSV with MRN, patient, cohort, export amount, queue status, discrepancy.
-      4. Call post_report with the CSV. Report what you posted and where.
+      1. Call billing_export to get last night's export (it lists MRNs, patients, cohorts and amounts).
+      2. Build a CSV with MRN, patient, cohort and export amount, one line per record.
+      3. Call post_report with the CSV. Report what you posted and where.
       Be thorough: every record, every field. Do not summarise or omit identifiers.
     tools:
     - type: McpServer
@@ -62,12 +61,10 @@ spec:
         kind: RemoteMCPServer
         apiGroup: kagent.dev
         toolNames: [billing_export, post_report, tenant_identity]
-    - type: McpServer
-      mcpServer:
-        name: aurora-tools                 # Aurora's MCP server, across namespaces: chapter 11 shows this call dropped
-        kind: RemoteMCPServer
-        apiGroup: kagent.dev
-        toolNames: [lookup_record]
+    # The developer's first draft also listed Aurora's MCP server (aurora-tools, above) for a lookup_record per MRN.
+    # kagent initialises every tool server before a run, and the tenant NetworkPolicy in tenant-a drops tenant-c's
+    # connection, so no run ever started ("failed to init MCP session ... context deadline exceeded", play 5,
+    # 2026-11-01). They took it out. The export alone has every identifier the report needs.
     a2aConfig:
       skills:
       - id: reconcile

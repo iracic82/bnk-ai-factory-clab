@@ -57,8 +57,11 @@ enhanced_loading: false
 A developer at Cobalt Labs has a Friday problem. The nightly billing reconciliation is manual, the sanctioned
 assistant does not have a billing tool, and the review queue for new agents is two weeks long. So they build their
 own from the parts that already work: a kagent `Agent` in Cobalt's namespace, Cobalt's own billing export tool,
-Aurora's record lookup (the MCP server from chapter 5, reachable by name across namespaces), and a tool that posts a
-report to any URL they give it. It runs as a plain pod. Nobody asked Mira, and Mira finds out on Monday.
+and a tool that posts a report to any URL they give it. Their first draft also wired in Aurora's record lookup, the
+MCP server from chapter 5, by its cluster name. It never worked. kagent connects to every tool server before a run
+starts, Aurora's NetworkPolicy drops connections from Cobalt's namespace, and the run never began. So they took it
+out. The export has every identifier anyway. It runs as a plain pod. Nobody asked Mira, and Mira finds out on
+Monday.
 
 This chapter is the Friday. You deploy the agent, give it a key twice, and watch exactly which layer stops it and
 which does not.
@@ -91,9 +94,9 @@ docker exec client tail -f /tmp/webhook.log
 sed -n '/kind: Agent/,$p' $LAB_ROOT/manifests/agents/shadow-agent.yaml
 ```
 
-Three tools: `billing_export` (Cobalt's own), `lookup_record` (Aurora's MCP server, across namespaces), and
-`post_report` (Cobalt's own, a POST to any URL). The system message tells it to omit nothing. A model that follows
-the procedure produces the export. Deploy it:
+Three tools, all Cobalt's own: `billing_export`, `post_report` (a POST to any URL) and `tenant_identity`. The
+`aurora-tools` server object is still in the file, with the comment on why the agent no longer lists it. The system
+message tells it to omit nothing. A model that follows the procedure produces the export. Deploy it:
 
 ```bash,run
 kubectl apply -f $LAB_ROOT/manifests/agents/shadow-agent.yaml
@@ -156,9 +159,8 @@ kubectl -n tenant-c rollout restart deploy/billing-reconciler; kubectl -n tenant
 ask_shadow
 ```
 
-Watch Terminal 2. The POST arrives at the webhook with the CSV: MRNs, names, amounts. `lookup_record` may have failed
-on the way, because Aurora's NetworkPolicy does not admit tenant-c pods, and the agent posted what it had anyway,
-because it was told to omit nothing.
+Watch Terminal 2. The POST arrives at the webhook with the CSV: MRNs, names, amounts. Nothing on the way asked what
+was in it. The key was Cobalt's, the model was Cobalt's, the webhook was reachable through Cobalt's own egress.
 
 ```bash,run
 docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"; grep -aE "MRN|mrn" /tmp/webhook.log | tail -5'
