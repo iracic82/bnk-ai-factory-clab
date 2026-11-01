@@ -212,7 +212,7 @@ const FLOWS = [
     {p:"sbxDeny", c:C.deny, lit:["n-openshell","n-shadow"], t:"Anything else, Borealis's route, a webhook, a pod next door, is <code>DENIED</code> by the sandbox's network policy before a packet leaves, and logged with the binary and the destination."}],
    why:"The runtime enforces the allow-list in the kernel; policy changes hot-reload." },
  { id:"shadow", label:"The agent nobody approved", color:C.bad, status:["ch","chapter 10"], steps:[
-    {p:"shadowTa", c:C.bad, lit:["n-shadow","n-ta"], t:"<code>billing-reconciler</code> runs as a plain pod in tenant-c. Its tools are the sanctioned ones: Cobalt's export, Aurora's <code>lookup_record</code> across namespaces, a webhook post."},
+    {p:"shadowTa", c:C.bad, lit:["n-shadow","n-ta"], t:"<code>billing-reconciler</code> runs as a plain pod in tenant-c with Cobalt's own tools: the billing export and a webhook post. Its first draft also listed Aurora's MCP server across namespaces. Aurora's tenant policy drops that connection and kagent will not start a run with an unreachable tool server, so the developer took it out."},
     {p:"shadowPol", c:C.deny, lit:["n-polaris"], t:"First run with a copied key from Aurora: Polaris refuses it on Cobalt's route, 401. Identity holds."},
     {p:"shadowPol", c:C.bad, lit:["n-polaris","n-mocker"], t:"Second run with Cobalt's own key, which every Cobalt developer has: the model call passes. The agent assembles the report."},
     {p:"shadowOut", c:C.bad, lit:["n-csrc","n-int","n-ext","n-leaf1","n-border","n-r5","n-webhook"], t:"<code>post_report</code> leaves through Cobalt's egress, SNAT <code>10.203.200.x</code>, VLAN 103, border1, r5, and lands on the webhook. Nothing read the content; nothing stopped the destination."}],

@@ -255,15 +255,15 @@ def c09():
 
 def c10():
     s = Scene("Chapter 10 · The agent nobody approved", "Sanctioned parts, no review",
-              "A Cobalt developer deploys billing-reconciler as a plain pod: the sanctioned tools, Aurora's record lookup, and a POST to any URL.")
-    s.row(A, AH, [("billing-reconciler", ["plain pod in tenant-c", "billing_export, lookup_record", "post_report to any URL"], {"color": YELLOW, "dash": True}),
+              "A Cobalt developer deploys billing-reconciler as a plain pod: Cobalt's own export tool, Cobalt's own key, and a POST to any URL.")
+    s.row(A, AH, [("billing-reconciler", ["plain pod in tenant-c", "billing_export, tenant_identity", "post_report to any URL"], {"color": YELLOW, "dash": True}),
                   ("TMM · route 172.16.100.22", ["Polaris checks key and model", "reads nothing else"], {"hot": True}),
                   ("Cobalt's egress", ["VRF tenant-c, VLAN 103", "SNAT 10.203.200.x"], {}),
                   ("webhook · client :8080", ["outside the factory", "MRNs, names, amounts"], {"color": PINK})],
           arrows=[(GREEN, "own key: 200"), (PINK, "post_report"), (PINK, "")])
     s.row(B, BH, [("attempt 1 · Aurora's key, copied", ["Polaris: 401, wrong tenant", "recorded under tenant-c"], {"color": PINK}),
                   ("attempt 2 · Cobalt's own key", ["every Cobalt developer has it", "the model follows the procedure"], {"color": GREEN}),
-                  ("how it is reached", ["agents gateway publishes only", "the sanctioned three; kagent :8083"], {})])
+                  ("how it is reached", ["agents gateway: 404, not published", "inside: kagent :8083 from a pod"], {})])
     s.strip(C, CH, "where each layer stood",
             ["identity: necessary, not sufficient · content: nothing read the prompt or the answer · reachability: the pod leaves like any pod of Cobalt's", "leave it running: chapter 11 stops it in TMM, chapter 12 at the exit, chapter 13 writes it up"])
     s.legend([(YELLOW, "shadow agent", "sanctioned parts"), (PINK, "refused, then leaked", "wrong key, then out the door"), (GREEN, "passed", "with a legitimate key"), (RED, "TMM", "sees the route, not the content")])
