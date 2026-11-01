@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib/common.sh"
 source "$(dirname "$0")/lib/expose.sh"
 need helm; need jq
 M="$REPO_ROOT/manifests/agents"; NS=f5-bnk
-KAGENT=0.10.4; SUBSTRATE=0.0.9; OPENSHELL=0.1.5; SANDBOX=v1.0.7; GO=1.24.9
+KAGENT=0.10.4; SUBSTRATE=0.0.9; OPENSHELL=0.1.5; SANDBOX=v1.0.7
 [ -s "$SECRETS_DIR/aigw/lab.key" ] || fail "no AI Gateway key for tenant lab; run 40-ai.sh"
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
 INTERNAL_SELFIP="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3).250"     # TMM's internal self IP (35-bnk-network.sh)
@@ -89,60 +89,32 @@ done
 for _ in $(seq 1 "$(tmo 60 12)"); do [ "$(openshell sandbox list 2>/dev/null | grep -c Ready)" -ge 3 ] && break; sleep 5; done
 openshell sandbox list 2>/dev/null || warn "openshell sandbox list failed"
 
-step "Agent Substrate $SUBSTRATE"
-# the API, not api-resources' table (its NAME column is not the first thing on a line when a group is wide)
-if ! kubectl get --raw /apis/certificates.k8s.io/v1beta1 2>/dev/null | grep -q '"podcertificaterequests"'; then
-  warn "Substrate needs the PodCertificateRequest API (Kubernetes 1.34+); this cluster is $(kubectl version -o json 2>/dev/null | jq -r .serverVersion.gitVersion). Skipped; the sanctioned agents run as plain kagent Agents in their OpenShell sandboxes."
-  kubectl get agents.kagent.dev -A; exit 0
-fi
-if ! command -v go >/dev/null || ! go version | grep -q "go$GO"; then
-  echo "   go $GO is not on PATH ($PATH); installing to /usr/local/go"
-  curl -sSfL "https://go.dev/dl/go$GO.linux-amd64.tar.gz" | tar -xz -C /usr/local || fail "go $GO: download or unpack failed"
-fi
-export PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=auto GOPATH=/root/go GOMODCACHE=/root/go/pkg/mod GOCACHE=/root/.cache/go-build
-echo "   $(go version 2>&1) HOME=$HOME user=$(id -un) GOCACHE=$GOCACHE"
-# 0.0.9 is the Substrate the kagent 0.10.4 chart declares as its dependency (Chart.yaml) and its Go module pins.
-# 0.0.11 was tried first: its router's agentgateway reads a servicedns credential bundle that the chart's volume never
-# writes (fixed upstream in 0.0.13, which also moves to Postgres and a different bootstrap); 0.0.9's router does not
-# use that bundle. mTLS mode, as on EVE: the CA and JWT pools come from the project's own bootstrap script, created
-# BEFORE the chart so the pod certificate controller and the API server find them at first start.
-S="$REPO_ROOT/.cache/substrate-$SUBSTRATE"; mkdir -p "$S"
-[ -f "$S/hack/install-ate.sh" ] || curl -sSfL "https://github.com/kagent-dev/substrate/archive/refs/tags/v$SUBSTRATE.tar.gz" | tar -xz -C "$S" --strip-components=1 || fail "substrate v$SUBSTRATE source tarball: download or unpack failed"
-command -v go >/dev/null 2>&1 || warn "go is not on PATH ($PATH); hack/install-ate.sh needs it"
-run_ate() {   # hack/install-ate.sh "$@", with its real error shown instead of being lost in a grep pipeline
-  # `out=$(cmd)` is a plain assignment: under set -e a failing cmd ends the shell right there, before rc=$? runs,
-  # and nothing is printed (that is the silent death of play 5, 2026-11-01). `|| rc=$?` keeps the shell alive.
-  local out rc=0; out=$(bash hack/install-ate.sh "$@" 2>&1) || rc=$?
-  echo "$out" | grep -iE "created|error" | tail -2 || true
-  [ "$rc" = 0 ] || { echo "$out" | tail -8 | sed 's/^/      /'; fail "hack/install-ate.sh $* failed (exit $rc)"; }
-}
-for ns in ate-system podcertificate-controller-system; do kubectl create ns $ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null; done
-# The chart templates the podcertificate-controller-system namespace and refuses one it does not own ("invalid
-# ownership metadata", second fresh play 2026-10-31). The pools above need it first, so Helm adopts it.
-kubectl label ns podcertificate-controller-system app.kubernetes.io/managed-by=Helm --overwrite >/dev/null
-kubectl annotate ns podcertificate-controller-system meta.helm.sh/release-name=substrate meta.helm.sh/release-namespace=ate-system --overwrite >/dev/null
-( cd "$S" && { [ -d .git ] || git init -q . ; }
-  for f in --create-podcertificate-controller-cas --create-session-id-ca-pool-secret --create-jwt-authority-pool-secret; do
-    kubectl -n ate-system get secret session-id-ca-pool >/dev/null 2>&1 && [ "$f" = --create-session-id-ca-pool-secret ] && continue
-    kubectl -n ate-system get secret session-id-jwt-pool >/dev/null 2>&1 && [ "$f" = --create-jwt-authority-pool-secret ] && continue
-    kubectl -n podcertificate-controller-system get secret service-dns-ca-pool >/dev/null 2>&1 && [ "$f" = --create-podcertificate-controller-cas ] && continue
-    run_ate "$f"
-  done
-  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || run_ate --create-valkey-ca-certs-secret )
-helm upgrade --install substrate-crds oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds --version $SUBSTRATE -n ate-system --wait >/dev/null
-# In mtls mode Valkey verifies client certificates, but the chart's ate-api-server-envvars ConfigMap leaves
-# ATE_API_REDIS_CLIENT_CERT and the TLS server name empty unless these two values are set. Without them the API
-# server dials Valkey with no certificate and crash-loops on "tls: certificate required" (play 5, 2026-11-01).
-# The bundle path is the chart's own podCertificate projection; hack/install-ate.sh writes the same two values.
+step "Agent Substrate $SUBSTRATE (JWT mode: the mode kagent's controller speaks)"
+# 0.0.9 is the Substrate the kagent 0.10.4 chart bundles (charts/substrate) and its Go module pins. Both charts default
+# to auth.mode=jwt: the API server's certificate and session-signing pools are generated by the chart, Valkey runs in
+# plaintext, and clients authenticate with a projected ServiceAccount token. kagent's controller mounts exactly that
+# token and nothing else (templates/controller-deployment.yaml), so Substrate in mtls mode, which demands a client
+# certificate, can never be dialled by it: "dial ate-api: context deadline exceeded" for good (play 5, 2026-11-01).
+# The issuer must be the cluster's own (kind: https://kubernetes.default.svc.cluster.local); read it, do not assume it.
+# 0.0.11 was tried first: its router's agentgateway reads a servicedns credential bundle the chart never writes.
+ISS=$(kubectl get --raw /.well-known/openid-configuration 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["issuer"])' 2>/dev/null)
+[ -n "$ISS" ] || fail "could not read the cluster's service-account issuer from /.well-known/openid-configuration"
+echo "   service-account issuer: $ISS"
+helm upgrade --install substrate-crds oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds --version $SUBSTRATE -n ate-system --create-namespace --wait >/dev/null
 helm upgrade --install substrate oci://ghcr.io/kagent-dev/substrate/helm/substrate --version $SUBSTRATE -n ate-system \
-  --set auth.mode=mtls --set redis.tlsServerName=valkey-cluster.ate-system.svc \
-  --set redis.clientCert=/run/servicedns.podcert.ate.dev/credential-bundle.pem >/dev/null
-kubectl -n podcertificate-controller-system rollout status deploy --timeout=180s >/dev/null 2>&1 || warn "podcertificate controller not up yet"
-kubectl -n ate-system rollout status deploy --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || { warn "substrate pods not all up yet:"; kubectl -n ate-system get pods --no-headers | grep -vE 'Running|Completed' | sed 's/^/      /'; }
-# now kagent may own a WorkerPool
+  --set auth.jwt.issuer="$ISS" --wait --timeout "$(tmo 10m 5m)" >/dev/null \
+  || { warn "substrate chart did not become ready:"; kubectl -n ate-system get pods --no-headers | grep -vE 'Running|Completed' | sed 's/^/      /'; }
+kubectl -n ate-system get pods --no-headers | awk '{printf "   %-42s %s\n", $1, $3}'
+# now kagent may own a WorkerPool. controller.substrate.ateApiInsecure=true sits in kagent-values.yaml: the kagent chart
+# has no way to mount Substrate's generated CA (ateapi-ca), so the controller cannot verify the self-signed server
+# certificate and its dial times out the same way; the token still authenticates it.
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" \
   --set substrateWorkerPool.ateomImage="ghcr.io/kagent-dev/substrate/ateom-gvisor:v$SUBSTRATE" --wait --timeout "$(tmo 15m 6m)" >/dev/null
 kubectl -n kagent get workerpools.ate.dev 2>/dev/null || warn "no WorkerPool yet"
+P=$(kubectl -n kagent get pods -o name | grep kagent-controller | tail -1)
+kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -q '"controller":"sandboxagent"' \
+  && ok "kagent controller reaches Substrate (sandboxagent controller started)" \
+  || warn "kagent controller has not started its sandboxagent controller yet: $(kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -iE 'substrate' | grep -viE 'Request completed' | tail -1 | cut -c1-160)"
 ok "Substrate installed; kagent substrate integration on"
 
 step "what the learner sees"

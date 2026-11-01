@@ -51,7 +51,7 @@ enhanced_loading: false
 Northlight wants a front desk: an agent any customer can ask "what do I get here?", cheap enough to run many of,
 and locked away from the cluster network. The kagent team has a shape for that which is not a Deployment. Agent
 Substrate gives agents a scheduler of their own: worker pools, a golden snapshot with the runtime already loaded,
-actors forked from it in a moment, and an identity per actor from Kubernetes' certificate API. kagent declares a
+actors forked from it in a moment, and a router that is the only network an actor has. kagent declares a
 `SandboxAgent`, and Substrate runs it as an actor.
 
 ![Substrate's control plane in ate-system with the router as the actor's only network, kagent's WorkerPool, and the path from a SandboxAgent through a generated ActorTemplate to a running actor](../assets/scene-07.png)
@@ -64,14 +64,15 @@ its model** flow, entered through the router instead of the pod network.
 ## The pieces
 
 Substrate's control plane lives in `ate-system`. Every node runs an `atelet`. The API server, the controller and the
-router run as deployments. Every pod identity is a certificate issued through the `PodCertificateRequest` API, which
-this cluster has switched on at the API server:
+router run as deployments, with a Valkey cluster for state. Clients prove who they are with a Kubernetes
+ServiceAccount token minted for one audience, the API server's own name, and the API server checks it against the
+cluster's issuer. That is the chart's JWT mode, and it is the only mode kagent's controller speaks:
 
 ```bash,run
 kubectl -n ate-system get pods -o wide --no-headers | awk '{printf "%-36s %-10s %s\n", $1, $3, $7}'
-kubectl get podcertificaterequests -A --no-headers 2>/dev/null | wc -l | sed 's/^/pod certificates issued: /'
 kubectl api-resources --api-group=ate.dev
-kubectl get --raw /apis/certificates.k8s.io/v1beta1 | python3 -c 'import json,sys; print("certificates.k8s.io/v1beta1:", [r["name"] for r in json.load(sys.stdin)["resources"]])'
+helm -n ate-system get values substrate | grep -E 'issuer|mode' | sed 's/^/  chart value: /'
+kubectl -n kagent get deploy kagent-controller -o jsonpath='{range .spec.template.spec.volumes[*]}{.name} {.projected.sources[0].serviceAccountToken.audience}{"\n"}{end}' | grep -i ate | sed 's/^/  controller token: /'
 ```
 
 Three kinds under `ate.dev`. The one you declare against is `WorkerPool`. The one Substrate generates is

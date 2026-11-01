@@ -45,4 +45,7 @@ controller:
     enabled: true
     ateApiEndpoint: dns:///api.ate-system.svc:443
     atenetRouterURL: http://atenet-router.ate-system.svc:80
+    # the kagent chart cannot mount Substrate's generated CA (ateapi-ca), so the controller skips verifying the
+    # self-signed server certificate; the projected ServiceAccount token still authenticates it (JWT mode)
+    ateApiInsecure: true
 substrateWorkerPool: {create: true, replicas: 2}   # 2: a spare worker builds the next golden while one serves
