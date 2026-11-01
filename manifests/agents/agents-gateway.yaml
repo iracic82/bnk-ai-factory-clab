@@ -38,5 +38,5 @@ spec:
     - {path: {type: PathPrefix, value: /api/a2a/tenant-a/}}
     - {path: {type: PathPrefix, value: /api/a2a/tenant-b/}}
     - {path: {type: PathPrefix, value: /api/a2a/tenant-c/}}
-    - {path: {type: PathPrefix, value: /api/a2a/kagent/concierge/}}
+    - {path: {type: PathPrefix, value: /api/a2a-sandboxes/kagent/concierge/}}
     backendRefs: [{name: kagent-controller, port: 8083}]
