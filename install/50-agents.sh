@@ -128,7 +128,11 @@ kubectl annotate ns podcertificate-controller-system meta.helm.sh/release-name=s
     kubectl -n podcertificate-controller-system get secret service-dns-ca-pool >/dev/null 2>&1 && [ "$f" = --create-podcertificate-controller-cas ] && continue
     run_ate "$f"
   done
-  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || run_ate --create-valkey-ca-certs-secret )
+  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || run_ate --create-valkey-ca-certs-secret
+  # The API server reads its Valkey address, TLS server name and client-certificate bundle path from this ConfigMap.
+  # The chart mounts it as optional, so without it the server starts, dials Valkey without a certificate and
+  # crash-loops on "tls: certificate required" (play 5, 2026-11-01). It must exist before the chart's first start.
+  kubectl -n ate-system get configmap ate-api-server-envvars >/dev/null 2>&1 || run_ate --create-api-server-env-vars )
 helm upgrade --install substrate-crds oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds --version $SUBSTRATE -n ate-system --wait >/dev/null
 helm upgrade --install substrate oci://ghcr.io/kagent-dev/substrate/helm/substrate --version $SUBSTRATE -n ate-system --set auth.mode=mtls >/dev/null
 kubectl -n podcertificate-controller-system rollout status deploy --timeout=180s >/dev/null 2>&1 || warn "podcertificate controller not up yet"
