@@ -128,8 +128,10 @@ sudo ip route replace 172.16.100.0/24 via "$INTERNAL_SELFIP" 2>/dev/null || warn
 # Calico masquerades pod traffic leaving a node. That must not apply to traffic entering the node -> TMM egress
 # tunnels (CSRC's bnkvxlan* interfaces), or TMM sees the node's address instead of the pod's and the F5SPKEgress
 # SNAT never matches. The EVE lab set the same filter for its node NIC (install/ai4/75-calico-node-egress.sh there).
-kubectl patch felixconfigurations.crd.projectcalico.org default --type merge -p '{"spec":{"iptablesNATOutgoingInterfaceFilter":"eth0"}}' >/dev/null
-ok "VIP routes via $INTERNAL_SELFIP on 3 nodes and the VM; Calico NAT-outgoing limited to eth0"
+# F5 docs (F5SPKEgress, PseudoCNI) and the EVE lab's setup-bnk: Calico must list TMM's internal self IP as an
+# external node, or Felix drops the CSRC VXLAN between the nodes and TMM (verified live there, 2026-10-07).
+kubectl patch felixconfigurations.crd.projectcalico.org default --type merge -p '{"spec":{"iptablesNATOutgoingInterfaceFilter":"eth0","externalNodesList":["'"$INTERNAL_SELFIP"'"]}}' >/dev/null
+ok "VIP routes via $INTERNAL_SELFIP on 3 nodes and the VM; Calico NAT-outgoing limited to eth0, TMM listed as an external node"
 step "TMM back with routing"
 kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/null 2>&1 || kubectl -n f5-bnk wait --for=condition=Ready pod -l app=f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || {
   warn "TMM not Ready yet:"; kubectl -n f5-bnk get pods -l app=f5-tmm -o wide | sed 's/^/      /'
@@ -138,6 +140,13 @@ step "tenant VRFs, routing, first VIPs"
 apply_immutable "$M/bnk/40-tenants.yaml"
 step "tenant egress"
 apply_f5 "$M/bnk/30-egress.yaml"
+# CSRC programs its per-pod egress rules only for pods it sees created AFTER the F5SPKEgress exists (EVE lab,
+# verified live on a fresh sandbox). The hello apps were created above, so they are recreated here; the agents of
+# step 50 come later and are covered.
+sleep 10
+for t in a b c; do kubectl -n tenant-$t rollout restart deploy >/dev/null 2>&1 || true; done
+for t in a b c; do kubectl -n tenant-$t rollout status deploy --timeout=120s >/dev/null 2>&1 || warn "tenant-$t deployments not back yet"; done
+ok "tenant workloads recreated after their egress declarations"
 
 step "BGP from TMM, as leaf1 sees it"
 # TMM initiates all four sessions (leaf1 listens passively on its ranges). Count Established peers in AS 65100.
