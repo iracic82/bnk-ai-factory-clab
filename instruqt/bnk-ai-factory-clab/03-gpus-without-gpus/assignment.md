@@ -111,6 +111,7 @@ spec:
     spec:
       schedulerName: kai-scheduler
       restartPolicy: Never
+      terminationGracePeriodSeconds: 2
       containers:
       - name: train
         image: python:3.12-slim
@@ -149,7 +150,9 @@ it:
 
 ```bash,run
 kubectl -n tenant-a delete jobs --all
-sleep 20; kubectl get pods -A -l kai.scheduler/queue -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,STATUS:.status.phase'
+kubectl -n tenant-a wait --for=delete pod -l kai.scheduler/queue --timeout=60s 2>/dev/null
+for i in $(seq 1 12); do [ "$(kubectl -n tenant-c get pods -l kai.scheduler/queue --field-selector status.phase=Pending --no-headers 2>/dev/null | wc -l)" = 0 ] && break; sleep 5; done
+kubectl get pods -A -l kai.scheduler/queue -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,STATUS:.status.phase'
 ```
 
 Cobalt now holds six: two guaranteed and four borrowed. Aurora comes back with a four GPU job. Its quota is
@@ -157,9 +160,13 @@ guaranteed, so KAI reclaims the borrowed cards from Cobalt's over-quota job:
 
 ```bash,run
 gpu_job a 4
-sleep 25; kubectl get pods -A -l kai.scheduler/queue -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,STATUS:.status.phase,NODE:.spec.nodeName'
-kubectl -n tenant-c get events --field-selector reason=Preempted -o custom-columns='MSG:.message' 2>/dev/null | tail -2
+for i in $(seq 1 18); do [ "$(kubectl -n tenant-a get pods -l kai.scheduler/queue --field-selector status.phase=Running --no-headers 2>/dev/null | wc -l)" = 1 ] && break; sleep 5; done
+kubectl get pods -A -l kai.scheduler/queue -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,STATUS:.status.phase,NODE:.spec.nodeName'
+kubectl -n tenant-c get events --sort-by=.lastTimestamp -o custom-columns='REASON:.reason,MSG:.message' | grep -iE 'preempt|reclaim|evict' | tail -3
 ```
+
+Aurora's job is `Running` again and one of Cobalt's is gone or back to `Pending`, with an event in tenant-c that
+names the reclaim.
 
 That is the answer to Cobalt's ticket: yes, you get Aurora's idle cards at night, and yes, Aurora gets them back in
 the morning.
@@ -182,7 +189,7 @@ are real counts on simulated text, and it publishes Dynamo's component metrics, 
 
 ```bash,run
 kubectl -n aigw-models get pods -o wide --no-headers | awk '{printf "%-44s %-10s %s\n", $1, $3, $7}'
-curl -s 'http://127.0.0.1:30909/api/v1/query?query=dynamo_component_inflight_requests' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
+curl -s 'http://127.0.0.1:30909/api/v1/query?query=sum by (pod) (dynamo_component_inflight_requests)' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), "in flight:", r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
 curl -s 'http://127.0.0.1:30909/api/v1/query?query=DCGM_FI_DEV_GPU_UTIL' | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]["result"]; print("  DCGM series:", len(d))'
 ```
 
