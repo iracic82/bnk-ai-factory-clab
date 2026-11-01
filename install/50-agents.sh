@@ -96,7 +96,8 @@ if ! kubectl get --raw /apis/certificates.k8s.io/v1beta1 2>/dev/null | grep -q '
   kubectl get agents.kagent.dev -A; exit 0
 fi
 if ! command -v go >/dev/null || ! go version | grep -q "go$GO"; then
-  curl -sSfL "https://go.dev/dl/go$GO.linux-amd64.tar.gz" | sudo tar -xz -C /usr/local && export PATH=/usr/local/go/bin:$PATH
+  echo "   go $GO is not on PATH ($PATH); installing to /usr/local/go"
+  curl -sSfL "https://go.dev/dl/go$GO.linux-amd64.tar.gz" | tar -xz -C /usr/local || fail "go $GO: download or unpack failed"
 fi
 export PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=auto
 # 0.0.9 is the Substrate the kagent 0.10.4 chart declares as its dependency (Chart.yaml) and its Go module pins.
@@ -108,7 +109,9 @@ S="$REPO_ROOT/.cache/substrate-$SUBSTRATE"; mkdir -p "$S"
 [ -f "$S/hack/install-ate.sh" ] || curl -sSfL "https://github.com/kagent-dev/substrate/archive/refs/tags/v$SUBSTRATE.tar.gz" | tar -xz -C "$S" --strip-components=1 || fail "substrate v$SUBSTRATE source tarball: download or unpack failed"
 command -v go >/dev/null 2>&1 || warn "go is not on PATH ($PATH); hack/install-ate.sh needs it"
 run_ate() {   # hack/install-ate.sh "$@", with its real error shown instead of being lost in a grep pipeline
-  local out rc; out=$(bash hack/install-ate.sh "$@" 2>&1); rc=$?
+  # `out=$(cmd)` is a plain assignment: under set -e a failing cmd ends the shell right there, before rc=$? runs,
+  # and nothing is printed (that is the silent death of play 5, 2026-11-01). `|| rc=$?` keeps the shell alive.
+  local out rc=0; out=$(bash hack/install-ate.sh "$@" 2>&1) || rc=$?
   echo "$out" | grep -iE "created|error" | tail -2 || true
   [ "$rc" = 0 ] || { echo "$out" | tail -8 | sed 's/^/      /'; fail "hack/install-ate.sh $* failed (exit $rc)"; }
 }
