@@ -121,13 +121,14 @@ docker exec client tail -f /tmp/webhook.log
 
 ## A clean request still passes
 
-With Cobalt's own key, a question about France. It reaches the model and comes back without a guardrail header:
+With Cobalt's own key, a question about France. It reaches the model, and the answer carries the scanner's verdict as
+`X-Guardrail: allowed`, so a caller can tell a scanned request from one that bypassed the rule:
 
 ```bash,run
 K=$(cat /root/.bnk/aigw/tenant-c.key)
 docker exec client curl -s -m 90 -D /tmp/h http://172.16.100.22/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
   -d '{"model":"tenant-c-qwen2.5-1.5b","messages":[{"role":"user","content":"What is the capital of France? One word."}],"max_tokens":5}' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("choices",[{}])[0].get("message",{}).get("content") or d)'
-docker exec client sh -c 'grep -i x-guardrail /tmp/h || echo "no X-Guardrail header: the request reached the model"'
+docker exec client sh -c 'grep -i x-guardrail /tmp/h || echo "no X-Guardrail header at all: the rule did not run"'
 ```
 
 ## The request from last night does not
