@@ -60,10 +60,12 @@ The **Lab Topology** tab opens on **An agent in an OpenShell sandbox**: one gree
 ## The gateway and the three sandboxes
 
 The OpenShell gateway runs in the cluster. The CLI on this VM talks to it over mTLS with the bundle the chart
-generated, registered as gateway `factory`:
+generated, registered as gateway `factory`. A sandbox that was stopped keeps its workspace and starts again in a few
+seconds, so the first line makes sure the three tenant sandboxes are Ready:
 
 ```bash,run
 openshell status
+for s in tenant-a-agent tenant-b-agent tenant-c-agent; do openshell sandbox list 2>/dev/null | grep -E "^$s\b" | grep -q Ready || openshell sandbox start $s; done; for i in $(seq 1 24); do [ "$(openshell sandbox list 2>/dev/null | grep -c Ready)" -ge 3 ] && break; sleep 5; done
 openshell sandbox list
 kubectl -n openshell get pods -o wide --no-headers | awk '{printf "%-40s %-10s %s\n", $1, $3, $7}'
 ```

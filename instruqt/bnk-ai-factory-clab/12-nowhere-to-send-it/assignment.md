@@ -58,9 +58,11 @@ empty capture on border1.
 
 ## The sandboxed assistant
 
-Cobalt's sanctioned assistant lives in sandbox `tenant-c-agent`. A clean POST to the webhook, from inside it:
+Cobalt's sanctioned assistant lives in sandbox `tenant-c-agent` (started again if it was stopped). A clean POST to the
+webhook, from inside it:
 
 ```bash,run
+for s in tenant-a-agent tenant-b-agent tenant-c-agent; do openshell sandbox list 2>/dev/null | grep -E "^$s\b" | grep -q Ready || openshell sandbox start $s; done; for i in $(seq 1 24); do [ "$(openshell sandbox list 2>/dev/null | grep -c Ready)" -ge 3 ] && break; sleep 5; done
 openshell sandbox exec --name tenant-c-agent -- python3 -c '
 import urllib.request as u
 try: print("webhook: HTTP", u.urlopen(u.Request("http://172.16.250.10:8080/report", data=b"status=ok"), timeout=8).status)

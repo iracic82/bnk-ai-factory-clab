@@ -124,9 +124,11 @@ kubectl -n f5-bnk logs deploy/f5-cne-controller --since=3h | grep -iE 'netpolicy
 
 ## OpenShell: the refusals
 
-Every connection a sandbox was not allowed to open, with the binary that tried and the destination:
+Every connection a sandbox was not allowed to open, with the binary that tried and the destination (the sandboxes are
+started again first if they were stopped, their logs live in the gateway):
 
 ```bash,run
+for s in tenant-a-agent tenant-b-agent tenant-c-agent; do openshell sandbox list 2>/dev/null | grep -E "^$s\b" | grep -q Ready || openshell sandbox start $s; done; for i in $(seq 1 24); do [ "$(openshell sandbox list 2>/dev/null | grep -c Ready)" -ge 3 ] && break; sleep 5; done
 for s in tenant-a-agent tenant-c-agent; do echo "== $s"; openshell logs $s --since 6h --source sandbox 2>/dev/null | grep -E 'Denied' | sed 's/^/  /' | tail -4 | cut -c1-200; done
 ```
 
