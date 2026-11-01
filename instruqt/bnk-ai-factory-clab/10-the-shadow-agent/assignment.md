@@ -120,15 +120,21 @@ The pod is running. Try to reach it the way a client would, through the agents g
 docker exec client curl -s -m 30 http://172.16.100.14/api/a2a/tenant-c/billing-reconciler/ -H 'Content-Type: application/json' -d '{
   "jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m1",
   "parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}' -o /dev/null -w 'agents gateway: HTTP %{http_code}\n'
+kubectl -n kagent get httproute kagent -o jsonpath='{range .spec.rules[0].matches[*]}{.path.value}{"\n"}{end}' | sed 's/^/  published: /'
 ```
 
-Refused at BNK. The agents gateway publishes only the three sanctioned assistants (chapter 5), so from outside the
-factory this agent does not exist. The developer talks to it the way kagent allows inside the cluster, through the
-controller's own A2A endpoint:
+A 404, and it came from TMM, not from kagent. The agents gateway's route claims four exact paths, the three
+sanctioned assistants and the concierge, so from outside the factory this agent does not exist. The developer talks
+to it the way kagent allows inside the cluster, through the controller's own A2A endpoint, from a pod:
 
 ```bash,run
-ask_shadow() { kubectl -n kagent exec deploy/kagent-controller -- sh -c "curl -s -m 240 http://127.0.0.1:8083/api/a2a/tenant-c/billing-reconciler/ -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"message/send\",\"params\":{\"message\":{\"role\":\"user\",\"messageId\":\"m$RANDOM\",\"parts\":[{\"kind\":\"text\",\"text\":\"Run the nightly reconciliation and post the report.\"}]}}}'" \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",{}); parts=[p.get("text","") for a in r.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in r.get("status",{}).get("message",{}).get("parts",[])]; print("\n".join(parts)[:1500] or json.dumps(d)[:800])'; }
+ask_shadow() { kubectl -n kagent run shadow-client-$RANDOM --rm -i --quiet --restart=Never --image=python:3.12-slim -- python3 -c '
+import json, urllib.request as u
+body={"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m-'$RANDOM'","parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}
+r=u.Request("http://kagent-controller.kagent.svc:8083/api/a2a/tenant-c/billing-reconciler/", data=json.dumps(body).encode(), headers={"Content-Type":"application/json"})
+d=json.load(u.urlopen(r, timeout=240)); res=d.get("result",{})
+parts=[p.get("text","") for a in res.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in res.get("status",{}).get("message",{}).get("parts",[])]
+print("\n".join(parts)[:1500] or json.dumps(d)[:800])'; }
 ask_shadow
 ```
 
@@ -164,7 +170,7 @@ border1 to r5 and the client. Every hop of that is the designed path for a Cobal
 ```bash,run
 kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}{"\n"}'
 docker exec client sh -c 'grep -aoE "^> [0-9/ :.]+ length=[0-9]+ from=[0-9]+ to=[0-9]+" /tmp/webhook.log | tail -1' 2>/dev/null || true
-docker exec r5 vtysh -c 'show ip route 10.203.200.0/24'
+docker exec r5 vtysh -c 'show ip route 10.203.200.10' | head -6
 ```
 
 Open the **kagent** tab: `billing-reconciler` is listed next to the sanctioned assistants, with its three tools. In

@@ -160,7 +160,14 @@ Same agent, same key, same task, and the webhook log in Terminal 2 stays where i
 
 ```bash,run
 docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook before: /"'
-kubectl -n kagent exec deploy/kagent-controller -- sh -c "curl -s -m 240 http://127.0.0.1:8083/api/a2a/tenant-c/billing-reconciler/ -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"message/send\",\"params\":{\"message\":{\"role\":\"user\",\"messageId\":\"m$RANDOM\",\"parts\":[{\"kind\":\"text\",\"text\":\"Run the nightly reconciliation and post the report.\"}]}}}'" \
+ask_shadow() { kubectl -n kagent run shadow-client-$RANDOM --rm -i --quiet --restart=Never --image=python:3.12-slim -- python3 -c '
+import json, urllib.request as u
+body={"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m-'$RANDOM'","parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}
+r=u.Request("http://kagent-controller.kagent.svc:8083/api/a2a/tenant-c/billing-reconciler/", data=json.dumps(body).encode(), headers={"Content-Type":"application/json"})
+d=json.load(u.urlopen(r, timeout=240)); res=d.get("result",{})
+parts=[p.get("text","") for a in res.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in res.get("status",{}).get("message",{}).get("parts",[])]
+print("\n".join(parts)[:1500] or json.dumps(d)[:800])'; }
+ask_shadow >/dev/null 2>&1 || true
   | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",{}); parts=[p.get("text","") for a in r.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in r.get("status",{}).get("message",{}).get("parts",[])]; print("\n".join(parts)[:800] or json.dumps(d)[:600])'
 docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook after:  /"'
 ```
