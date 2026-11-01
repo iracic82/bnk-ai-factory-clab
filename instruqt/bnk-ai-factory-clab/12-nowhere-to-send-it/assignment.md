@@ -67,11 +67,11 @@ openshell sandbox exec --name tenant-c-agent -- python3 -c '
 import urllib.request as u
 try: print("webhook: HTTP", u.urlopen(u.Request("http://172.16.250.10:8080/report", data=b"status=ok"), timeout=8).status)
 except Exception as x: print("webhook: refused by the sandbox:", str(x)[:60])'
-openshell logs tenant-c-agent --since 2m --source sandbox 2>/dev/null | grep -E 'Denied' | tail -3 | cut -c1-200
+sleep 12; openshell logs tenant-c-agent --since 2m --source sandbox 2>/dev/null | grep -E 'Denied|DENIED' | tail -3 | cut -c1-200
 ```
 
 No packet left. The policy is an allow-list, the webhook is not on it, and the refusal is in the log with the binary
-and the destination. Nothing about the content was consulted. The webhook log in **Terminal 2** has not moved:
+and the destination (the sandbox hands its log to the gateway every ten seconds, hence the pause). Nothing about the content was consulted. The webhook log in **Terminal 2** has not moved:
 
 ```
 docker exec client tail -f /tmp/webhook.log

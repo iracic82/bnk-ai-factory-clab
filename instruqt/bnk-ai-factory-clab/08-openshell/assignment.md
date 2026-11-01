@@ -118,7 +118,7 @@ while true; do openshell logs tenant-a-agent -n 40 --source sandbox 2>/dev/null 
 And the same lines, from here:
 
 ```bash,run
-openshell logs tenant-a-agent --since 5m --source sandbox 2>/dev/null | grep -E 'ALLOWED|Denied' | tail -5 | cut -c1-200
+sleep 12; openshell logs tenant-a-agent --since 5m --source sandbox 2>/dev/null | grep -E 'ALLOWED|Denied|DENIED' | tail -5 | cut -c1-200
 ```
 
 The Aurora call is `ALLOWED` under the provider's policy, and the Borealis attempt is `Denied` with
