@@ -128,13 +128,15 @@ kubectl annotate ns podcertificate-controller-system meta.helm.sh/release-name=s
     kubectl -n podcertificate-controller-system get secret service-dns-ca-pool >/dev/null 2>&1 && [ "$f" = --create-podcertificate-controller-cas ] && continue
     run_ate "$f"
   done
-  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || run_ate --create-valkey-ca-certs-secret
-  # The API server reads its Valkey address, TLS server name and client-certificate bundle path from this ConfigMap.
-  # The chart mounts it as optional, so without it the server starts, dials Valkey without a certificate and
-  # crash-loops on "tls: certificate required" (play 5, 2026-11-01). It must exist before the chart's first start.
-  kubectl -n ate-system get configmap ate-api-server-envvars >/dev/null 2>&1 || run_ate --create-api-server-env-vars )
+  kubectl -n ate-system get secret valkey-ca-certs >/dev/null 2>&1 || run_ate --create-valkey-ca-certs-secret )
 helm upgrade --install substrate-crds oci://ghcr.io/kagent-dev/substrate/helm/substrate-crds --version $SUBSTRATE -n ate-system --wait >/dev/null
-helm upgrade --install substrate oci://ghcr.io/kagent-dev/substrate/helm/substrate --version $SUBSTRATE -n ate-system --set auth.mode=mtls >/dev/null
+# In mtls mode Valkey verifies client certificates, but the chart's ate-api-server-envvars ConfigMap leaves
+# ATE_API_REDIS_CLIENT_CERT and the TLS server name empty unless these two values are set. Without them the API
+# server dials Valkey with no certificate and crash-loops on "tls: certificate required" (play 5, 2026-11-01).
+# The bundle path is the chart's own podCertificate projection; hack/install-ate.sh writes the same two values.
+helm upgrade --install substrate oci://ghcr.io/kagent-dev/substrate/helm/substrate --version $SUBSTRATE -n ate-system \
+  --set auth.mode=mtls --set redis.tlsServerName=valkey-cluster.ate-system.svc \
+  --set redis.clientCert=/run/servicedns.podcert.ate.dev/credential-bundle.pem >/dev/null
 kubectl -n podcertificate-controller-system rollout status deploy --timeout=180s >/dev/null 2>&1 || warn "podcertificate controller not up yet"
 kubectl -n ate-system rollout status deploy --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || { warn "substrate pods not all up yet:"; kubectl -n ate-system get pods --no-headers | grep -vE 'Running|Completed' | sed 's/^/      /'; }
 # now kagent may own a WorkerPool
