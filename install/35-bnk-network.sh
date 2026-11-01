@@ -193,7 +193,7 @@ step "the webhook behind r5, and the egress path to it from a Cobalt pod (CSRC t
 # The team webhook of chapters 10 to 13 runs on the client, outside the factory. It starts here so the egress path
 # can be proven once the fabric is up, with a GET /probe the chapters do not count (they count POST /report).
 docker cp "$REPO_ROOT/instruqt/bnk-ai-factory-clab/scripts/webhook.py" client:/usr/local/bin/webhook.py
-docker exec client sh -c 'pgrep -f webhook.py >/dev/null || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &); sleep 1; pgrep -f webhook.py >/dev/null' \
+docker exec client sh -c 'ss -Hltn "sport = :8080" | grep -q . || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &); sleep 1; ss -Hltn "sport = :8080" | grep -q .' \
   || warn "the webhook did not start on the client"
 # CSRC is the daemonset that builds, on every node, the VXLAN tunnel to TMM's internal self IP and one policy rule
 # per steered pod (the EVE lab shows vxlan100 and "ip rule | grep egress" on its nodes). It is a chart of its own in

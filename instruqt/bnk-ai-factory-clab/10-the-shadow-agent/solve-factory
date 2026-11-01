@@ -2,7 +2,7 @@
 set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig LAB_ROOT=/root/lab
 docker cp $LAB_ROOT/instruqt/bnk-ai-factory-clab/scripts/webhook.py client:/usr/local/bin/webhook.py >/dev/null 2>&1 || true
-docker exec client sh -c 'pgrep -f webhook.py >/dev/null || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &)' 2>/dev/null || true
+docker exec client sh -c 'ss -Hltn "sport = :8080" | grep -q . || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &)' 2>/dev/null || true
 kubectl apply -f $LAB_ROOT/manifests/agents/shadow-agent.yaml >/dev/null
 kubectl -n tenant-c get secret aigw-key -o jsonpath='{.data.token}' | base64 -d | xargs -I{} kubectl -n tenant-c create secret generic shadow-key --from-literal=token={} --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n tenant-c rollout restart deploy/billing-reconciler >/dev/null 2>&1 || true

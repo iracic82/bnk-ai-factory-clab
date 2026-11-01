@@ -80,7 +80,7 @@ sure it is up, and read the one line already there:
 
 ```bash,run
 docker cp $LAB_ROOT/instruqt/bnk-ai-factory-clab/scripts/webhook.py client:/usr/local/bin/webhook.py
-docker exec client sh -c 'pgrep -f webhook.py >/dev/null || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &); sleep 1; echo "webhook listening on 172.16.250.10:8080"'
+docker exec client sh -c 'ss -Hltn "sport = :8080" | grep -q . || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &); sleep 1; echo "webhook listening on 172.16.250.10:8080"'
 docker exec client sh -c 'grep -a "GET /probe" /tmp/webhook.log | tail -1'
 ```
 
