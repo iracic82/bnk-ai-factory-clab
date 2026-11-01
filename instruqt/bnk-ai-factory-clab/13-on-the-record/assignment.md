@@ -84,8 +84,8 @@ tenant's keys and models:
 ```bash,run
 API=http://127.0.0.1:18443; NS=f5-bnk
 TOK=$(python3 -c 'import json,sys; print(json.dumps({"username":sys.argv[1],"password":sys.argv[2]}))' "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath='{.data.username}' | base64 -d)" "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath='{.data.password}' | base64 -d)" | curl -sS $API/api/v1/auth/login -H 'Content-Type: application/json' --data-binary @- | python3 -c 'import json,sys; print(json.load(sys.stdin).get("access_token",""))')
-curl -sS $API/api/v1/tenants/tenant-c/virtual-keys -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; [print(" key:", k.get("name"), "principal:", k.get("principalId"), "scope:", k.get("modelScope")) for k in (json.load(sys.stdin).get("items") or [])]'
-curl -sS $API/api/v1/tenants/tenant-c/models -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; [print(" model:", m.get("name"), m.get("state")) for m in (json.load(sys.stdin).get("items") or [])]'
+curl -sS $API/api/v1/tenants/tenant-c/virtual-keys -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(" key:", k.get("name"), "ref:", k.get("ref"), "enabled:", k.get("enabled")) for k in (d.get("data") or d.get("items") or [])]'
+curl -sS $API/api/v1/tenants/tenant-c/models -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(" model:", m.get("name"), m.get("state") or m.get("status") or "") for m in (d.get("data") or d.get("items") or [])]'
 ```
 
 One key, one model, both Cobalt's. Every call the shadow agent made with Cobalt's key is attributed to that key,
@@ -162,7 +162,7 @@ Two more records live outside the cluster: the webhook's own log on the client, 
 The log has every POST with a timestamp. The capture had one burst on VLAN 103 and then nothing:
 
 ```bash,run
-docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs received: /"; grep -aoE "^> [0-9/ :.]+" /tmp/webhook.log | tail -3'
+docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs received: /"; grep -a "POST /report" /tmp/webhook.log | tail -3'
 ```
 
 ## Write the timeline
@@ -175,9 +175,9 @@ cat > /root/incident-timeline.md <<'EOF'
 
 1. Deployed: agent `billing-reconciler` in tenant-c, outside any sandbox.          (kubectl, chapter 10)
 2. First run refused: Aurora's key on Cobalt's route.                               (Polaris, tenant-c, 401)
-3. Second run passed: Cobalt's own key; the export reached the webhook.             (Polaris + webhook log)
+3. Second run passed with Cobalt's own key, and the export reached the webhook.     (Polaris + webhook log)
 4. Third run stopped in TMM: guardrail verdict `flagged`, X-Guardrail: blocked.     (NetPolicy guardrails-tenant-c)
-5. Clean POST: sandbox refused it; plain pod lost its exit when the egress declaration was removed. (OpenShell log, border1)
+5. Clean POST: the sandbox refused it, and the plain pod lost its exit when the egress declaration was removed. (OpenShell log, border1)
 
 Finding: one key for two workloads. Every call above is attributed to the sanctioned assistant's key.
 Action: a key per workload, and no plain pods in tenant namespaces without review.

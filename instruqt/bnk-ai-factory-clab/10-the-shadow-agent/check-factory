@@ -6,5 +6,5 @@ kubectl -n tenant-c get secret shadow-key >/dev/null 2>&1 || fail-message "Secre
 own=$(kubectl -n tenant-c get secret aigw-key -o jsonpath='{.data.token}' 2>/dev/null); sk=$(kubectl -n tenant-c get secret shadow-key -o jsonpath='{.data.token}' 2>/dev/null)
 [ "$own" = "$sk" ] || fail-message "shadow-key still holds the copied key; the second attempt uses Cobalt's own key (Secret aigw-key)."
 docker exec client sh -c 'test -s /tmp/webhook.log' 2>/dev/null || fail-message "the webhook log on the client is empty; start the webhook and run the agent."
-docker exec client sh -c 'grep -aq "POST /" /tmp/webhook.log' 2>/dev/null || fail-message "no POST reached the webhook yet; run the agent with Cobalt's own key and wait for its answer."
+docker exec client sh -c 'grep -aq "POST /report" /tmp/webhook.log' 2>/dev/null || fail-message "no POST reached the webhook yet; run the agent with Cobalt's own key and wait for its answer."
 exit 0

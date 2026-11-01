@@ -74,13 +74,19 @@ The **Lab Topology** tab opens on **The agent nobody approved**, four hops, the 
 
 ## The webhook on the outside
 
-The report goes to a webhook. Stand one up on the client behind r5, outside the factory, and keep its log open in
-**Terminal 2** for the rest of the chapter and the next two:
+The report goes to a webhook. The team's is a small HTTP server on the client behind r5, outside the factory,
+running since track start. It writes every request to a log with the address it came from, and answers `ok`. Make
+sure it is up, and read the one line already there:
 
 ```bash,run
-docker exec -d client sh -c 'socat -v TCP-LISTEN:8080,reuseaddr,fork SYSTEM:"printf \"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok\"" 2>>/tmp/webhook.log'
-sleep 1; docker exec client sh -c 'ls -la /tmp/webhook.log && echo "webhook listening on 172.16.250.10:8080"'
+docker cp $LAB_ROOT/instruqt/bnk-ai-factory-clab/scripts/webhook.py client:/usr/local/bin/webhook.py
+docker exec client sh -c 'pgrep -f webhook.py >/dev/null || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &); sleep 1; echo "webhook listening on 172.16.250.10:8080"'
+docker exec client sh -c 'grep -a "GET /probe" /tmp/webhook.log | tail -1'
 ```
+
+That line is the factory's own setup proving the path: a `GET /probe` from Cobalt's hello pod, and the address it
+came from is `10.203.200.10`, Cobalt's SNAT address, not a pod. Keep the log open in **Terminal 2** for the rest of
+the chapter and the next two:
 
 In Terminal 2:
 
@@ -163,15 +169,16 @@ Watch Terminal 2. The POST arrives at the webhook with the CSV: MRNs, names, amo
 was in it. The key was Cobalt's, the model was Cobalt's, the webhook was reachable through Cobalt's own egress.
 
 ```bash,run
-docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"; grep -aE "MRN|mrn" /tmp/webhook.log | tail -5'
+docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"; grep -aE "MRN|mrn" /tmp/webhook.log | tail -5'
 ```
 
 Where it went out. The pod's connection left through Cobalt's egress, SNATed from Cobalt's pool, on VLAN 103, through
-border1 to r5 and the client. Every hop of that is the designed path for a Cobalt pod:
+border1 to r5 and the client. The webhook saw the SNAT address, and r5 learned that address from border1 as a host
+route. Every hop of that is the designed path for a Cobalt pod:
 
 ```bash,run
 kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}{"\n"}'
-docker exec client sh -c 'grep -aoE "^> [0-9/ :.]+ length=[0-9]+ from=[0-9]+ to=[0-9]+" /tmp/webhook.log | tail -1' 2>/dev/null || true
+docker exec client sh -c 'grep -a "POST /report" /tmp/webhook.log | tail -1'
 docker exec r5 vtysh -c 'show ip route 10.203.200.10' | head -6
 ```
 

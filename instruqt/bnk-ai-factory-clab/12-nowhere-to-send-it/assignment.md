@@ -77,10 +77,11 @@ docker exec client tail -f /tmp/webhook.log
 
 ## The plain pod
 
-The agent of chapter 10 runs as an ordinary pod in `tenant-c`. Before you post from it, put a capture on Cobalt's
-handoff at border1, on the VLAN 103 sub-interface towards r5. That is the last hop inside the factory, and it sees
-every packet that leaves Cobalt's VRF. Use a third terminal if you have one open, or stop the tail in Terminal 2 for
-a moment:
+The agent of chapter 10 runs as an ordinary pod in `tenant-c`. Its image has no shell, so the POST comes from the
+other plain pod in Cobalt's namespace, `hello`, which leaves the factory the same way: same namespace, same
+declaration, same tunnel. Before you post, put a capture on Cobalt's handoff at border1, on the VLAN 103
+sub-interface towards r5. That is the last hop inside the factory, and it sees every packet that leaves Cobalt's VRF.
+Use a third terminal if you have one open, or stop the tail in Terminal 2 for a moment:
 
 ```bash,run
 docker exec border1 sh -c 'command -v tcpdump >/dev/null || apk add --no-cache tcpdump >/dev/null 2>&1; echo ready'
@@ -95,24 +96,27 @@ docker exec border1 tcpdump -ni eth3.103 -c 6 'tcp port 8080'
 Now the POST, from the plain pod:
 
 ```bash,run
-P=$(kubectl -n tenant-c get pod -l app=billing-reconciler -o jsonpath='{.items[0].metadata.name}' 2>/dev/null); [ -n "$P" ] || P=$(kubectl -n tenant-c get pod --no-headers | awk '/billing-reconciler/{print $1; exit}')
+P=$(kubectl -n tenant-c get pod -l app=hello -o jsonpath='{.items[0].metadata.name}'); N=$(kubectl -n tenant-c get pod "$P" -o jsonpath='{.spec.nodeName}'); echo "pod $P on node $N"
 kubectl -n tenant-c exec "$P" -- sh -c 'wget -q -O- -T 5 --post-data "status=ok" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed"'
-docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"'
+docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"; grep -a "POST /report" /tmp/webhook.log | tail -1'
 ```
 
-The POST arrived, and Terminal 2 shows it on VLAN 103 from a `10.203.200.x` address, Cobalt's SNAT pool. The packet
-took the tenant's egress exactly as designed: tunnel to TMM, route domain tenant-c, SNAT, VLAN 103, border1, r5,
-client. That is the path to close.
+The POST arrived, and Terminal 2 shows it on VLAN 103 from `10.203.200.10`, Cobalt's SNAT address, which is also what
+the webhook logged. The packet took the tenant's egress exactly as designed: tunnel to TMM, route domain tenant-c,
+SNAT, VLAN 103, border1, r5, client. That is the path to close.
 
 ## Where the path begins
 
-Egress for a namespace is one declaration on BNK. Read it: which namespaces it steers, which SNAT pool it uses, and
-how TMM sees the tunnel from the node:
+Egress for a namespace is one declaration on BNK. Read it: which namespaces it steers and which SNAT pool it uses.
+Then look at the node the pod runs on. BNK's CSRC daemonset built a VXLAN tunnel there to TMM's internal self IP,
+and wrote one policy rule per steered pod that sends the pod's traffic into it. The pod itself still has Calico's
+default route and knows nothing:
 
 ```bash,run
-kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}  vrf: {.spec.vrf}{"\n"}'
+kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}  vrf: {.spec.pseudoCNIConfig.vxlan.vrf}{"\n"}'
 kubectl -n f5-bnk get f5-spk-egresses -o custom-columns='NAME:.metadata.name,NAMESPACES:.spec.pseudoCNIConfig.namespaces,SNAT:.spec.egressSnatpool'
-docker exec bnk-worker2 ip -br link show type vxlan 2>/dev/null | head -4
+docker exec "$N" sh -c 'ip -br link show type vxlan | grep -v calico; ip rule | grep -vE "lookup (local|main|default)$"'
+kubectl -n tenant-c exec "$P" -- ip route
 ```
 
 Three egress objects, one per tenant, each steering its own namespace into its own route domain. Without the one
@@ -120,13 +124,15 @@ for tenant-c, pods of that namespace have no path through TMM at all.
 
 ## Remove the tenant's egress
 
-Restart the capture in Terminal 2 (the same tcpdump line), then delete the declaration and post again:
+Restart the capture in Terminal 2 (the same tcpdump line), then delete the declaration. CSRC takes the pod's rule
+off the node, and the post has nowhere to go:
 
 ```bash,run
 kubectl -n f5-bnk delete f5-spk-egresses tenant-c-egress
-sleep 10
+sleep 15
+docker exec "$N" sh -c 'ip rule | grep -vE "lookup (local|main|default)$" | grep -c . | sed "s/^/egress rules left on the node: /"'
 kubectl -n tenant-c exec "$P" -- sh -c 'wget -q -O- -T 5 --post-data "status=ok" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed: no path"'
-docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"'
+docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"'
 ```
 
 The count did not move, and Terminal 2 stays empty: border1 never saw a packet, because the pod's connection had no
@@ -140,7 +146,7 @@ leg on the node, not through egress:
 K=$(cat /root/.bnk/aigw/tenant-c.key)
 kubectl -n tenant-c exec "$P" -- sh -c "wget -q -O- -T 20 --header 'Authorization: Bearer $K' http://172.16.100.22/v1/models 2>&1 | head -c 200"; echo
 unset K
-docker exec bnk-worker2 ip route get 172.16.100.22 | head -1
+docker exec "$N" ip route get 172.16.100.22 | head -1
 ```
 
 The node's route for `172.16.100.0/24` points at TMM's internal self IP. The model is reachable. The outside is not.
@@ -148,15 +154,23 @@ The node's route for `172.16.100.0/24` points at TMM's internal self IP. The mod
 ## Put it back the right way
 
 Cobalt needs egress for legitimate work, so the declaration comes back. What changes is who is allowed to run outside
-a sandbox in that namespace, which is a review question, not a routing one. Remove the agent and its key:
+a sandbox in that namespace, which is a review question, not a routing one. Remove the agent and its key. Two
+details of CSRC matter here: it writes a pod's rule only for pods it sees created after the declaration, so Cobalt's
+deployments are restarted once the declaration is back, and it can leave the old tunnel device on a node when a
+declaration goes, so any tunnel no rule uses any more is removed before the new one is built:
 
 ```bash,run
+for n in bnk-control-plane bnk-worker bnk-worker2; do docker exec $n sh -c 'for l in $(ip -br link show type vxlan | grep -v calico | awk "{print \$1}"); do ip rule | grep -q "$l" || ip link del "$l"; done' 2>/dev/null; done
 kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml
 sleep 8; kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress
 kubectl -n tenant-c delete agent billing-reconciler --ignore-not-found
 kubectl -n tenant-c delete secret shadow-key --ignore-not-found
-kubectl -n tenant-c exec deploy/hello -- sh -c 'wget -q -O- -T 5 http://172.16.250.10/ >/dev/null 2>&1; echo "Cobalt egress restored: exit $? (non-zero is fine, the client has no web server)"'
+kubectl -n tenant-c rollout restart deploy; kubectl -n tenant-c rollout status deploy --timeout=120s
+sleep 5; kubectl -n tenant-c exec deploy/hello -- sh -c 'wget -q -O- -T 5 --post-data "status=restored" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed"'
+docker exec client sh -c 'grep -a "POST /report" /tmp/webhook.log | tail -1'
 ```
+
+The count moved again, from Cobalt's SNAT address: the exit is back for the pods that remain.
 
 ## Three layers, three catches
 

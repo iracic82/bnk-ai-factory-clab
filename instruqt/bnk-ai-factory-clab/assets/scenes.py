@@ -279,7 +279,7 @@ def c11():
                   ("model", ["sees passed requests only", "flagged never arrives"], {"color": GREEN})],
           arrows=[(GREEN, ""), (PURPLE, "sideband"), (GREEN, "passed")])
     s.row(B, BH, [("flagged", ["HTTP 200 answered by TMM", "X-Guardrail: blocked", "reads like a model reply"], {"color": PINK}),
-                  ("the agent, rerun", ["same agent, key and task", "the export it read is flagged", "webhook count unchanged"], {"color": YELLOW}),
+                  ("the agent, rerun", ["same agent, key and task", "its first model call is flagged", "webhook count unchanged"], {"color": YELLOW}),
                   ("attach and detach", ["kubectl apply -f 50-attach-tenant-c", "same NetPolicy shape as ch 5 and 6", "kubectl delete -f takes it off"], {})])
     s.strip(C, CH, "content inspection where the content flows",
             ["in TMM, on the tenant's route, before the model · the verdict comes from the scanner, the enforcement and the record from the data plane", "chapter 12 is the case the scanner cannot see: a clean prompt"])

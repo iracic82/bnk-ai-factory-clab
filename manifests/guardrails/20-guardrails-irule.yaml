@@ -76,10 +76,19 @@ spec:
       }
 
       if { $verdict ne "pass" } {
-        # The JSON sits in braces: inside a double-quoted Tcl string the [ ] of "choices":[...] would be
-        # command substitution, and the f5validate webhook rejects the whole iRule ("undefined procedure").
-        set blocked {{"guardrail":"blocked","reason":"flagged by policy or not scannable","choices":[{"message":{"role":"assistant","content":"This request was blocked by the BNK guardrail policy before it reached the model."}}]}}
-        HTTP::respond 200 content $blocked "Content-Type" "application/json" "X-Guardrail" "blocked"
+        # Two shapes of the same block, so every caller reads it as the model's reply and stops. An agent
+        # runtime that asked for a streamed completion ("stream":true, kagent's default) reads server-sent
+        # events and ignores a plain JSON body: it gets one chunk and [DONE]. Everyone else gets a complete
+        # chat completion. Both sit in braces: inside a double-quoted Tcl string the [ ] of "choices":[...]
+        # would be command substitution, and the f5validate webhook rejects the whole iRule ("undefined procedure").
+        set blocked_json {{"id":"guardrail","object":"chat.completion","created":0,"model":"guardrail","guardrail":"blocked","reason":"flagged by policy or not scannable","choices":[{"index":0,"message":{"role":"assistant","content":"This request was blocked by the BNK guardrail policy before it reached the model."},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}}
+        set blocked_chunk {{"id":"guardrail","object":"chat.completion.chunk","created":0,"model":"guardrail","choices":[{"index":0,"delta":{"role":"assistant","content":"This request was blocked by the BNK guardrail policy before it reached the model."},"finish_reason":"stop"}]}}
+        set done {[DONE]}
+        if { [string match {*"stream":true*} $body] || [string match {*"stream": true*} $body] } {
+          HTTP::respond 200 content "data: $blocked_chunk\n\ndata: $done\n\n" "Content-Type" "text/event-stream" "X-Guardrail" "blocked"
+        } else {
+          HTTP::respond 200 content $blocked_json "Content-Type" "application/json" "X-Guardrail" "blocked"
+        }
         return
       }
 

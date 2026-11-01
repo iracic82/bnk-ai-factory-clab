@@ -188,3 +188,44 @@ for t in a b c; do
   done
   printf '  tenant-%s %-16s %s\n' "$t" "$vip" "$code"
 done
+
+step "the webhook behind r5, and the egress path to it from a Cobalt pod (CSRC tunnel, SNAT, VLAN 103, border1, r5)"
+# The team webhook of chapters 10 to 13 runs on the client, outside the factory. It starts here so the egress path
+# can be proven once the fabric is up, with a GET /probe the chapters do not count (they count POST /report).
+docker cp "$REPO_ROOT/instruqt/bnk-ai-factory-clab/scripts/webhook.py" client:/usr/local/bin/webhook.py
+docker exec client sh -c 'pgrep -f webhook.py >/dev/null || (nohup python3 /usr/local/bin/webhook.py /tmp/webhook.log 8080 >/dev/null 2>&1 &); sleep 1; pgrep -f webhook.py >/dev/null' \
+  || warn "the webhook did not start on the client"
+# CSRC is the daemonset that builds, on every node, the VXLAN tunnel to TMM's internal self IP and one policy rule
+# per steered pod (the EVE lab shows vxlan100 and "ip rule | grep egress" on its nodes). It is a chart of its own in
+# the release manifest (charts/csrc), deployed by the lifecycle operator into the core namespace, not next to TMM.
+# A kind node starts with the kernel's three rules (local, main, default); everything beyond them here is CSRC's.
+csrc_ds=$(kubectl get ds -A --no-headers 2>/dev/null | grep -i csrc || true)
+if [ -n "$csrc_ds" ]; then echo "$csrc_ds" | awk '{printf "   csrc daemonset %s/%s  desired %s  ready %s\n", $1, $2, $3, $5}'
+else warn "no CSRC daemonset in any namespace: pseudoCNI is not deployed, tenant pods have no egress"; fi
+for n in bnk-control-plane bnk-worker bnk-worker2; do
+  t=$(docker exec "$n" sh -c 'ip -br link show type vxlan 2>/dev/null' | awk '!/calico/{print $1}' | paste -sd,)
+  r=$(docker exec "$n" ip rule 2>/dev/null | grep -vcE 'lookup (local|main|default)$' || true)
+  printf '   %-18s tunnels: %-16s egress policy rules: %s\n' "$n" "${t:-none}" "${r:-0}"
+done
+probe=""
+for _ in $(seq 1 12); do
+  probe=$(kubectl -n tenant-c exec deploy/hello -- wget -q -O- -T 5 http://172.16.250.10:8080/probe 2>&1 || true)
+  [ "$probe" = ok ] && break
+  sleep 10
+done
+if [ "$probe" = ok ]; then
+  ok "a Cobalt pod reached the webhook: $(docker exec client sh -c 'grep -a "GET /probe" /tmp/webhook.log | tail -1')"
+else
+  warn "no path from tenant-c to the webhook behind r5 (wget: ${probe:-no output}); chapters 10 and 12 need it. CSRC's state:"
+  kubectl get pods -A -o wide --no-headers 2>/dev/null | grep -i csrc | awk '{printf "      %s/%s %s restarts=%s node=%s\n", $1, $2, $4, $5, $8}'
+  cp=$(kubectl get pods -A --no-headers 2>/dev/null | grep -i csrc | head -1 | awk '{print $1 " " $2}')
+  [ -n "$cp" ] && kubectl -n "${cp% *}" logs "${cp#* }" --all-containers --tail=500 2>/dev/null | grep -iE 'error|fail|vxlan|rule|egress|tunnel|address' | tail -12 | cut -c1-220 | sed 's/^/      /'
+  for c in $(kubectl -n f5-bnk get cm -o name 2>/dev/null | grep -i tmmcnfmappings); do
+    kubectl -n f5-bnk get "$c" -o jsonpath='{.data.vxlanInfo}' 2>/dev/null | python3 -c '
+import json, sys
+try:
+    for v in json.load(sys.stdin).get("pseudocni-vxlan-config", []): print("      vxlan", v.get("name"), "tmm ifaces", v.get("tmmassignedifaces"))
+except Exception as e: print("      (vxlanInfo unreadable:", e, ")")'
+  done
+  kubectl get felixconfiguration default -o jsonpath='      felix externalNodesList={.spec.externalNodesList} natOutgoingFilter={.spec.iptablesNATOutgoingInterfaceFilter}{"\n"}' 2>/dev/null
+fi

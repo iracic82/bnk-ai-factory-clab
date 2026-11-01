@@ -5,8 +5,8 @@ cat > /root/incident-timeline.md <<'EOF'
 
 1. Deployed: agent `billing-reconciler` in tenant-c, outside any sandbox.          (kubectl, chapter 10)
 2. First run refused: Aurora's key on Cobalt's route.                               (Polaris, tenant-c, 401)
-3. Second run passed: Cobalt's own key; the export reached the webhook.             (Polaris + webhook log)
+3. Second run passed with Cobalt's own key, and the export reached the webhook.     (Polaris + webhook log)
 4. Third run stopped in TMM: guardrail verdict `flagged`, X-Guardrail: blocked.     (NetPolicy guardrails-tenant-c)
-5. Clean POST: sandbox refused it; plain pod lost its exit when the egress declaration was removed. (OpenShell log, border1)
+5. Clean POST: the sandbox refused it, and the plain pod lost its exit when the egress declaration was removed. (OpenShell log, border1)
 EOF
 exit 0

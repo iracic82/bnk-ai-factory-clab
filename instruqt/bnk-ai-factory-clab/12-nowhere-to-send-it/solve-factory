@@ -4,7 +4,10 @@ export KUBECONFIG=/root/lab/clab/kubeconfig LAB_ROOT=/root/lab
 openshell sandbox exec --name tenant-c-agent -- python3 -c 'import urllib.request as u
 try: u.urlopen(u.Request("http://172.16.250.10:8080/report", data=b"status=ok"), timeout=8)
 except Exception: pass' >/dev/null 2>&1 || true
+for n in bnk-control-plane bnk-worker bnk-worker2; do docker exec $n sh -c 'for l in $(ip -br link show type vxlan | grep -v calico | awk "{print \$1}"); do ip rule | grep -q "$l" || ip link del "$l"; done' >/dev/null 2>&1; done
 kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml >/dev/null
 kubectl -n tenant-c delete agent billing-reconciler --ignore-not-found >/dev/null 2>&1
 kubectl -n tenant-c delete secret shadow-key --ignore-not-found >/dev/null 2>&1
+kubectl -n tenant-c rollout restart deploy >/dev/null 2>&1 || true
+kubectl -n tenant-c rollout status deploy --timeout=120s >/dev/null 2>&1 || true
 exit 0
