@@ -90,7 +90,7 @@ attached to it and only the tenant paths in it. That is the surface the client s
 
 ```bash,run
 kubectl -n f5-bnk get gateway/agents-gw; kubectl -n kagent get httproute
-kubectl -n kagent get httproute kagent -o jsonpath='{range .spec.rules[*]}{.matches[0].path.value}{"\n"}{end}'
+kubectl -n kagent get httproute kagent -o jsonpath='{range .spec.rules[0].matches[*]}{.path.value}{"\n"}{end}'
 ```
 
 ## Ask Aurora's assistant
@@ -116,10 +116,10 @@ kubectl -n tenant-a logs deploy/assistant -f --tail=5
 ```
 
 Through the tenant's own published app, which is how Aurora's users will reach it. A BNK Gateway `tenant-gw` in
-tenant-a on `172.16.100.16` fronts a small web app that calls the assistant:
+tenant-a on `172.16.100.16` carries an L4Route to a small web app that calls the assistant:
 
 ```bash,run
-kubectl -n tenant-a get gateway/tenant-gw httproute 2>/dev/null | head -4
+kubectl -n tenant-a get gateway tenant-gw; kubectl -n tenant-a get l4routes.gateway.k8s.f5.com
 docker exec client curl -s -m 180 http://172.16.100.16/api/ask -H 'Content-Type: application/json' -d '{"question":"Where do I run, and how does my traffic leave the factory?"}' | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("answer", d))'
 ```
 
