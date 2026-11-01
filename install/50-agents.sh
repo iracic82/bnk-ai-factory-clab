@@ -99,7 +99,8 @@ if ! command -v go >/dev/null || ! go version | grep -q "go$GO"; then
   echo "   go $GO is not on PATH ($PATH); installing to /usr/local/go"
   curl -sSfL "https://go.dev/dl/go$GO.linux-amd64.tar.gz" | tar -xz -C /usr/local || fail "go $GO: download or unpack failed"
 fi
-export PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=auto
+export PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=auto GOPATH=/root/go GOMODCACHE=/root/go/pkg/mod GOCACHE=/root/.cache/go-build
+echo "   $(go version 2>&1) HOME=$HOME user=$(id -un) GOCACHE=$GOCACHE"
 # 0.0.9 is the Substrate the kagent 0.10.4 chart declares as its dependency (Chart.yaml) and its Go module pins.
 # 0.0.11 was tried first: its router's agentgateway reads a servicedns credential bundle that the chart's volume never
 # writes (fixed upstream in 0.0.13, which also moves to Postgres and a different bootstrap); 0.0.9's router does not
