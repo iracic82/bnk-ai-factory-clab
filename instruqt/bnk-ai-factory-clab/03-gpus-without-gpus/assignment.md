@@ -189,7 +189,7 @@ are real counts on simulated text, and it publishes Dynamo's component metrics, 
 
 ```bash,run
 kubectl -n aigw-models get pods -o wide --no-headers | awk '{printf "%-44s %-10s %s\n", $1, $3, $7}'
-curl -s 'http://127.0.0.1:30909/api/v1/query?query=sum by (pod) (dynamo_component_inflight_requests)' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), "in flight:", r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
+curl -sG http://127.0.0.1:30909/api/v1/query --data-urlencode 'query=sum by (pod) (dynamo_component_inflight_requests)' | python3 -c 'import json,sys; [print(" ", r["metric"].get("pod","?"), "in flight:", r["value"][1]) for r in json.load(sys.stdin)["data"]["result"]]'
 curl -s 'http://127.0.0.1:30909/api/v1/query?query=DCGM_FI_DEV_GPU_UTIL' | python3 -c 'import json,sys; d=json.load(sys.stdin)["data"]["result"]; print("  DCGM series:", len(d))'
 ```
 
