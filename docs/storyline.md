@@ -80,7 +80,7 @@ About four hours. Chapters 10 to 12 are the incident; 5 to 8 introduce what they
   JWT validation in front of both, and iRules for what the CRDs do not express.
 - **CalypsoAI** is reached the way the lb POC reaches it: `POST /backend/v1/scans`, bearer token, verdict in
   `result.outcome` (`cleared`, `flagged`, `redacted`). With `CALYPSO_API_KEY` set the sideband goes to
-  `us2.calypsoai.app` through a TLS egress bridge (F5VirtualServer + Pool + ServerSSL). Without it the lab runs
+  `us1.calypsoai.app` (the region of the lab key; AI_CALYPSO_URL overrides it) through a TLS egress bridge (F5VirtualServer + Pool + ServerSSL). Without it the lab runs
   the mock from the kv lab, extended to flag MRNs, national IDs, card numbers and the exfiltration verbs the
   shadow agent uses. Chapter 10 prints which one is live; the iRule fails closed either way.
 - **OpenShell 0.1.x** enforces policy in the kernel on file access, system calls and network connections;

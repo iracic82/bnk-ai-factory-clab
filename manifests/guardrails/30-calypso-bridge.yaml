@@ -17,7 +17,7 @@ data:
     import json, os, ssl, urllib.request, urllib.error
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-    UPSTREAM = os.environ.get("CALYPSO_URL", "https://us2.calypsoai.app/backend/v1/scans")
+    UPSTREAM = os.environ.get("CALYPSO_URL", "https://us1.calypsoai.app/backend/v1/scans")
     TOKEN = open("/secrets/api-key").read().strip()
     PROJECT = os.environ.get("CALYPSO_PROJECT_ID", "")
     CTX = ssl.create_default_context()
@@ -85,7 +85,7 @@ spec:
         image: python:3.12-slim
         command: ["python3", "/app/bridge.py"]
         env:
-        - {name: CALYPSO_URL, value: "https://us2.calypsoai.app/backend/v1/scans"}
+        - {name: CALYPSO_URL, value: "https://us1.calypsoai.app/backend/v1/scans"}
         - name: CALYPSO_PROJECT_ID
           valueFrom: {secretKeyRef: {name: calypso, key: project-id, optional: true}}
         ports: [{name: http, containerPort: 8080}]

@@ -29,7 +29,7 @@ if [ -s "$SECRETS_DIR/calypso-api-key" ]; then
     $( [ -s "$SECRETS_DIR/calypso-project-id" ] && echo --from-file=project-id="$SECRETS_DIR/calypso-project-id" ) \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   CALYPSO_URL=$(cat "$SECRETS_DIR/calypso-url" 2>/dev/null || true)
-  sub "$M/30-calypso-bridge.yaml" | sed "s|https://us2.calypsoai.app/backend/v1/scans|${CALYPSO_URL:-https://us2.calypsoai.app/backend/v1/scans}|" | kubectl apply -f - >/dev/null
+  sub "$M/30-calypso-bridge.yaml" | sed "s|https://us1.calypsoai.app/backend/v1/scans|${CALYPSO_URL:-https://us1.calypsoai.app/backend/v1/scans}|" | kubectl apply -f - >/dev/null
   kubectl -n guardrails rollout status deploy/calypso-bridge --timeout=180s >/dev/null
   # The bridge turns every upstream failure into "flagged" with a reason, and a scanner that flags a clean sentence
   # would block every request of chapter 11 (play 6: the key answered 401 and "What is the capital of France" was
