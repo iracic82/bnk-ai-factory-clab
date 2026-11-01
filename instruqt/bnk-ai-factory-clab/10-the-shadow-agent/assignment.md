@@ -128,7 +128,7 @@ The pod is running. Try to reach it the way a client would, through the agents g
 ```bash,run
 docker exec client curl -s -m 30 http://172.16.100.14/api/a2a/tenant-c/billing-reconciler/ -H 'Content-Type: application/json' -d '{
   "jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m1",
-  "parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}' -o /dev/null -w 'agents gateway: HTTP %{http_code}\n'
+  "parts":[{"kind":"text","text":"Run the nightly reconciliation: call billing_export, build the CSV, then call post_report to the team webhook and tell me the HTTP status."}]}}}' -o /dev/null -w 'agents gateway: HTTP %{http_code}\n'
 kubectl -n kagent get httproute kagent -o jsonpath='{range .spec.rules[0].matches[*]}{.path.value}{"\n"}{end}' | sed 's/^/  published: /'
 ```
 
@@ -139,7 +139,7 @@ to it the way kagent allows inside the cluster, through the controller's own A2A
 ```bash,run
 ask_shadow() { kubectl -n kagent run shadow-client-$RANDOM --rm -i --quiet --restart=Never --image=python:3.12-slim -- python3 -c '
 import json, urllib.request as u
-body={"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m-'$RANDOM'","parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}
+body={"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m-'$RANDOM'","parts":[{"kind":"text","text":"Run the nightly reconciliation: call billing_export, build the CSV, then call post_report to the team webhook and tell me the HTTP status."}]}}}
 r=u.Request("http://kagent-controller.kagent.svc:8083/api/a2a/tenant-c/billing-reconciler/", data=json.dumps(body).encode(), headers={"Content-Type":"application/json"})
 d=json.load(u.urlopen(r, timeout=240)); res=d.get("result",{})
 parts=[p.get("text","") for a in res.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in res.get("status",{}).get("message",{}).get("parts",[])]
@@ -162,11 +162,13 @@ namespace, and nothing stops them reading it.
 ```bash,run
 kubectl -n tenant-c get secret aigw-key -o jsonpath='{.data.token}' | base64 -d | xargs -I{} kubectl -n tenant-c create secret generic shadow-key --from-literal=token={} --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n tenant-c rollout restart deploy/billing-reconciler; kubectl -n tenant-c rollout status deploy/billing-reconciler --timeout=180s
-ask_shadow
+before=$(docker exec client grep -ac "POST /report" /tmp/webhook.log); for i in 1 2 3; do ask_shadow; sleep 3; [ "$(docker exec client grep -ac "POST /report" /tmp/webhook.log)" -gt "$before" ] && break; echo "--- the model skipped the post this time (a 1.5B model does that now and then); asking again"; done
 ```
 
 Watch Terminal 2. The POST arrives at the webhook with the CSV: MRNs, names, amounts. Nothing on the way asked what
-was in it. The key was Cobalt's, the model was Cobalt's, the webhook was reachable through Cobalt's own egress.
+was in it. The key was Cobalt's, the model was Cobalt's, the webhook was reachable through Cobalt's own egress. The
+loop is there because a 1.5B model sometimes answers "posted" without calling the tool. The agent's own log shows
+every tool it really ran, which is the first thing chapter 13 reads.
 
 ```bash,run
 docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"; grep -aE "MRN|mrn" /tmp/webhook.log | tail -5'

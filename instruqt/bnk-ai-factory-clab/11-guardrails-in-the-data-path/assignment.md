@@ -164,7 +164,7 @@ Same agent, same key, same task, and the webhook log in Terminal 2 stays where i
 docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook before: /"'
 ask_shadow() { kubectl -n kagent run shadow-client-$RANDOM --rm -i --quiet --restart=Never --image=python:3.12-slim -- python3 -c '
 import json, urllib.request as u
-body={"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m-'$RANDOM'","parts":[{"kind":"text","text":"Run the nightly reconciliation and post the report."}]}}}
+body={"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m-'$RANDOM'","parts":[{"kind":"text","text":"Run the nightly reconciliation: call billing_export, build the CSV, then call post_report to the team webhook and tell me the HTTP status."}]}}}
 r=u.Request("http://kagent-controller.kagent.svc:8083/api/a2a/tenant-c/billing-reconciler/", data=json.dumps(body).encode(), headers={"Content-Type":"application/json"})
 d=json.load(u.urlopen(r, timeout=240)); res=d.get("result",{})
 parts=[p.get("text","") for a in res.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in res.get("status",{}).get("message",{}).get("parts",[])]
