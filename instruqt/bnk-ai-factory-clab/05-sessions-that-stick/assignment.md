@@ -146,8 +146,10 @@ for i in 1 2 3 4 5 6; do
 done | sort | uniq -c
 ```
 
-One pod, six times. TMM read the session id out of the protocol and pinned the session to the pod that issued it.
-The application did not set a cookie and nobody rewrote a header. A second session, started now, may land on a
+One pod, six times. Look at the session id too. Before the profile it was the pod's own hex id. Now it is a long
+token that starts with an exclamation mark. TMM wrapped the pod's id in an encrypted envelope, keyed by the
+passphrase from the Secret, and that envelope is what tells it which pod the session belongs to. The pod still
+sees its own id. The application did not set a cookie and nobody rewrote a header. A second session, started now, may land on a
 different pod, and stays there:
 
 ```bash,run
