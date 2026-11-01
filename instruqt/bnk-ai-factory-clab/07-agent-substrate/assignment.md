@@ -129,15 +129,17 @@ The answer comes from a worker, through the AI Gateway's lab tenant.
 
 [button label="Open kagent" variant="success"](tab-3)
 
-From the terminal, the same question through A2A on the agents gateway. Note the path. A sandbox agent has no
-Service of its own, so kagent serves it under `/api/a2a-sandboxes/` instead of `/api/a2a/`, and the agents gateway's
-route claims exactly that one path for the concierge and nothing else in the kagent namespace:
+From the terminal, the same question through A2A on the agents gateway. Two details differ from the tenant
+assistants. A sandbox agent has no Service of its own, so kagent serves it under `/api/a2a-sandboxes/` instead of
+`/api/a2a/`, and the agents gateway's route claims exactly that one path for the concierge and nothing else in the
+kagent namespace. And the message carries a `contextId`, because one session is one actor. Without it kagent has no
+actor to send the message to and says so:
 
 ```bash,run
 kubectl -n kagent get httproute kagent -o jsonpath='{range .spec.rules[0].matches[*]}{.path.value}{"\n"}{end}' | sed 's/^/  route claims: /'
-docker exec client curl -s -m 120 http://172.16.100.14/api/a2a-sandboxes/kagent/concierge/ -H 'Content-Type: application/json' -d '{
-  "jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m1",
-  "parts":[{"kind":"text","text":"What does a tenant get at Northlight?"}]}}}' | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",d); print(json.dumps(r, indent=1)[:900])'
+docker exec client curl -s -m 180 http://172.16.100.14/api/a2a-sandboxes/kagent/concierge/ -H 'Content-Type: application/json' -d '{
+  "jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m1","contextId":"front-desk-1",
+  "parts":[{"kind":"text","text":"What does a tenant get at Northlight?"}]}}}' | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",d); print(json.dumps(r, indent=1)[:1200])'
 ```
 
 The operator's own agent, `kagent/factory-operator`, is not on that list, so from the client it does not exist.
