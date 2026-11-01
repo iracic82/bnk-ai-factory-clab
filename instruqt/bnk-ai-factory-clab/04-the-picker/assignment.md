@@ -117,7 +117,7 @@ up as "EPP received request" and "EPP sent request body response(s) to proxy" wi
 asking and the picker answering:
 
 ```
-P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1); kubectl -n aigw-models logs -f $P | grep -E 'EPP (received|sent)|dynamo'
+P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1); kubectl -n aigw-models logs -f $P | grep --line-buffered -E 'EPP (received|sent)'
 ```
 
 ```bash,run
@@ -163,7 +163,7 @@ is no `F5VirtualServer` object to read for it. What there is: the Gateway's list
 the InferencePool's status, which says the picker reference resolved and the parent accepted it:
 
 ```bash,run
-kubectl -n f5-bnk get gateway pool-vip -o jsonpath='{.spec.addresses[0].value}: {range .status.listeners[*]}{.name} port={.port} attachedRoutes={.attachedRoutes}{"\n"}{end}'
+kubectl -n f5-bnk get gateway pool-vip -o jsonpath='{.spec.addresses[0].value}: {range .status.listeners[*]}{.name} attachedRoutes={.attachedRoutes}{"\n"}{end}'
 kubectl -n aigw-models get inferencepool model-pool -o jsonpath='{range .status.parents[0].conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 ```
 
