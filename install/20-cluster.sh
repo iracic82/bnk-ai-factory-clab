@@ -50,6 +50,28 @@ if ! docker exec bnk-worker ip link show eth2 >/dev/null 2>&1; then
 fi
 ok "bnk-worker eth2 <-> $BR:tmm-int0 ($(docker exec bnk-worker cat /sys/class/net/eth2/operstate))"
 
+step "an interface CSRC can see on every node (the tunnel endpoint for BNK egress)"
+# BNK's CSRC daemonset reports each node's interfaces to the controller, and the controller picks the one whose
+# address sits in TMM's internal VLAN subnet as that node's VXLAN endpoint. CSRC lists physical devices, vxlan
+# devices and lo; it leaves veths out, and a kind node's eth0 is a veth. Found in play 6 (2026-11-01): CSRC reported
+# only lo and vxlan.calico, the controller logged "Error finding interface on worker node: interface not found"
+# and "Add:Vxlan Empty node data", and no tunnel was ever built. A macvlan child of eth0 with its own address in
+# the kind subnet is reported (verified live: csrc0 in the report, vxlan100-102 built, LocalAddr = its address).
+# Its traffic rides eth0 to the docker bridge like any other MAC, and TMM's internal self IP is a macvlan on
+# another parent (bnk-worker eth2), so the two can talk even on the TMM node. Addresses .241-.243: above anything
+# docker hands out on this network and below TMM's .250. Calico keeps eth0 (nodeAddressAutodetectionV4 in
+# 10-fabric.sh), so this never becomes a node address.
+KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
+KIND_NET3="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3)"; KIND_PLEN="${KIND_SUBNET#*/}"
+i=0
+for n in bnk-control-plane bnk-worker bnk-worker2; do
+  i=$((i+1)); a="$KIND_NET3.24$i/$KIND_PLEN"
+  docker exec "$n" ip link show csrc0 >/dev/null 2>&1 || docker exec "$n" ip link add csrc0 link eth0 type macvlan mode bridge
+  docker exec "$n" ip -4 addr show dev csrc0 | grep -q "inet $a " || docker exec "$n" ip addr add "$a" dev csrc0
+  docker exec "$n" ip link set csrc0 up
+  ok "$n csrc0 $(docker exec "$n" ip -br addr show csrc0 | awk '{print $3}') on eth0"
+done
+
 step "node roles"
 kubectl label node bnk-worker app=f5-tmm --overwrite >/dev/null
 kubectl label node bnk-worker2 workload=ai --overwrite >/dev/null
