@@ -99,7 +99,7 @@ Now the POST, from the plain pod:
 
 ```bash,run
 P=$(kubectl -n tenant-c get pod -l app=hello -o jsonpath='{.items[0].metadata.name}'); N=$(kubectl -n tenant-c get pod "$P" -o jsonpath='{.spec.nodeName}'); echo "pod $P on node $N"
-kubectl -n tenant-c exec "$P" -- sh -c 'wget -q -O- -T 5 --post-data "status=ok" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed"'
+kubectl -n tenant-c exec "$P" -- sh -c 'wget -q -O- -T 5 --post-data "status=ok" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed"'; echo
 docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"; grep -a "POST /report" /tmp/webhook.log | tail -1'
 ```
 
@@ -133,7 +133,7 @@ off the node, and the post has nowhere to go:
 kubectl -n f5-bnk delete f5-spk-egresses tenant-c-egress
 sleep 15
 docker exec "$N" sh -c 'ip rule | grep -vE "lookup (local|main|default)$" | grep -c . | sed "s/^/egress rules left on the node: /"'
-kubectl -n tenant-c exec "$P" -- sh -c 'wget -q -O- -T 5 --post-data "status=ok" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed: no path"'
+kubectl -n tenant-c exec "$P" -- sh -c 'wget -q -O- -T 5 --post-data "status=ok" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed: no path"'; echo
 docker exec client sh -c 'grep -ac "POST /report" /tmp/webhook.log | sed "s/^/POSTs at the webhook: /"'
 ```
 
@@ -168,7 +168,7 @@ sleep 8; kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress
 kubectl -n tenant-c delete agent billing-reconciler --ignore-not-found
 kubectl -n tenant-c delete secret shadow-key --ignore-not-found
 kubectl -n tenant-c rollout restart deploy; kubectl -n tenant-c rollout status deploy --timeout=120s
-sleep 5; kubectl -n tenant-c exec deploy/hello -- sh -c 'wget -q -O- -T 5 --post-data "status=restored" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed"'
+sleep 5; kubectl -n tenant-c exec deploy/hello -- sh -c 'wget -q -O- -T 5 --post-data "status=restored" http://172.16.250.10:8080/report 2>&1 | head -1 || echo "post failed"'; echo
 docker exec client sh -c 'grep -a "POST /report" /tmp/webhook.log | tail -1'
 ```
 
