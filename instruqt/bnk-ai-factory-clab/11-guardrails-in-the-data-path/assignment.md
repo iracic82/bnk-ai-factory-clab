@@ -167,8 +167,7 @@ r=u.Request("http://kagent-controller.kagent.svc:8083/api/a2a/tenant-c/billing-r
 d=json.load(u.urlopen(r, timeout=240)); res=d.get("result",{})
 parts=[p.get("text","") for a in res.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in res.get("status",{}).get("message",{}).get("parts",[])]
 print("\n".join(parts)[:1500] or json.dumps(d)[:800])'; }
-ask_shadow >/dev/null 2>&1 || true
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d.get("result",{}); parts=[p.get("text","") for a in r.get("artifacts",[]) for p in a.get("parts",[])] or [p.get("text","") for p in r.get("status",{}).get("message",{}).get("parts",[])]; print("\n".join(parts)[:800] or json.dumps(d)[:600])'
+ask_shadow
 docker exec client sh -c 'grep -ac "POST /" /tmp/webhook.log | sed "s/^/POSTs at the webhook after:  /"'
 ```
 
