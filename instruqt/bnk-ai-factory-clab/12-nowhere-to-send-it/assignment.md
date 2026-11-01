@@ -71,7 +71,8 @@ sleep 12; openshell logs tenant-c-agent --since 2m --source sandbox 2>/dev/null 
 ```
 
 No packet left. The policy is an allow-list, the webhook is not on it, and the refusal is in the log with the binary
-and the destination (the sandbox hands its log to the gateway every ten seconds, hence the pause). Nothing about the content was consulted. The webhook log in **Terminal 2** has not moved:
+and the destination. The sandbox hands its log to the gateway every ten seconds, hence the pause. Nothing about the
+content was consulted. The webhook log in **Terminal 2** has not moved:
 
 ```
 docker exec client tail -f /tmp/webhook.log

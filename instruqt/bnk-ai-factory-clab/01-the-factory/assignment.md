@@ -79,8 +79,7 @@ docker ps --format '{{.Names}}\t{{.Image}}' | sort | column -t
 ```
 
 Six FRR routers and a client from the topology file, three kind nodes the cluster made, seven registry mirrors
-that fed the build, and ollama. Open the **Lab Topology** tab now and keep it open: it reads these same sources
-every few seconds and colours what is up.
+that fed the build, and ollama. The Lab Topology tab reads these same sources every few seconds.
 
 ## The underlay
 

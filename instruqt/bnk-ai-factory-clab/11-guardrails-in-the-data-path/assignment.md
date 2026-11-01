@@ -82,8 +82,8 @@ connection to the scanner, posts the whole prompt to `/backend/v1/scans`, and re
 the request towards the model. `flagged` makes TMM answer the caller itself with `HTTP::respond 200`, a body that
 reads like a model reply, and a header `X-Guardrail: blocked`. A caller that asked for a streamed completion gets the
 same reply as one server-sent event, so an agent runtime reads it as the model's answer and stops. The scanner mode
-is `mock` unless real CalypsoAI
-credentials were given to the track. The iRule is identical in both cases.
+is `real` when the track was started with CalypsoAI credentials and setup saw the service clear a clean sentence and
+flag an export, and `mock` otherwise. The iRule is identical in both cases.
 
 Ask the scanner directly from inside the cluster, with a harmless sentence and with last night's kind of request:
 

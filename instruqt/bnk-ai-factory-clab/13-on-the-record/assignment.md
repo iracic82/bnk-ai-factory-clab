@@ -88,7 +88,7 @@ curl -sS $API/api/v1/tenants/tenant-c/virtual-keys -H "Authorization: Bearer $TO
 curl -sS $API/api/v1/tenants/tenant-c/models -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(" model:", m.get("name"), m.get("state") or m.get("status") or "") for m in (d.get("data") or d.get("items") or [])]'
 ```
 
-One key, one model, both Cobalt's. Every call the shadow agent made with Cobalt's key is attributed to that key,
+One key, three models, all Cobalt's. Every call the shadow agent made with Cobalt's key is attributed to that key,
 which is the key the sanctioned assistant uses. That is the first finding for the write-up: the record is per key,
 and Cobalt gave two workloads one key. The request history itself, with timestamps, is the console's job:
 
@@ -134,8 +134,8 @@ for s in tenant-a-agent tenant-c-agent; do echo "== $s"; openshell logs $s --sin
 
 Two sandboxes, two kinds of refusal: Aurora's reaching for Borealis's route in chapter 8, Cobalt's reaching for the
 webhook in chapter 12. The gateway keeps the log of the running instance, so if Aurora's list is empty, chapter 8 was
-skipped in this session or its sandbox was stopped and started again since. Neither packet existed on the network, so neither shows in any capture, which is why the
-sandbox's own log is the only record of them.
+skipped in this session or its sandbox was stopped and started again since. Neither packet existed on the network,
+so neither shows in any capture, which is why the sandbox's own log is the only record of them.
 
 ## Prometheus: the load around it
 

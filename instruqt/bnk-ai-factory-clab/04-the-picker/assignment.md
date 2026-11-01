@@ -126,7 +126,7 @@ sleep 2
 ask "Describe the water cycle in three sentences for a ten year old."; counts
 ```
 
-The mocker answers with filler text, which is what it is for; the counters are the point. The second request has
+The mocker answers with filler text, which is what it is for. The counters are the point. The second request has
 a prefix the first one pushed into one worker's KV cache, so the prefix-cache scorer pulls it to that worker: the
 same counter moves twice. A different prompt has no such pull and is free to go to the other one:
 
@@ -153,7 +153,7 @@ wait; counts
 
 Both counters moved, and the burst was not sent to one worker only: the prefill-load and queue scorers outweighed
 the cache scorer, which had nothing to say for twelve different prompts. The mocker answers in milliseconds, so
-`dynamo_component_inflight_requests` is almost always zero when you look; the rate of the total is the graph that
+`dynamo_component_inflight_requests` is almost always zero when you look. The rate of the total is the graph that
 shows the burst.
 
 ## TMM's side of it
@@ -180,5 +180,5 @@ kubectl explain f5-epps.spec.mode | sed -n '1,20p'
 
 ## Checkpoint
 
-The check sends one request through the pool VIP and expects a 200, and expects the picker to have logged at least
-one choice in the last thirty minutes.
+The check sends one request through the pool VIP and expects a 200, and expects at least one decode worker's own
+request counter to show that it has served something.

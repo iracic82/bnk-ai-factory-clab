@@ -122,8 +122,8 @@ sleep 12; openshell logs tenant-a-agent --since 5m --source sandbox 2>/dev/null 
 ```
 
 The Aurora call is `ALLOWED` under the provider's policy, and the Borealis attempt is `Denied` with
-`172.16.100.21:80` and the reason: not allowed by any policy. This is what Borealis's reviewer asked for: not a
-promise that the agent will behave, but a record of each time it did not.
+`172.16.100.21:80` and the reason: not allowed by any policy. This is what Borealis's reviewer asked for: a
+record of each time the agent did not behave, written by the thing that stopped it.
 
 ## Where the key appears
 

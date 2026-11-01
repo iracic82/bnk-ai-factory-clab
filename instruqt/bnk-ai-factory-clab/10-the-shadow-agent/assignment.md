@@ -191,12 +191,10 @@ kagent's eyes it is an agent like any other.
 
 ## Where each layer stood
 
-- **Identity (Polaris keys)**: necessary. A wrong key stopped the agent cold. A right key, which every tenant
-  developer has, let it through.
-- **Content**: nothing read the prompt or the answer. The request to the model carried an export of records and
-  the words "post them", and TMM passed it as it would any chat completion. Chapter 11 puts a scanner in the path.
-- **Reachability**: the webhook was reachable because the pod leaves through Cobalt's VRF like any pod of Cobalt's.
-  Chapter 12 closes that.
+Identity did its part. A wrong key stopped the agent cold, and a right key, which every tenant developer has, let it
+through. Nothing read the content: the request to the model carried an export of records and the words "post them",
+and TMM passed it as it would any chat completion. Chapter 11 puts a scanner in that path. And the webhook was
+reachable because the pod leaves through Cobalt's VRF like any pod of Cobalt's. Chapter 12 closes that.
 
 Leave the agent running. The next two chapters stop it twice, in two different places, without touching it.
 

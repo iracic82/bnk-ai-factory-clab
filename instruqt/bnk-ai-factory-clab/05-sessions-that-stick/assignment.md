@@ -66,8 +66,8 @@ the same idea on the agents gateway.
 The MCP sidecar is reachable inside the cluster only. Give it a BNK Gateway of its own on an address from the pool.
 The Gateway is published by the platform team in BNK's namespace, with its listener open to routes from Aurora's
 namespace, and Aurora owns the HTTPRoute for `/mcp` in its own namespace, the same shape as the pool VIP. The
-manifest also carries the persistence profile and the NetPolicy that attaches it, next to the Gateway in `f5-bnk`;
-they stay unprogrammed until a passphrase Secret exists there. Read it before you apply it:
+manifest also carries the persistence profile and the NetPolicy that attaches it, next to the Gateway in `f5-bnk`.
+They stay unprogrammed until a passphrase Secret exists there. Read it before you apply it:
 
 ```bash,run
 grep -nE '^kind:|^  name:|destinationAddress|value: 172|type: MODEL|passphrase|targetRef|extensionRef' $LAB_ROOT/manifests/chapters/05-mcp-route.yaml
