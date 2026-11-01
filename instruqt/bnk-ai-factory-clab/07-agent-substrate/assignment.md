@@ -147,13 +147,17 @@ The operator's own agent, `kagent/factory-operator`, is not on that list, so fro
 ## Where the model call went
 
 The actor has no cluster network. Its model calls go through Substrate's router, which is the only thing it can
-reach, and the router talks to the AI Gateway route of the lab tenant. Polaris records the call under that tenant:
+reach, and from there to the model the agent's ModelConfig names: the AI Gateway route of the lab tenant, on the
+shared VIP range. Polaris records the call under that tenant, which you can see in the **Polaris** tab:
 
 ```bash,run
 kubectl -n ate-system get svc api atenet-router
-kubectl -n ate-system logs --since=5m $(kubectl -n ate-system get deploy -o name | grep -i router | head -1) 2>/dev/null | grep -iE 'chat/completions|172.16.100' | tail -3
-kubectl -n kagent get sandboxagent concierge -o jsonpath='{.spec.declarative.modelConfig}{"\n"}'
+kubectl -n kagent get sandboxagent concierge -o jsonpath='{.spec.declarative.modelConfig}{"\n"}' | sed 's/^/  model config: /'
+kubectl -n kagent get modelconfig default-model-config -o jsonpath='  model: {.spec.model}  base URL: {.spec.openAI.baseUrl}{"\n"}'
+kubectl -n ate-system logs deploy/atenet-router --since=10m --tail=300 2>/dev/null | grep -iE '172\.16\.100|chat|upstream|proxy' | tail -3 | cut -c1-160
 ```
+
+The base URL is `172.16.100.13`, the lab tenant's route on BNK. The actor never saw a pod IP, a Service name or a node.
 
 ## What it changes
 
