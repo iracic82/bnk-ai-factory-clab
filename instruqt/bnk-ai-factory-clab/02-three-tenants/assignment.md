@@ -73,18 +73,21 @@ sed -n '/name: tenant-a, namespace/,/snat: {type: automap}/p' $LAB_ROOT/manifest
 
 Read the manifest top to bottom: a `Vrf` with its own route domain id, a VLAN leg on interface 1.1 tagged 101 with
 self IP `172.17.101.11`, a `RoutingConfig` that peers with leaf1 inside that VRF, a virtual server, an egress and a
-SNAT pool. Nothing here mentions Borealis or Cobalt. That is the point.
+SNAT pool. Nothing here mentions Borealis or Cobalt. That is the point. The virtual server's READY column may
+still say False with a note about dependent CRs. That status lags behind the data path. The /32 on leaf1 and the
+200 from the client further down are the proof that counts.
 
 TMM holds all of it as one route domain. Ask its routing stack for the tenant's own table:
 
 ```bash,run
 P=$(kubectl -n f5-bnk get pod -l app=f5-tmm -o jsonpath='{.items[0].metadata.name}')
-kubectl -n f5-bnk exec $P -c f5-tmm-routing -- imish -e 'show ip bgp summary' | grep -E 'Neighbor|172.17.101'
-kubectl -n f5-bnk exec $P -c f5-tmm-routing -- imish -e 'show ip route' | grep -E '101\.1|10\.201' | head -6
+kubectl -n f5-bnk exec $P -c f5-tmm-routing -- imish -e 'show ip bgp summary' | grep -E '172.17.101' | head -1 | sed 's/^/peer: /'
+kubectl -n f5-bnk exec $P -c f5-tmm-routing -- imish -e 'show ip route vrf tenant-a' | grep -E '^[CBK]'
 ```
 
-The peer on `172.17.101.1` is leaf1's VLAN 101 address. The routes TMM learned from it are the default and the
-client subnet. The routes TMM announces are below.
+The peer on `172.17.101.1` is leaf1's VLAN 101 address, up for as long as the lab has been running. What TMM takes
+from it is one default route. Everything outside the factory, including the client behind r5, is reached through
+that one route. The connected line is the handoff subnet itself. What TMM announces back is below.
 
 ## What the fabric accepts
 
