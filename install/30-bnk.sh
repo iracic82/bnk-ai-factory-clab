@@ -149,12 +149,14 @@ kubectl explain cneinstance.spec.aiGateway >/dev/null 2>&1 || fail "the CNEInsta
 ok "operator $FLO_CUR -> $FLO_WANT; CNEInstance CRD knows spec.aiGateway"
 
 step "AI features and the EVE network model (patched on; the installer's template has no knob for them)"
-# pseudoCNI must leave pod, service and node-network traffic alone; the node network is whatever docker gave kind
+# pseudoCNI must leave pod, service and node-network traffic alone; the node network is whatever docker gave kind.
+# The VIP network too: a tenant pod reaches its AI route through TMM's internal leg (node route, 35-bnk-network.sh),
+# not through its egress tunnel and the fabric, which is what chapter 12 states and chapters 7-9 rely on.
 KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
 # aiGateway + intelligentLB are what the lab is about. demoMode as on EVE. The legacy network model (Vrf, Vxlan,
 # RoutingConfig) is the only one that carries EVPN in 2.4.1, and the controller registers its Vrf handler only with
 # USE_GATEWAY_SETTINGS=false. OcNOS (ZEBOS_STATE=ocnos) is the routing stack whose BGP comes from GlobalRoutingConfig.
-kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{"advanced":{"pseudoCNI":{"env":[{"name":"EXCLUDE_CIDR","value":"192.168.0.0/16,10.96.0.0/12,'"$KIND_SUBNET"'"}]}}}}' >/dev/null
+kubectl patch cneinstance -n f5-bnk f5-bnk-instance --type merge -p '{"spec":{"advanced":{"pseudoCNI":{"env":[{"name":"EXCLUDE_CIDR","value":"192.168.0.0/16,10.96.0.0/12,'"$KIND_SUBNET"',172.16.100.0/24"}]}}}}' >/dev/null
 # a field the CRD does not know is silently dropped by a merge patch; the warning becomes an error here on purpose
 FEATURES='{"spec":{
   "aiGateway":{"enabled":true,"aiMetrics":true},

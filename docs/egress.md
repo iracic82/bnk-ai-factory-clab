@@ -1,0 +1,63 @@
+# Tenant egress on kind: how the tunnel is built here
+
+Egress is the one BNK feature that reaches into the nodes. A daemonset, CSRC, builds a VXLAN tunnel on every node
+to TMM and writes one policy rule per steered pod. TMM takes the pod's packet out of its tunnel, applies the
+tenant's SNAT address and routes it out of the tenant's VRF. On the EVE lab that just worked, because the nodes
+were VMs with real NICs on a network the fabric could route to. On this VM the nodes are containers on a private
+docker network, and four assumptions failed, one behind the other. I found them in play 6 (2026-11-01), each with
+a capture, and the install now carries the answer to each.
+
+```
+ pod 192.168.x.y (tenant-c)                       TMM (bnk-worker)                      fabric
+ ──────────────────────────                       ────────────────                      ──────
+ cali veth ─► node ip rule "from pod" ─► vxlan1NN ──► int-c  VLAN 203, VRF tenant-c ──► egress listener
+              table: default via 10.0.128.1         (10.249.3.250)                      SNAT 10.203.200.10
+              local 10.249.3.24x dev int-c                                              route: default via leaf1
+              (VLAN sub-interface of eth0)                                              fab-c VLAN 103 ─► border1 ─► r5 ─► client
+```
+
+## What had to change
+
+1. **CSRC sees no veth.** It reports a node's physical, vlan, macvlan and vxlan devices and lo. A kind node has
+   only veths, so the controller found no interface in the tunnel subnet and built nothing. F5's own BNK-on-kind
+   lab gives every node docker macvlan legs for the same reason. Here each node gets VLAN sub-interfaces of eth0
+   named `int-a`, `int-b`, `int-c` (tags 201 to 203, addresses 10.249.1-3.241 to .243). The names avoid "eth0" on
+   purpose: Calico's interface setting is the regular expression `eth0`, and an `eth0.203` made Calico move its own
+   VXLAN endpoint onto the tenant leg.
+2. **The tunnel must live in the tenant's VRF end to end.** The controller programs the tunnel's remote endpoints
+   (the node VTEPs) in the VRF of the F5SPKEgress. With the underlay on TMM's internal VLAN in route domain 0, TMM
+   looked the nodes up inside the tenant VRF, where the only route is the default towards the fabric. EVE's fabric
+   happened to route back to the node network. So each tenant has its own leg on TMM's internal interface: an
+   F5SPKVlan `int-a/b/c` tagged 201 to 203, `vrf: tenant-x`, `internal: true`, self IP 10.249.x.250, and the egress
+   names it as `tmmInterfaceName`. Calico's felix lists those three addresses as external nodes next to the
+   internal self IP, or it drops their VXLAN.
+3. **The firewall.** This instance runs with the AFM firewall ACL on, and an egress listener under AFM forwards only
+   with an enforced policy. One accept-all `F5BigFwPolicy`, `egress-allow`, is named by the three egress objects.
+   I verified enforcement by switching it to reject: the pod got a reset at once.
+4. **Checksums.** A pod's TCP checksum is left for hardware to fill, and on a veth nothing fills it. The kernel and
+   Calico never notice. TMM validates the checksum of what it takes out of the tunnel and drops the SYN after the
+   listener has matched it: 14 connections, no server side, no counter, no log. F5's kind lab turns
+   `tx-checksum-ip-generic` off on the egress vxlan devices after creating the egress objects. CSRC recreates
+   those devices whenever an egress is declared again (chapter 12 does), and the leg interfaces report the feature
+   as fixed, so a small watcher container per node (`csum-<node>`, the netshoot image the lab already has, in the
+   node's network namespace with NET_ADMIN) keeps every CSRC vxlan device at checksum-off.
+
+One more consequence: once egress steers a namespace, everything a pod sends that is not excluded goes into the
+tunnel, including calls to its own AI route on 172.16.100.x. Those are meant to reach TMM through the node's route
+to the internal self IP, which is what chapter 12 says and chapters 7 to 9 rely on, so the VIP network is in
+CSRC's `EXCLUDE_CIDR` with the pod, service and node networks.
+
+## How setup proves it
+
+The last step of `install/35-bnk-network.sh` starts the webhook receiver on the client, lists the CSRC daemonset,
+prints each node's tunnels and policy rules, and sends `GET /probe` from tenant-c's hello pod. The webhook log line
+it prints shows the request arriving from `10.203.200.10`, Cobalt's SNAT address. On failure it prints CSRC's log,
+the controller's tunnel data and felix's settings, which is how play 6 was read.
+
+## Where the facts came from
+
+- `kubectl -n f5-cne-core logs ds/f5-spk-csrc -c spk-csrc`: `NodeNetworkInterfaces response` (what CSRC reports),
+  `CreateAndUpdateVxlanData` (what the controller sent back).
+- `kubectl -n f5-bnk logs deploy/f5-cne-controller -c f5-cne-controller`: the `declTmm.vxlan`, `l2_forward` and
+  `virtual_server` messages, with the route domain of every address.
+- In TMM's debug container: `tcpdump -nnei 0.0`, `tmctl -d blade -i virtual_server_stat`, `fw_rule_stat`.

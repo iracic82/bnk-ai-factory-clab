@@ -1,7 +1,8 @@
 # Per-tenant egress: one F5SPKEgress per application namespace (pseudoCNIConfig.namespaces takes exactly one), each
 # with its own SNAT pool in the tenant's VRF, so a tenant's pods always leave through that tenant's VRF with that
 # tenant's addresses (leaf1 accepts the pool from TMM, border1 passes it to r5). pseudoCNIConfig.vxlan.create builds the
-# node -> TMM tunnel on the internal leg. addressList: one inner list per TMM replica. The webhook wants the tunnel's
+# node -> TMM tunnel on the tenant's own leg (int-a/b/c in 10-network.yaml), the one VLAN of the tenant VRF on TMM's
+# internal interface: that keeps the tunnel's endpoints, the pod rules and the SNAT exit in one route domain. addressList: one inner list per TMM replica. The webhook wants the tunnel's
 # IPv4 and IPv6 subnets together; the IPv6 one is unused.
 # The firewall: this BNK instance runs with the AFM firewall ACL on (bnk-deploy host profile), and an egress listener
 # under AFM forwards nothing unless the F5SPKEgress names an enforced policy. Without it (play 6, 2026-11-01) TMM
@@ -34,7 +35,7 @@ spec:
     appPodInterface: eth0
     vxlan:
       create: true
-      tmmInterfaceName: internal
+      tmmInterfaceName: int-a
       vrf: tenant-a
       ipv4Subnet: 10.0.0.0
       ipv4PrefixLen: 18
@@ -61,7 +62,7 @@ spec:
     appPodInterface: eth0
     vxlan:
       create: true
-      tmmInterfaceName: internal
+      tmmInterfaceName: int-b
       vrf: tenant-b
       ipv4Subnet: 10.0.64.0
       ipv4PrefixLen: 18
@@ -88,7 +89,7 @@ spec:
     appPodInterface: eth0
     vxlan:
       create: true
-      tmmInterfaceName: internal
+      tmmInterfaceName: int-c
       vrf: tenant-c
       ipv4Subnet: 10.0.128.0
       ipv4PrefixLen: 18

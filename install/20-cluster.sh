@@ -50,26 +50,53 @@ if ! docker exec bnk-worker ip link show eth2 >/dev/null 2>&1; then
 fi
 ok "bnk-worker eth2 <-> $BR:tmm-int0 ($(docker exec bnk-worker cat /sys/class/net/eth2/operstate))"
 
-step "an interface CSRC can see on every node (the tunnel endpoint for BNK egress)"
-# BNK's CSRC daemonset reports each node's interfaces to the controller, and the controller picks the one whose
-# address sits in TMM's internal VLAN subnet as that node's VXLAN endpoint. CSRC lists physical devices, vxlan
-# devices and lo; it leaves veths out, and a kind node's eth0 is a veth. Found in play 6 (2026-11-01): CSRC reported
-# only lo and vxlan.calico, the controller logged "Error finding interface on worker node: interface not found"
-# and "Add:Vxlan Empty node data", and no tunnel was ever built. A macvlan child of eth0 with its own address in
-# the kind subnet is reported (verified live: csrc0 in the report, vxlan100-102 built, LocalAddr = its address).
-# Its traffic rides eth0 to the docker bridge like any other MAC, and TMM's internal self IP is a macvlan on
-# another parent (bnk-worker eth2), so the two can talk even on the TMM node. Addresses .241-.243: above anything
-# docker hands out on this network and below TMM's .250. Calico keeps eth0 (nodeAddressAutodetectionV4 in
-# 10-fabric.sh), so this never becomes a node address.
-KIND_SUBNET=$(docker network inspect kind -f '{{range .IPAM.Config}}{{if .Gateway}}{{.Subnet}} {{end}}{{end}}' | tr ' ' '\n' | grep -E '^[0-9.]+/' | head -1)
-KIND_NET3="$(echo "${KIND_SUBNET%/*}" | cut -d. -f1-3)"; KIND_PLEN="${KIND_SUBNET#*/}"
+step "a tenant leg on every node: the underlay of BNK's egress tunnels, one VLAN per tenant VRF"
+# BNK's CSRC daemonset reports each node's interfaces to the controller, and the controller picks, per F5SPKEgress,
+# the node interface whose address sits in the subnet of the TMM VLAN the egress names (tmmInterfaceName). Two facts
+# of this build shape what that interface has to be (play 6, 2026-11-01, each verified live):
+#  - CSRC lists physical devices, vlan and macvlan devices, vxlan devices and lo. It leaves veths out, and a kind
+#    node's eth0 is a veth: with nothing else the controller logged "Error finding interface on worker node" and
+#    built no tunnel. F5's own BNK-on-kind lab gives the nodes docker macvlan legs for the same reason.
+#  - The egress tunnel of a tenant must sit entirely in that tenant's VRF. The controller programs the tunnel's
+#    remote endpoints in the VRF of the F5SPKEgress, so an underlay in route domain 0 (TMM's internal VLAN) leaves
+#    TMM looking the nodes up in the tenant VRF, whose only route is the default towards the fabric. On EVE the
+#    fabric happened to route back to the node network; the kind network is private to this VM. So each tenant
+#    gets its own leg: a tagged VLAN on TMM's 1.2 inside the tenant VRF (manifests/bnk/10-network.yaml, int-a/b/c,
+#    tags 201-203, self IP .250), and on every node a VLAN sub-interface of eth0 with the matching tag and .241-.243.
+#    The tags ride eth0 and the docker bridge like any frame and reach TMM's 1.2 through bnk-worker's eth2.
+# Names must not contain "eth0": Calico's node interface setting is the regular expression eth0 (10-fabric.sh), and
+# an eth0.203 made Calico move its own VXLAN endpoint onto the tenant leg (play 6).
+KIND_PLEN=24
 i=0
 for n in bnk-control-plane bnk-worker bnk-worker2; do
-  i=$((i+1)); a="$KIND_NET3.24$i/$KIND_PLEN"
-  docker exec "$n" ip link show csrc0 >/dev/null 2>&1 || docker exec "$n" ip link add csrc0 link eth0 type macvlan mode bridge
-  docker exec "$n" ip -4 addr show dev csrc0 | grep -q "inet $a " || docker exec "$n" ip addr add "$a" dev csrc0
-  docker exec "$n" ip link set csrc0 up
-  ok "$n csrc0 $(docker exec "$n" ip -br addr show csrc0 | awk '{print $3}') on eth0"
+  i=$((i+1))
+  for t in a:201:1 b:202:2 c:203:3; do
+    leg="int-${t%%:*}"; tag=$(echo "$t" | cut -d: -f2); a="10.249.$(echo "$t" | cut -d: -f3).24$i/$KIND_PLEN"
+    docker exec "$n" ip link show "$leg" >/dev/null 2>&1 || docker exec "$n" ip link add "$leg" link eth0 type vlan id "$tag"
+    docker exec "$n" ip -4 addr show dev "$leg" | grep -q "inet $a " || docker exec "$n" ip addr add "$a" dev "$leg"
+    docker exec "$n" ip link set "$leg" up
+  done
+  ok "$n $(docker exec "$n" ip -br addr show type vlan | awk '{printf "%s %s  ", $1, $3}')"
+done
+
+step "checksum offload off on the egress tunnels (the F5 BNK-on-kind lab's hack, kept current by a watcher per node)"
+# A pod's TCP checksum is left for hardware to fill, and on a veth nothing ever fills it. The kernel and Calico do not
+# care, but TMM validates the checksum of what comes out of the tunnel and drops the SYN after the egress listener
+# has already matched it: no counter, no log, 14 connections and no server side (play 6). F5's BNK-on-kind lab turns
+# tx-checksum-ip-generic off on the egress vxlan devices after creating the F5SPKEgress objects. CSRC recreates those
+# devices whenever an egress is declared again (chapter 12 does that), and the macvlan and vlan legs report the
+# feature as fixed, so a small watcher per node keeps every CSRC vxlan device at checksum-off. It runs in the node's
+# network namespace from the netshoot image the lab already has (the client container), with NET_ADMIN only.
+for n in bnk-control-plane bnk-worker bnk-worker2; do
+  docker rm -f "csum-$n" >/dev/null 2>&1 || true
+  docker run -d --name "csum-$n" --restart unless-stopped --net "container:$n" --cap-add NET_ADMIN nicolaka/netshoot:v0.14 sh -c '
+    while true; do
+      for v in $(ip -br link show type vxlan 2>/dev/null | grep -v calico | cut -d@ -f1 | awk "{print \$1}"); do
+        ethtool -k "$v" 2>/dev/null | grep -q "tx-checksum-ip-generic: on" && ethtool -K "$v" tx-checksum-ip-generic off >/dev/null 2>&1 && echo "$(date -u +%FT%TZ) $v tx-checksum-ip-generic off"
+      done
+      sleep 2
+    done' >/dev/null
+  ok "csum-$n watching $n for CSRC vxlan devices"
 done
 
 step "node roles"

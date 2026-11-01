@@ -108,14 +108,14 @@ SNAT, VLAN 103, border1, r5, client. That is the path to close.
 ## Where the path begins
 
 Egress for a namespace is one declaration on BNK. Read it: which namespaces it steers and which SNAT pool it uses.
-Then look at the node the pod runs on. BNK's CSRC daemonset built a VXLAN tunnel there to TMM's internal self IP,
-and wrote one policy rule per steered pod that sends the pod's traffic into it. The pod itself still has Calico's
-default route and knows nothing:
+Then look at the node the pod runs on. BNK's CSRC daemonset built a VXLAN tunnel there to TMM's leg for Cobalt,
+`int-c`, a VLAN that lives inside Cobalt's VRF, and wrote one policy rule per steered pod that sends the pod's traffic
+into it. The pod itself still has Calico's default route and knows nothing:
 
 ```bash,run
 kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='namespaces: {.spec.pseudoCNIConfig.namespaces}  snat pool: {.spec.egressSnatpool}  vrf: {.spec.pseudoCNIConfig.vxlan.vrf}{"\n"}'
 kubectl -n f5-bnk get f5-spk-egresses -o custom-columns='NAME:.metadata.name,NAMESPACES:.spec.pseudoCNIConfig.namespaces,SNAT:.spec.egressSnatpool'
-docker exec "$N" sh -c 'ip -br link show type vxlan | grep -v calico; ip rule | grep -vE "lookup (local|main|default)$"'
+docker exec "$N" sh -c 'ip -br addr show int-c; ip -br link show type vxlan | grep -v calico; ip rule | grep -vE "lookup (local|main|default)$"'
 kubectl -n tenant-c exec "$P" -- ip route
 ```
 

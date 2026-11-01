@@ -129,9 +129,10 @@ sudo ip route replace 172.16.100.0/24 via "$INTERNAL_SELFIP" 2>/dev/null || warn
 # tunnels (CSRC's bnkvxlan* interfaces), or TMM sees the node's address instead of the pod's and the F5SPKEgress
 # SNAT never matches. The EVE lab set the same filter for its node NIC (install/ai4/75-calico-node-egress.sh there).
 # F5 docs (F5SPKEgress, PseudoCNI) and the EVE lab's setup-bnk: Calico must list TMM's internal self IP as an
-# external node, or Felix drops the CSRC VXLAN between the nodes and TMM (verified live there, 2026-10-07).
-kubectl patch felixconfigurations.crd.projectcalico.org default --type merge -p '{"spec":{"iptablesNATOutgoingInterfaceFilter":"eth0","externalNodesList":["'"$INTERNAL_SELFIP"'"]}}' >/dev/null
-ok "VIP routes via $INTERNAL_SELFIP on 3 nodes and the VM; Calico NAT-outgoing limited to eth0, TMM listed as an external node"
+# external node, or Felix drops the CSRC VXLAN between the nodes and TMM (verified live there, 2026-10-07). Here the
+# tunnels end on TMM's tenant legs (10.249.x.250, 10-network.yaml), so those are listed too (play 6, verified live).
+kubectl patch felixconfigurations.crd.projectcalico.org default --type merge -p '{"spec":{"iptablesNATOutgoingInterfaceFilter":"eth0","externalNodesList":["'"$INTERNAL_SELFIP"'","10.249.1.250","10.249.2.250","10.249.3.250"]}}' >/dev/null
+ok "VIP routes via $INTERNAL_SELFIP on 3 nodes and the VM; Calico NAT-outgoing limited to eth0, TMM's internal and tenant-leg addresses listed as external nodes"
 step "TMM back with routing"
 kubectl -n f5-bnk rollout status ds/f5-tmm --timeout="$(tmo 900s 600s)" >/dev/null 2>&1 || kubectl -n f5-bnk wait --for=condition=Ready pod -l app=f5-tmm --timeout="$(tmo 600s 300s)" >/dev/null 2>&1 || {
   warn "TMM not Ready yet:"; kubectl -n f5-bnk get pods -l app=f5-tmm -o wide | sed 's/^/      /'

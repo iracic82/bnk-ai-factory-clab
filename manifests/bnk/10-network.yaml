@@ -26,6 +26,49 @@ spec:
   selfip_v4s: [__INTERNAL_SELFIP__]   # <kind network>/16 + .0.250, filled in by install/35-bnk-network.sh (docker picks the subnet)
   prefixlen_v4: __INTERNAL_PLEN__
   auto_lasthop: AUTO_LASTHOP_ENABLED
+# int-a/b/c: the underlay of each tenant's egress tunnel, a tagged VLAN on the internal interface inside the tenant's
+# VRF (internal: true is what lets the controller hand its subnet to CSRC). The nodes carry the matching VLAN
+# sub-interfaces (install/20-cluster.sh); TMM is .250 of each /24, the nodes .241-.243. The egress objects name these
+# legs as tmmInterfaceName (30-egress.yaml), so tunnel endpoints, pod rules and the SNAT exit sit in one route domain.
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: int-a, namespace: f5-bnk}
+spec:
+  name: int-a
+  interfaces: ["1.2"]
+  tag: 201
+  vrf: tenant-a
+  internal: true
+  selfip_v4s: [10.249.1.250]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: int-b, namespace: f5-bnk}
+spec:
+  name: int-b
+  interfaces: ["1.2"]
+  tag: 202
+  vrf: tenant-b
+  internal: true
+  selfip_v4s: [10.249.2.250]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5SPKVlan
+metadata: {name: int-c, namespace: f5-bnk}
+spec:
+  name: int-c
+  interfaces: ["1.2"]
+  tag: 203
+  vrf: tenant-c
+  internal: true
+  selfip_v4s: [10.249.3.250]
+  prefixlen_v4: 24
+  auto_lasthop: AUTO_LASTHOP_ENABLED
 ---
 apiVersion: k8s.f5net.com/v1
 kind: F5SPKVlan
