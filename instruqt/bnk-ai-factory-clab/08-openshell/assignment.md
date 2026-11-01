@@ -83,74 +83,82 @@ not in the file and not in the sandbox.
 
 ## What it can reach
 
-From inside the sandbox, Aurora's route answers, and the request arrived with a key the sandbox never had. Borealis's
-route, one address over, is refused before a packet leaves. And the environment inside has no key at all:
+The sandbox runs a plain `python:3.12-slim` image, so python is the agent's only way onto the network, and the
+profile's `binaries` list names it. Put a tiny probe in place and send it inside the sandbox. It reads the
+`AIGW_API_KEY` variable the provider set and puts it in the `Authorization` header, the way an agent would:
 
 ```bash,run
-openshell sandbox exec --name tenant-a-agent -- sh -c 'curl -s -m 8 -o /dev/null -w "Aurora route 172.16.100.20: HTTP %{http_code}\n" http://172.16.100.20/v1/models'
-openshell sandbox exec --name tenant-a-agent -- sh -c 'curl -s -m 8 -o /dev/null -w "Borealis route 172.16.100.21: HTTP %{http_code}\n" http://172.16.100.21/v1/models || echo "Borealis route: refused by the sandbox"'
-openshell sandbox exec --name tenant-a-agent -- sh -c 'env | grep -i key || echo "no key in the sandbox environment"'
+cat > /tmp/sb-get.py <<'EOF'
+import os, sys, urllib.request as u, urllib.error as e
+label, url = sys.argv[1], sys.argv[2]
+req = u.Request(url, headers={"Authorization": "Bearer " + os.environ.get("AIGW_API_KEY", "")})
+try: print(label + ": HTTP", u.urlopen(req, timeout=8).status)
+except e.HTTPError as x: print(label + ": HTTP", x.code)
+except Exception as x: print(label + ": refused by the sandbox:", str(x)[:60])
+EOF
+sbget() { openshell sandbox exec --name tenant-a-agent -- python3 -c "$(cat /tmp/sb-get.py)" "$1" "$2"; }
+sbget "Aurora route 172.16.100.20" http://172.16.100.20/v1/models
+sbget "Borealis route 172.16.100.21" http://172.16.100.21/v1/models
+openshell sandbox exec --name tenant-a-agent -- sh -c 'env | grep -i aigw_api_key'
 ```
 
-Keep **Terminal 2** on the sandbox's log for the rest of the chapter. Every refusal is a line with the binary, the
-destination and the reason:
+Aurora's route answers 200. Borealis's route, one address over, is refused before a packet leaves. And look at the
+variable: it is not a key. It is a placeholder, `openshell:resolve:env:...`, and the real key is swapped in on the
+way out, by the supervisor, only for the endpoint the profile names.
+
+Keep **Terminal 2** on the sandbox's log for the rest of the chapter. Every decision is a line: the allowed calls
+with the policy that allowed them, the refused ones with the destination and the reason:
 
 ```
-openshell logs tenant-a-agent --follow --source sandbox | grep -E 'DENIED|NET:OPEN'
+while true; do openshell logs tenant-a-agent -n 40 --source sandbox 2>/dev/null | grep -E 'ALLOWED|Denied'; sleep 5; done | awk '!seen[$0]++'
 ```
 
 And the same lines, from here:
 
 ```bash,run
-openshell logs tenant-a-agent --since 5m --source sandbox | grep -E 'DENIED|NET:OPEN' | tail -5
+openshell logs tenant-a-agent --since 5m --source sandbox 2>/dev/null | grep -E 'ALLOWED|Denied' | tail -5 | cut -c1-200
 ```
 
-The Borealis attempt is there, with `/usr/bin/curl` and `172.16.100.21:80`. This is what Borealis's reviewer asked
-for: not a promise that the agent will behave, but a record of each time it did not.
+The Aurora call is `ALLOWED` under the provider's policy, and the Borealis attempt is `Denied` with
+`172.16.100.21:80` and the reason: not allowed by any policy. This is what Borealis's reviewer asked for: not a
+promise that the agent will behave, but a record of each time it did not.
 
 ## Where the key appears
 
-Prove the injection from the other side. Polaris records every call under the key that made it. The sandbox's call
-to Aurora's route landed under Aurora's app key, which the sandbox cannot print:
+Prove the injection from the other side. The sandbox's model call carries the placeholder, and the model answers,
+so the request that reached Polaris carried Aurora's real key, which the sandbox cannot print:
 
 ```bash,run
 K=$(cat /root/.bnk/aigw/tenant-a.key); echo "Aurora's key ends in ...${K: -6}"; unset K
-openshell sandbox exec --name tenant-a-agent -- sh -c 'curl -s -m 60 http://172.16.100.20/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\":\"tenant-a-qwen2.5-1.5b\",\"messages\":[{\"role\":\"user\",\"content\":\"Say ok.\"}],\"max_tokens\":4}" | head -c 200'; echo
+openshell sandbox exec --name tenant-a-agent -- python3 -c '
+import os, json, urllib.request as u
+r=u.Request("http://172.16.100.20/v1/chat/completions", data=json.dumps({"model":"tenant-a-qwen2.5-1.5b","messages":[{"role":"user","content":"Say ok."}],"max_tokens":4}).encode(), headers={"Content-Type":"application/json","Authorization":"Bearer "+os.environ.get("AIGW_API_KEY","")})
+print(json.loads(u.urlopen(r, timeout=90).read())["choices"][0]["message"]["content"])'
 ```
 
-No `Authorization` header was written by the sandbox, and the model answered. The provider added it between the
-sandbox and the wire.
+The placeholder went in, the key went out, the model answered. The provider added the key between the sandbox and
+the wire.
 
 ## Change the policy while it runs
 
 `policy get --base` prints the sandbox's base policy. `policy update` adds one network rule without touching the
-rest and hot-reloads it. Add a rule for curl to reach Borealis's route:
+rest and hot-reloads it. Add a rule for python to reach Borealis's route:
 
 ```bash,run
-openshell policy get tenant-a-agent --base | sed -n '1,40p'
-openshell policy update tenant-a-agent --rule-name borealis --binary /usr/bin/curl --add-endpoint 172.16.100.21:80:read-write:rest:enforce --wait
-openshell sandbox exec --name tenant-a-agent -- sh -c 'curl -s -m 8 -o /dev/null -w "Borealis route after the rule: HTTP %{http_code}\n" http://172.16.100.21/v1/models'
+openshell policy get tenant-a-agent --base | sed -n '1,30p'
+openshell policy update tenant-a-agent --rule-name borealis --binary '/usr/local/bin/python3*' --add-endpoint 172.16.100.21:80:read-write:rest:enforce --wait
+sbget "Borealis route after the rule" http://172.16.100.21/v1/models
 ```
 
-A `401` now. The packet got out, and Polaris refused it because no key was injected for that host: the provider knows
-one endpoint, and this is not it. Two layers, two different answers, and Terminal 2 shows no `DENIED` for this one.
+A `401` now. The packet got out, and Polaris refused it, because the placeholder was not swapped for that host: the
+provider knows one endpoint, and this is not it. Two layers, two different answers, and Terminal 2 shows `ALLOWED`
+under the rule you just wrote, not under the provider.
 
-Put the base policy back. The script below removes the rule from a copy of the current policy and sets it as the
-new base:
+Put the base policy back. One flag removes the rule by name:
 
 ```bash,run
-openshell policy get tenant-a-agent --base | sed -n '/^[a-z]/,$p' > /tmp/tenant-a-base.yaml
-python3 - <<'EOF'
-import yaml
-p = yaml.safe_load(open('/tmp/tenant-a-base.yaml'))
-net = p.get('network', {})
-for key in ('rules', 'policies'):
-    if isinstance(net.get(key), list):
-        net[key] = [r for r in net[key] if r.get('name') != 'borealis']
-open('/tmp/tenant-a-base.yaml', 'w').write(yaml.safe_dump(p, sort_keys=False))
-EOF
-openshell policy set tenant-a-agent --policy /tmp/tenant-a-base.yaml --wait
-openshell sandbox exec --name tenant-a-agent -- sh -c 'curl -s -m 8 -o /dev/null -w "Borealis route: HTTP %{http_code}\n" http://172.16.100.21/v1/models || echo "Borealis route: refused again"'
+openshell policy update tenant-a-agent --remove-rule borealis --wait
+sbget "Borealis route" http://172.16.100.21/v1/models
 openshell policy get tenant-a-agent --base | grep -c borealis | sed 's/^/rules named borealis left: /'
 ```
 
@@ -159,11 +167,11 @@ Refused again, logged again. Nothing restarted.
 ## What Mira sends to Borealis
 
 - The key lives in the provider, not in the sandbox. A copied key cannot leave because it was never there.
-- The allow-list is per binary and per destination, enforced in the sandbox's kernel, and every refusal is logged
-  with the binary that tried.
+- The allow-list is per binary and per destination, enforced by the sandbox's supervisor, and every refusal is
+  logged with the destination that was tried.
 - Policy changes are live. Chapter 12 relies on exactly this: a clean prompt and a webhook the policy does not list.
 
 ## Checkpoint
 
-The check expects the OpenShell gateway connected, `tenant-a-agent` Ready, at least one `DENIED` line in its sandbox
+The check expects the OpenShell gateway connected, `tenant-a-agent` Ready, at least one `Denied` line in its sandbox
 log, and no rule named `borealis` left in its base policy.

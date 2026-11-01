@@ -1,18 +1,8 @@
 #!/usr/bin/env bash
 set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig
-openshell sandbox exec --name tenant-a-agent -- sh -c 'curl -s -m 8 -o /dev/null http://172.16.100.21/v1/models' >/dev/null 2>&1 || true
-if openshell policy get tenant-a-agent --base 2>/dev/null | grep -q 'borealis'; then
-  openshell policy get tenant-a-agent --base | sed -n '/^[a-z]/,$p' > /tmp/tenant-a-base.yaml
-  python3 - <<'EOF'
-import yaml
-p = yaml.safe_load(open('/tmp/tenant-a-base.yaml'))
-net = p.get('network', {})
-for key in ('rules', 'policies'):
-    if isinstance(net.get(key), list):
-        net[key] = [r for r in net[key] if r.get('name') != 'borealis']
-open('/tmp/tenant-a-base.yaml', 'w').write(yaml.safe_dump(p, sort_keys=False))
-EOF
-  openshell policy set tenant-a-agent --policy /tmp/tenant-a-base.yaml --wait >/dev/null 2>&1 || true
-fi
+openshell sandbox exec --name tenant-a-agent -- python3 -c 'import urllib.request as u
+try: u.urlopen("http://172.16.100.21/v1/models", timeout=8)
+except Exception: pass' >/dev/null 2>&1 || true
+openshell policy get tenant-a-agent --base 2>/dev/null | grep -q 'borealis' && openshell policy update tenant-a-agent --remove-rule borealis --wait >/dev/null 2>&1
 exit 0

@@ -82,9 +82,12 @@ for t in a b c; do
   openshell provider profile lint -f "$REPO_ROOT/.cache/openshell-profile-$ns.yaml" >/dev/null && \
   openshell provider profile import -f "$REPO_ROOT/.cache/openshell-profile-$ns.yaml" --global >/dev/null 2>&1 || true
   AIGW_API_KEY="$(tr -d ' \n\r' < "$SECRETS_DIR/aigw/$ns.key")" openshell provider create --name "f5-aigw-$ns" --type "f5-aigw-$ns" --credential AIGW_API_KEY >/dev/null 2>&1 || true
-  # a long-running sandbox per tenant; chapter 7 shows its policy, chapter 11 shows it cannot reach the webhook
+  # a long-running sandbox per tenant; chapter 8 shows its policy, chapter 12 shows it cannot reach the webhook.
+  # python:3.12-slim (in the image cache since chapter 3 uses it): OpenShell's default image is a bare Ubuntu with
+  # no curl, wget or python, so nothing in it could open a connection and chapter 8 saw "command not found"
+  # instead of a policy decision (play 5, 2026-11-01). The provider profile lists python3 among its binaries.
   openshell sandbox list 2>/dev/null | grep -q "^$ns-agent\b" || \
-    openshell sandbox create --name "$ns-agent" --provider "f5-aigw-$ns" --env "OPENAI_BASE_URL=http://$host/v1" --no-tty -- sleep infinity >/dev/null 2>&1 &
+    openshell sandbox create --name "$ns-agent" --from python:3.12-slim --provider "f5-aigw-$ns" --env "OPENAI_BASE_URL=http://$host/v1" --no-tty -- sleep infinity >/dev/null 2>&1 &
 done
 for _ in $(seq 1 "$(tmo 60 12)"); do [ "$(openshell sandbox list 2>/dev/null | grep -c Ready)" -ge 3 ] && break; sleep 5; done
 openshell sandbox list 2>/dev/null || warn "openshell sandbox list failed"

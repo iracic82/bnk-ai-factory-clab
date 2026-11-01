@@ -3,6 +3,6 @@ set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig
 openshell status >/dev/null 2>&1 || fail-message "the openshell CLI has no connected gateway (openshell status fails); see /var/log/setup-factory.log, step 50."
 openshell sandbox list 2>/dev/null | grep -qE '^tenant-a-agent\s.*Ready' || fail-message "sandbox tenant-a-agent is not Ready."
-openshell logs tenant-a-agent --since 2h --source sandbox 2>/dev/null | grep -q 'DENIED' || fail-message "no denied connection in tenant-a-agent's log yet; run the curl to 172.16.100.21 from inside the sandbox."
+openshell logs tenant-a-agent --since 2h --source sandbox 2>/dev/null | grep -q 'Denied' || fail-message "no denied connection in tenant-a-agent's log yet; run the probe to 172.16.100.21 from inside the sandbox."
 openshell policy get tenant-a-agent --base 2>/dev/null | grep -q 'borealis' && fail-message "the rule 'borealis' is still in tenant-a-agent's base policy; put the base policy back."
 exit 0

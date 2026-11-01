@@ -127,7 +127,7 @@ kubectl -n f5-bnk logs deploy/f5-cne-controller --since=3h | grep -iE 'netpolicy
 Every connection a sandbox was not allowed to open, with the binary that tried and the destination:
 
 ```bash,run
-for s in tenant-a-agent tenant-c-agent; do echo "== $s"; openshell logs $s --since 6h --source sandbox 2>/dev/null | grep -E 'DENIED' | sed 's/^/  /' | tail -4; done
+for s in tenant-a-agent tenant-c-agent; do echo "== $s"; openshell logs $s --since 6h --source sandbox 2>/dev/null | grep -E 'Denied' | sed 's/^/  /' | tail -4 | cut -c1-200; done
 ```
 
 Two sandboxes, two kinds of refusal: Aurora's reaching for Borealis's route in chapter 8, Cobalt's reaching for the
