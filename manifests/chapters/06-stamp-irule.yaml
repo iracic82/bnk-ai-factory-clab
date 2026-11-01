@@ -1,6 +1,22 @@
 # Chapter 6: an iRule on Aurora's MCP gateway, attached through the NetPolicy that already carries the persistence
-# profile (one NetPolicy per listener; extensionRefs may list both kinds). The iRule answers one path itself and
-# stamps every other request with the tenant, so the backend can see which gateway delivered it.
+# profile (one NetPolicy per listener; extensionRefs may list both kinds, and the list can be changed in place).
+# The iRule answers one path itself and stamps every other request with the tenant, so the backend can see which
+# gateway delivered it.
+#
+# TMM runs HTTP_REQUEST iRules only for requests an HTTPRoute has claimed. A path no route matches is answered 404
+# before any iRule sees it (measured on play 5, 2026-11-01). So the tenant's route gains a second match, /factory,
+# that points at the same backend: the pod would answer it with 405, the iRule answers first.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: tenant-mcp, namespace: tenant-a}
+spec:
+  parentRefs: [{name: tenant-mcp, namespace: f5-bnk, sectionName: http}]
+  rules:
+  - matches:
+    - {path: {type: PathPrefix, value: /mcp}}
+    - {path: {type: PathPrefix, value: /factory}}
+    backendRefs: [{name: agent, port: 8001}]
+---
 apiVersion: k8s.f5net.com/v1
 kind: F5BigCneIrule
 metadata: {name: tenant-stamp, namespace: f5-bnk}
@@ -14,6 +30,7 @@ spec:
       HTTP::header insert "X-Factory-Tenant" "tenant-a"
     }
 ---
+# targetRefs are immutable after creation: this block must match chapter 5's NetPolicy exactly, only extensionRefs grows.
 apiVersion: gateway.k8s.f5.com/v1alpha1
 kind: NetPolicy
 metadata: {name: tenant-mcp-sessions, namespace: f5-bnk}

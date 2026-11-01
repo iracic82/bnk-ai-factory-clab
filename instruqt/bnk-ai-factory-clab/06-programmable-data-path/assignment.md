@@ -64,25 +64,34 @@ sed -n '/kind: F5BigCneIrule/,/^---/p' $LAB_ROOT/manifests/chapters/06-stamp-iru
 ```
 
 `HTTP::respond` is the part that never reaches a pod. `HTTP::header insert` is the stamp. Both run inside TMM on the
-listener's events, in the data path, for every request on `172.16.100.23`.
+listener's events, in the data path, for every request on `172.16.100.23` that a route has claimed. That last
+part matters. Right now nothing claims `/factory`, and TMM answers an unclaimed path with a 404 of its own before any
+iRule runs:
+
+```bash,run
+docker exec client curl -s -m 5 -i http://172.16.100.23/factory/whoami | grep -E '^HTTP'
+```
 
 ## Attach it
 
-The NetPolicy from chapter 5 already targets Aurora's MCP gateway. A listener takes one NetPolicy, and a NetPolicy
-takes several extensions, so the iRule joins the persistence profile in the same object. The manifest's second
-document is that NetPolicy with two `extensionRefs`:
+The manifest has three documents. The tenant's HTTPRoute gains a second match, `/factory`, pointing at the same
+backend, so the listener claims the path. Then the iRule. Then the NetPolicy from chapter 5, which already targets
+Aurora's MCP gateway. A listener takes one NetPolicy, and a NetPolicy takes several extensions, so the iRule joins
+the persistence profile in the same object. Its `targetRefs` cannot change after creation, only the list of
+extensions can:
 
 ```bash,run
 sed -n '/kind: NetPolicy/,$p' $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml
 kubectl apply -f $LAB_ROOT/manifests/chapters/06-stamp-irule.yaml
-sleep 5; kubectl -n f5-bnk annotate netpolicy tenant-mcp-sessions factory.lab/resync=$(date +%s) --overwrite >/dev/null
 for i in $(seq 1 12); do s=$(kubectl -n f5-bnk get f5-big-cne-irules tenant-stamp -o jsonpath='{.status.conditions[-1].status}' 2>/dev/null); [ "$s" = True ] && break; sleep 5; done
 kubectl -n f5-bnk get f5-big-cne-irules tenant-stamp -o custom-columns='NAME:.metadata.name,READY:.status.conditions[-1].status,MESSAGE:.status.conditions[-1].message'
 kubectl -n f5-bnk get netpolicy tenant-mcp-sessions -o jsonpath='{range .spec.extensionRefs[*]}{.kind}/{.name}{"\n"}{end}'
+kubectl -n tenant-a get httproute tenant-mcp -o jsonpath='{range .spec.rules[0].matches[*]}{.path.value} {end}{"\n"}'
 ```
 
-`Ready=True` on the iRule, and two extensions on the NetPolicy. From the client, the path TMM answers itself, with
-the header the iRule sets:
+`Ready=True` on the iRule, two extensions on the NetPolicy, two paths on the route. From the client, the path TMM
+answers itself, with the header the iRule sets. The pod would have answered this with a 405, and never got the
+chance:
 
 ```bash,run
 docker exec client curl -s -m 5 -i http://172.16.100.23/factory/whoami | grep -E '^HTTP|^X-Factory|^\{'
@@ -91,7 +100,7 @@ docker exec client curl -s -m 5 -i http://172.16.100.23/factory/whoami | grep -E
 No pod saw that request. Prove it: watch the agent pods' logs in **Terminal 2** while you send a few more.
 
 ```
-kubectl -n tenant-a logs -l app=agent --all-containers --tail=0 -f
+kubectl -n tenant-a logs -l component=agent --all-containers --tail=0 -f
 ```
 
 ```bash,run
@@ -133,8 +142,8 @@ BNK's controller turns the CRD into TMM configuration. The iRule is visible from
 server's configuration, which the controller logs when it programs it:
 
 ```bash,run
-kubectl -n f5-bnk logs deploy/f5-cne-controller --since=10m 2>/dev/null | grep -iE 'irule|tenant-stamp' | tail -5
-kubectl -n f5-bnk get netpolicy tenant-mcp-sessions -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
+kubectl -n f5-bnk logs deploy/f5-cne-controller -c f5-cne-controller --since=15m 2>/dev/null | grep -E 'F5Irule|tenant-stamp' | grep -v 'gRPC - Send' | tail -4 | cut -c1-160
+kubectl -n f5-bnk get netpolicy tenant-mcp-sessions -o jsonpath='target: {.spec.targetRefs[0].kind}/{.spec.targetRefs[0].name} listener {.spec.targetRefs[0].sectionName}{"\n"}'
 ```
 
 ## The Access CRDs
@@ -155,6 +164,7 @@ tokens, this is where they are checked, next to the iRule and the persistence pr
 ## What Mira has now
 
 - One listener, one NetPolicy, two extensions: a protocol-aware profile and her own Tcl.
+- The route is the door and the iRule is what happens inside it. A path no route claims never reaches the Tcl.
 - An iRule change is a `kubectl apply`, picked up by TMM in seconds, with the sessions intact.
 - Identity checks have a home at the traffic layer. The CRDs are there, the IdP is the only thing missing here.
 

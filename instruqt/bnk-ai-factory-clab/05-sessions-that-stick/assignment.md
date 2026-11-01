@@ -112,7 +112,7 @@ Two or three pod names. The lab's MCP server tolerates that. A real one that kee
 there are three and all are Ready:
 
 ```
-kubectl -n tenant-a get pods -l app=agent -w
+kubectl -n tenant-a get pods -l component=agent -w
 ```
 
 ## Turn the profile on
