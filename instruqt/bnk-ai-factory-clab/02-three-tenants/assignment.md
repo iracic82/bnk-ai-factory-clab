@@ -146,7 +146,7 @@ Back here, send the connection from Aurora's pod to the client:
 
 ```bash,run
 kubectl -n tenant-a exec deploy/hello -- sh -c 'wget -q -O- -T 5 http://172.16.250.10/ >/dev/null 2>&1; echo "left the factory: exit $?"'
-docker exec r5 vtysh -c 'show ip route 10.201.200.0/24'
+docker exec r5 vtysh -c 'show ip route 10.201.200.10'
 ```
 
 Terminal 2 shows the SYN from a `10.201.200.x` address on the tenant-a sub-interface. The client has no web server, so
