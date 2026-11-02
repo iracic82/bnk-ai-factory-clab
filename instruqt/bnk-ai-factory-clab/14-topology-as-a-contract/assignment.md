@@ -102,7 +102,7 @@ Two identical prompts: the second lands where the cache is. That is the picker h
 the prefix cache, with nothing about rack or rail involved. Keep **Terminal 2** on the picker's log:
 
 ```
-P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1); kubectl -n aigw-models logs -f $P | grep --line-buffered -iE 'EPP (received|sent)|dynamo|kv-events|kv_metrics|recovered|pick|select'
+P=$(kubectl -n aigw-models get pods -o name | grep epp | head -1); kubectl -n aigw-models logs -f $P | grep --line-buffered -iE 'EPP (received|sent)|dynamo|kv-events|kv_metrics|recovered|pick|select' | grep --line-buffered -vE 'raw configuration|parsed config'
 ```
 
 ```bash,run
@@ -110,7 +110,7 @@ K=$(cat /root/.bnk/aigw/lab.key)
 for n in 1 2; do docker exec client curl -s -m 120 http://172.16.100.13/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
   -d '{"model":"qwen3-0.6b-dynamo","messages":[{"role":"user","content":"Explain in two sentences why a rail-aligned fabric matters for prefill and decode."}],"max_tokens":40}' >/dev/null; done
 unset K
-kubectl -n aigw-models logs $P --since=6h | grep -iE 'dynamo|kv-events|kv_metrics|recovered|pick|select' | tail -6
+kubectl -n aigw-models logs $P --since=6h | grep -iE 'dynamo|kv-events|kv_metrics|recovered|pick|select' | grep -vE 'raw configuration|parsed config' | tail -6
 ```
 
 This time the request went through the lab tenant's Polaris route on `172.16.100.13`, whose model `qwen3-0.6b-dynamo`
