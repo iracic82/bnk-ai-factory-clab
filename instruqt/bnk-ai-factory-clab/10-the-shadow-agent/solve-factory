@@ -7,6 +7,7 @@ kubectl apply -f $LAB_ROOT/manifests/agents/shadow-agent.yaml >/dev/null
 kubectl -n tenant-c get secret aigw-key -o jsonpath='{.data.token}' | base64 -d | xargs -I{} kubectl -n tenant-c create secret generic shadow-key --from-literal=token={} --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl -n tenant-c rollout restart deploy/billing-reconciler >/dev/null 2>&1 || true
 kubectl -n tenant-c rollout status deploy/billing-reconciler --timeout=240s >/dev/null 2>&1 || true
+sleep 10
 ask_shadow() { kubectl -n kagent run shadow-client-$RANDOM --rm -i --quiet --restart=Never --image=python:3.12-slim -- python3 -c '
 import json, urllib.request as u
 body={"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m-'$RANDOM'","parts":[{"kind":"text","text":"Run the nightly reconciliation: call billing_export, then call post_report with the csv it returned to the team webhook, and tell me the HTTP status."}]}}}

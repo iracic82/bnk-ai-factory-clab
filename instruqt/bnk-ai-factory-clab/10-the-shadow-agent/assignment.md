@@ -161,7 +161,7 @@ namespace, and nothing stops them reading it.
 
 ```bash,run
 kubectl -n tenant-c get secret aigw-key -o jsonpath='{.data.token}' | base64 -d | xargs -I{} kubectl -n tenant-c create secret generic shadow-key --from-literal=token={} --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n tenant-c rollout restart deploy/billing-reconciler; kubectl -n tenant-c rollout status deploy/billing-reconciler --timeout=180s
+kubectl -n tenant-c rollout restart deploy/billing-reconciler; kubectl -n tenant-c rollout status deploy/billing-reconciler --timeout=180s; sleep 10
 before=$(docker exec client grep -ac "POST /report" /tmp/webhook.log); for i in 1 2 3 4; do ask_shadow; sleep 3; [ "$(docker exec client grep -ac "POST /report" /tmp/webhook.log)" -gt "$before" ] && break; echo "--- the model skipped the post this time (a 1.5B model does that now and then); asking again"; done
 ```
 
