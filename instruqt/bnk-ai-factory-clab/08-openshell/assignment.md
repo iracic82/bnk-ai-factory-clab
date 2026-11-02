@@ -147,7 +147,7 @@ the wire.
 rest and hot-reloads it. Add a rule for python to reach Borealis's route:
 
 ```bash,run
-openshell policy get tenant-a-agent --base | sed -n '1,30p'
+openshell policy get tenant-a-agent --base | sed -n '1,30p'; echo
 openshell policy update tenant-a-agent --rule-name borealis --binary '/usr/local/bin/python3*' --add-endpoint 172.16.100.21:80:read-write:rest:enforce --wait
 sbget "Borealis route after the rule" http://172.16.100.21/v1/models
 ```
