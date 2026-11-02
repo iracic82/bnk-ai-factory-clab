@@ -105,18 +105,18 @@ unset TOK
 ## TMM: the verdict
 
 The guardrail answered the flagged request with a 200 and `X-Guardrail: blocked`, so the client saw a model reply
-that was not one. The policy that did it, the iRule's own view of what it refuses, and the egress declaration that
-was removed and restored:
+that was not one. The policy that did it, the iRule's own view of what it refuses, and the egress policy that was
+closed and opened again:
 
 ```bash,run
 kubectl -n f5-bnk get netpolicy guardrails-tenant-c -o jsonpath='{.spec}' | python3 -m json.tool
 kubectl -n f5-bnk get f5-big-cne-irules guardrails -o jsonpath='{.spec.iRule}' | grep -oE 'HTTP::respond [0-9]+|X-Guardrail[^"]*' | sort | uniq -c
-kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='{.metadata.creationTimestamp}{"\n"}'
+kubectl -n f5-bnk get f5-big-fw-policies egress-allow-c -o jsonpath='egress-allow-c: action {.spec.rule[0].action}, generation {.metadata.generation}{"\n"}'
 ```
 
-That creation timestamp is from this session, not from track start: the egress object was deleted and re-created in
-chapter 12. Kubernetes keeps the fact, and the audit log would keep who did it. Keep **Terminal 2** on the BNK
-controller's recent log while you read. It names every object it programmed today:
+Generation 3 reads as a history: created at track start, closed once, opened once, all in chapter 12. Kubernetes
+keeps the count, and the audit log would keep who did it. Keep **Terminal 2** on the BNK controller's recent log
+while you read. It names every object it programmed today:
 
 ```
 kubectl -n f5-bnk logs deploy/f5-cne-controller --since=3h | grep -iE 'netpolicy|egress|irule' | tail -20
@@ -180,7 +180,7 @@ cat > /root/incident-timeline.md <<'EOF'
 2. First run refused: Aurora's key on Cobalt's route.                               (Polaris, tenant-c, 401)
 3. Second run passed with Cobalt's own key, and the export reached the webhook.     (Polaris + webhook log)
 4. Third run stopped in TMM: guardrail verdict `flagged`, X-Guardrail: blocked.     (NetPolicy guardrails-tenant-c)
-5. Clean POST: the sandbox refused it, and the plain pod lost its exit when the egress declaration was removed. (OpenShell log, border1)
+5. Clean POST: the sandbox refused it, and TMM refused the plain pod once Cobalt's egress policy was closed. (OpenShell log, border1)
 
 Finding: one key for two workloads. Every call above is attributed to the sanctioned assistant's key.
 Action: a key per workload, and no plain pods in tenant namespaces without review.

@@ -7,10 +7,29 @@
 # The firewall: this BNK instance runs with the AFM firewall ACL on (bnk-deploy host profile), and an egress listener
 # under AFM forwards nothing unless the F5SPKEgress names an enforced policy. Without it (play 6, 2026-11-01) TMM
 # counted every pod SYN as a connection on f5-bnk-tenant-c-egress-egress-ipv4 and sent nothing on any leg. One
-# accept-all policy, shared by the three tenants; the tenant isolation itself is the VRF and the SNAT pool.
+# accept-all policy per tenant, egress-allow-<x>: the policy is the one part of a tenant's exit that can be changed
+# in place, and chapter 12 closes Cobalt's exit by setting egress-allow-c to reject (manifests/chapters/12-exit-closed-c.yaml)
+# and opens it again by applying this file. The F5SPKEgress objects themselves are never deleted on a running lab:
+# the controller does not relearn a namespace's pods for a recreated egress, counts them to zero on the next pod
+# restart and then sends CSRC a mapping delete with no tunnel name, which removed another tenant's tunnel (play 8,
+# 2026-11-02, docs/egress.md). The tenant isolation itself is the VRF and the SNAT pool.
 apiVersion: k8s.f5net.com/v1
 kind: F5BigFwPolicy
-metadata: {name: egress-allow, namespace: f5-bnk}
+metadata: {name: egress-allow-a, namespace: f5-bnk}
+spec:
+  rule:
+  - {name: allow-all, action: accept, logging: false, ipProtocol: any}
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5BigFwPolicy
+metadata: {name: egress-allow-b, namespace: f5-bnk}
+spec:
+  rule:
+  - {name: allow-all, action: accept, logging: false, ipProtocol: any}
+---
+apiVersion: k8s.f5net.com/v1
+kind: F5BigFwPolicy
+metadata: {name: egress-allow-c, namespace: f5-bnk}
 spec:
   rule:
   - {name: allow-all, action: accept, logging: false, ipProtocol: any}
@@ -28,7 +47,7 @@ kind: F5SPKEgress
 metadata: {name: tenant-a-egress, namespace: f5-bnk}
 spec:
   snatType: SRC_TRANS_SNATPOOL
-  firewallEnforcedPolicy: egress-allow
+  firewallEnforcedPolicy: egress-allow-a
   egressSnatpool: tenant-a-snat
   pseudoCNIConfig:
     namespaces: [tenant-a]
@@ -55,7 +74,7 @@ kind: F5SPKEgress
 metadata: {name: tenant-b-egress, namespace: f5-bnk}
 spec:
   snatType: SRC_TRANS_SNATPOOL
-  firewallEnforcedPolicy: egress-allow
+  firewallEnforcedPolicy: egress-allow-b
   egressSnatpool: tenant-b-snat
   pseudoCNIConfig:
     namespaces: [tenant-b]
@@ -82,7 +101,7 @@ kind: F5SPKEgress
 metadata: {name: tenant-c-egress, namespace: f5-bnk}
 spec:
   snatType: SRC_TRANS_SNATPOOL
-  firewallEnforcedPolicy: egress-allow
+  firewallEnforcedPolicy: egress-allow-c
   egressSnatpool: tenant-c-snat
   pseudoCNIConfig:
     namespaces: [tenant-c]

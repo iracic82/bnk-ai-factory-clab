@@ -61,7 +61,7 @@ Northlight's platform team. Every chapter opens where that story is.
 | 9 | Meet the agents | A2A to Aurora's assistant, the tenant app, a key stopping at its tenant |
 | 10 | The agent nobody approved | the unsanctioned agent: copied key refused, own key passes, the webhook |
 | 11 | Guardrails in the data path | the CalypsoAI iRule attached to Cobalt's route, the rerun blocked |
-| 12 | Nowhere to send it | clean prompt: sandbox refuses, egress declaration removed, border1 sees nothing |
+| 12 | Nowhere to send it | clean prompt: sandbox refuses, Cobalt's egress policy closed and TMM resets the pod, border1 sees nothing |
 | 13 | On the record | Polaris, TMM, OpenShell logs, Prometheus into one timeline |
 | 14 | Topology as a contract (optional) | labels on the workers, what the picker reads |
 

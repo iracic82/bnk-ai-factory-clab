@@ -1,0 +1,11 @@
+# Chapter 12: close Cobalt's exit. The F5SPKEgress tenant-c-egress names this policy as the one TMM enforces on the
+# tenant's egress listener. Applying this file flips it from accept to reject in place: TMM resets every new
+# connection from Cobalt's pods before it is SNATed or routed, so nothing reaches VLAN 103 and border1 sees nothing.
+# kubectl apply -f manifests/bnk/30-egress.yaml puts the accept version back. The egress object itself is never
+# deleted on a running lab (why: the comment in manifests/bnk/30-egress.yaml and docs/egress.md).
+apiVersion: k8s.f5net.com/v1
+kind: F5BigFwPolicy
+metadata: {name: egress-allow-c, namespace: f5-bnk}
+spec:
+  rule:
+  - {name: exit-closed, action: reject, logging: false, ipProtocol: any}

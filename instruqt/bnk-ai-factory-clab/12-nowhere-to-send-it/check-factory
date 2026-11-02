@@ -2,6 +2,7 @@
 set -uo pipefail
 export KUBECONFIG=/root/lab/clab/kubeconfig
 openshell logs tenant-c-agent --since 3h --source sandbox 2>/dev/null | grep -q '172.16.250.10' || fail-message "no denied connection to 172.16.250.10 in tenant-c-agent's sandbox log; run the POST from inside the sandbox."
-kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress >/dev/null 2>&1 || fail-message "F5SPKEgress tenant-c-egress is still deleted; put Cobalt's egress back (kubectl apply -f manifests/bnk/30-egress.yaml)."
+kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress >/dev/null 2>&1 || fail-message "F5SPKEgress tenant-c-egress is missing; apply manifests/bnk/30-egress.yaml."
+[ "$(kubectl -n f5-bnk get f5-big-fw-policies egress-allow-c -o jsonpath='{.spec.rule[0].action}' 2>/dev/null)" = accept ] || fail-message "Cobalt's egress policy egress-allow-c is not back at accept; open the exit again (kubectl apply -f manifests/bnk/30-egress.yaml)."
 kubectl -n tenant-c get agent billing-reconciler >/dev/null 2>&1 && fail-message "the agent billing-reconciler is still running in tenant-c; remove it at the end of the chapter."
 exit 0

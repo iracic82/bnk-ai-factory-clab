@@ -32,13 +32,15 @@ a capture, and the install now carries the answer to each.
    names it as `tmmInterfaceName`. Calico's felix lists those three addresses as external nodes next to the
    internal self IP, or it drops their VXLAN.
 3. **The firewall.** This instance runs with the AFM firewall ACL on, and an egress listener under AFM forwards only
-   with an enforced policy. One accept-all `F5BigFwPolicy`, `egress-allow`, is named by the three egress objects.
-   I verified enforcement by switching it to reject: the pod got a reset at once.
+   with an enforced policy. One accept-all `F5BigFwPolicy` per tenant, `egress-allow-a/b/c`, each named by that
+   tenant's egress object. I verified enforcement by switching one to reject: the pod got a reset at once, and the
+   capture on border1 stayed empty. Chapter 12 is built on that: it closes Cobalt's exit by applying the reject
+   version of `egress-allow-c` and opens it again by applying `30-egress.yaml`.
 4. **Checksums.** A pod's TCP checksum is left for hardware to fill, and on a veth nothing fills it. The kernel and
    Calico never notice. TMM validates the checksum of what it takes out of the tunnel and drops the SYN after the
    listener has matched it: 14 connections, no server side, no counter, no log. F5's kind lab turns
    `tx-checksum-ip-generic` off on the egress vxlan devices after creating the egress objects. CSRC recreates
-   those devices whenever an egress is declared again (chapter 12 does), and the leg interfaces report the feature
+   those devices whenever an egress is declared again, and the leg interfaces report the feature
    as fixed, so a small watcher container per node (`csum-<node>`, the netshoot image the lab already has, in the
    node's network namespace with NET_ADMIN) keeps every CSRC vxlan device at checksum-off.
 
@@ -61,3 +63,29 @@ the controller's tunnel data and felix's settings, which is how play 6 was read.
 - `kubectl -n f5-bnk logs deploy/f5-cne-controller -c f5-cne-controller`: the `declTmm.vxlan`, `l2_forward` and
   `virtual_server` messages, with the route domain of every address.
 - In TMM's debug container: `tcpdump -nnei 0.0`, `tmctl -d blade -i virtual_server_stat`, `fw_rule_stat`.
+
+## Why chapter 12 never deletes an egress
+
+The first version of chapter 12 removed Cobalt's exit by deleting `tenant-c-egress` and put it back by applying the
+file again. On the cold build of play 8 (2026-11-02) that left Cobalt without a tunnel and then took Aurora's away
+too, and the controller log shows how:
+
+- A recreated egress does not relearn the pods of its namespace. The controller's count of steered pods for the new
+  object starts at zero, every pod it then sees arrive is logged as "unexpected object", and every pod that
+  terminates still counts down.
+- On the next rollout of the tenant's deployments the count reaches zero, and at zero the controller sends CSRC a
+  mapping delete for the egress, `tmmCnfMapsDel`, with an empty tunnel name.
+- CSRC's delete handler walks every route table it has and removed `vxlan100`, Aurora's device, on all three nodes.
+  A CSRC restart rebuilt Aurora and Borealis from the controller's memory and nothing for Cobalt.
+
+A controller restart is the one thing that would rebuild that memory, and rule 6 of the lifecycle notes rules it out
+on this build. So the egress objects are created once at setup and never touched again. What chapter 12 changes is
+the firewall policy the egress names, which TMM applies to new connections in place: reject resets the pod's SYN
+before SNAT and routing, accept lets it through, and neither touches CSRC, the tunnels or the pod rules.
+
+```
+pod ──veth──▶ vxlanNNN ──▶ TMM egress listener (tenant-c)
+                              │ policy egress-allow-c
+                              ├─ accept: SNAT 10.203.200.10 ─▶ VLAN 103 ─▶ border1 ─▶ r5 ─▶ webhook
+                              └─ reject: RST back to the pod, nothing on VLAN 103
+```

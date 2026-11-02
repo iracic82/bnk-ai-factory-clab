@@ -289,14 +289,14 @@ def c11():
 
 def c12():
     s = Scene("Chapter 12 · Nowhere to send it", "A clean prompt and the same webhook",
-              "Reachability is the last layer: the sandbox refuses the webhook by policy, and without its F5SPKEgress the plain pod has no first hop.")
+              "Reachability is the last layer: the sandbox refuses the webhook by policy, and with its egress policy closed the plain pod is reset at TMM.")
     s.row(A, AH, [("sandbox tenant-c-agent", ["POST 172.16.250.10:8080", "no rule for it: DENIED"], {"color": PINK}),
-                  ("the plain pod", ["billing-reconciler, no sandbox", "first 200, then no route"], {"color": YELLOW, "dash": True}),
-                  ("F5SPKEgress tenant-c-egress", ["tunnel, route domain, SNAT", "delete it: no exit at all"], {"hot": True}),
+                  ("the plain pod", ["billing-reconciler, no sandbox", "first 200, then refused"], {"color": YELLOW, "dash": True}),
+                  ("F5SPKEgress tenant-c-egress", ["tunnel, route domain, SNAT", "policy egress-allow-c: reject"], {"hot": True}),
                   ("border1 eth3.103 -> webhook", ["tcpdump on VLAN 103", "one POST, then silence"], {"color": BLUE})],
           arrows=[None, (YELLOW, "before"), (BLUE, "")])
     s.row(B, BH, [("still reachable", ["Cobalt's AI route 172.16.100.22", "internal leg, not egress", "sanctioned work unaffected"], {"color": GREEN}),
-                  ("put it back the right way", ["kubectl apply -f 30-egress.yaml", "then delete the agent and its key", "a review question, not routing"], {})])
+                  ("put it back the right way", ["kubectl apply -f 30-egress.yaml: accept", "then delete the agent and its key", "a review question, not routing"], {})])
     s.strip(C, CH, "three layers, three catches",
             ["OpenShell: no connection the policy does not list, clean prompt or not · BNK: a tenant's exit exists because a declaration says so", "content inspection, identity and reachability each caught something the other two could not"])
     s.legend([(PINK, "DENIED", "in the sandbox"), (YELLOW, "plain pod", "no exit once the declaration is gone"), (BLUE, "VLAN 103", "where border1 would see it"), (GREEN, "AI route", "unaffected")])
