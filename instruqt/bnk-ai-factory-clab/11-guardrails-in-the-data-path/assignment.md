@@ -109,7 +109,6 @@ One NetPolicy, written at track start, targets the Gateway `tenant-c-ai`, which 
 cat $LAB_ROOT/manifests/guardrails/50-attach-tenant-c.yaml
 kubectl apply -f $LAB_ROOT/manifests/guardrails/50-attach-tenant-c.yaml
 sleep 8; kubectl -n f5-bnk get netpolicy guardrails-tenant-c
-kubectl -n f5-bnk get netpolicy guardrails-tenant-c -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.message}{"\n"}{end}'
 kubectl -n f5-bnk get gateway tenant-c-ai -o jsonpath='{.status.conditions[?(@.type=="Programmed")].status}{"\n"}'
 ```
 
