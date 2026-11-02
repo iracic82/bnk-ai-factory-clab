@@ -110,7 +110,7 @@ closed and opened again:
 
 ```bash,run
 kubectl -n f5-bnk get netpolicy guardrails-tenant-c -o jsonpath='{.spec}' | python3 -m json.tool
-kubectl -n f5-bnk get f5-big-cne-irules guardrails -o jsonpath='{.spec.iRule}' | grep -oE 'HTTP::respond [0-9]+|"X-Guardrail" "[a-z]+"' | sort | uniq -c
+kubectl -n f5-bnk get f5-big-cne-irules guardrails -o jsonpath='{.spec.iRule}' | grep -oE 'HTTP::respond [0-9]+|X-Guardrail"? "?(allowed|blocked)' | tr -d '"' | sort | uniq -c
 pol=$(kubectl -n f5-bnk get f5-spk-egresses tenant-c-egress -o jsonpath='{.spec.firewallEnforcedPolicy}'); kubectl -n f5-bnk get f5-big-fw-policies "$pol" -o jsonpath="$pol: action {.spec.rule[0].action}, generation {.metadata.generation}{'\n'}"
 ```
 
