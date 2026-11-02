@@ -50,7 +50,7 @@ It is about whether the pod has anywhere to send it. The sanctioned assistant ru
 not list the webhook. The plain pod leaves through Cobalt's egress, and that egress is one declaration on BNK with
 one policy on it.
 
-![The sandbox refuses the webhook by policy; the plain pod's POST takes Cobalt's egress through TMM and VLAN 103 to the webhook until the policy on that egress is closed; the AI route stays reachable through the internal leg](../assets/scene-12.png)
+![The sandbox refuses the webhook by policy. The plain pod's POST takes Cobalt's egress through TMM and VLAN 103 to the webhook until the policy on that egress is closed. The AI route stays reachable through the internal leg](../assets/scene-12.png)
 
 [button label="Open the Lab Topology" variant="outline"](tab-2)
 
