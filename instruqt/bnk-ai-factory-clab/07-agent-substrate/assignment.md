@@ -154,7 +154,6 @@ shared VIP range. Polaris records the call under that tenant, which you can see 
 kubectl -n ate-system get svc api atenet-router
 kubectl -n kagent get sandboxagent concierge -o jsonpath='{.spec.declarative.modelConfig}{"\n"}' | sed 's/^/  model config: /'
 kubectl -n kagent get modelconfig default-model-config -o jsonpath='  model: {.spec.model}  base URL: {.spec.openAI.baseUrl}{"\n"}'
-kubectl -n ate-system logs deploy/atenet-router --since=10m --tail=300 2>/dev/null | grep -iE '172\.16\.100|chat|upstream|proxy' | tail -3 | cut -c1-160
 ```
 
 The base URL is `172.16.100.13`, the lab tenant's route on BNK. The actor never saw a pod IP, a Service name or a node.
