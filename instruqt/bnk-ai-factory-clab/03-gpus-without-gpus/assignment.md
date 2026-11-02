@@ -174,7 +174,9 @@ the morning.
 ## What a pod sees
 
 Inside a scheduled pod the GPU looks real to the application: the fake operator injects an `nvidia-smi` that reports
-an H100 with memory in use and load on it, and nothing in the pod can tell the difference:
+an H100 with memory in use and load on it. The one tell is the environment. A real device plugin sets
+`NVIDIA_VISIBLE_DEVICES` to the card's UUID, the fake one leaves it unset, which is why the job's own log line
+ends after "training on":
 
 ```bash,run
 P=$(kubectl get pods -A -l kai.scheduler/queue --field-selector status.phase=Running -o jsonpath='{.items[0].metadata.namespace}/{.items[0].metadata.name}')
