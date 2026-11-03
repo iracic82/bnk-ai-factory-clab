@@ -27,7 +27,7 @@ client ──▶ lab route 172.16.100.13 ──▶ Polaris (AI Gateway) ──�
 | Cloud tier | `manifests/ai/60-bedrock-proxy.yaml`, Deployment `bedrock-proxy` in `tenant-a`, 2 replicas, a PodDisruptionBudget, anti-affinity across the workers | LiteLLM, pinned by digest, speaking Bedrock's Converse API for `us.amazon.nova-{micro,lite,pro}-v1:0` with two retries, a 60 s timeout and a fallback ladder. It demands its own key (Secret `bedrock-proxy`, generated at install) and signs with the AWS keys from Secret `bedrock-aws`. Polaris registers it as the Generic provider `<tenant>-bedrock` in every tenant, with models `nova-micro`, `nova-lite`, `nova-pro` |
 | Credentials | `instruqt/bnk-ai-factory-clab/config.yml` (`aws_accounts`), `track_scripts/setup-factory`, `install/40-ai.sh` | An AWS account from the f5 team's pool with Bedrock and STS enabled in us-east-1 and `AmazonBedrockFullAccess`. Instruqt injects `INSTRUQT_AWS_ACCOUNT_BEDROCK_AWS_ACCESS_KEY_ID` and `_AWS_SECRET_ACCESS_KEY` into the lifecycle scripts; setup-factory writes them to one file, 40-ai.sh turns the file into the Secret and shreds it. No account, no cloud tier, and the lab runs as before |
 | The exit rule | `manifests/bnk/30-egress.yaml`, `manifests/chapters/15-cloud-closed-a.yaml` | `egress-allow-a` has two rules in order: `cloud-tier` (tcp/443, accept, logged) and `allow-all`. Chapter 15 flips the first to reject and back, the way chapter 12 does for Cobalt |
-| The internet | `fabric/nodes/r5/setup.sh` | r5 installs iptables at deploy and masquerades on its management interface, so a tenant's SNAT address never leaves the VM and the reply finds its way back through the fabric |
+| The internet | `fabric/nodes/r5/setup.sh`, `install/10-fabric.sh` | r5 masquerades on its management interface, so a tenant's SNAT address never leaves the VM and the reply finds its way back through the fabric. The FRR image has no iptables; setup.sh asks apk for it, and because the management network is not always up at first boot (first play, 2026-11-03), 10-fabric.sh repeats the install with retries after the deploy and adds the rule |
 | NetworkPolicies | both manifests | The proxy accepts port 4000 from `f5-bnk` and TMM's internal self IP only (tenant-isolation admits nothing else from outside the namespace). The router accepts 50051 and 8080 from `f5-bnk` and that self IP only |
 
 ## Why it is shaped this way
@@ -65,6 +65,14 @@ client ──▶ lab route 172.16.100.13 ──▶ Polaris (AI Gateway) ──�
    and picker, and site selection happens above the pool.
 
 ## Verified and still to verify
+
+Verified on the first play (2026-11-03, participant vjkeaj3ey31c): the AWS account was handed out and the proxy
+was Ready at setup; both router pods were Ready eight minutes after apply and the hook was Programmed at 19:45;
+`model: auto` sent a poem to `qwen2.5-0.5b`, a binary-search question to `nova-lite` and a one-word reply to the
+pool; a direct `nova-micro` request answered from Bedrock once r5 had its masquerade rule; LiteLLM's log carries
+`LiteLLM completion() model= converse/us.amazon.nova-micro-v1:0; provider = bedrock`, which the check greps. What
+failed on that play: r5's deploy-time `apk add iptables` (management network not ready), fixed by hand and then
+in `install/10-fabric.sh`.
 
 Verified on 2026-11-03 before the first play: the LiteLLM image `v1.106.6` and the extproc `v0.4.0` exist on
 ghcr.io at the pinned digests; the firewall rule fields (`destination.ports`, `ipProtocol: tcp`, `action: reject`)

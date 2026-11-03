@@ -104,9 +104,10 @@ rule needs TMM's global FQDN resolver (an `F5BigDnsCache` of type net-resolver w
 lab does not set one up. The port rule is what runs here.
 
 r5 masquerades. A packet for an address outside the factory leaves r5 on its management interface, where docker's
-own NAT only translates docker's subnet. `fabric/nodes/r5/setup.sh` installs iptables at deploy time and adds one
-POSTROUTING rule on eth0, so Aurora's SNAT address stays inside and the reply finds its way back through r5, border1,
-leaf1 and TMM.
+own NAT only translates docker's subnet. One POSTROUTING rule on r5's eth0 keeps Aurora's SNAT address inside, and
+the reply finds its way back through r5, border1, leaf1 and TMM. The FRR image carries no iptables: `fabric/nodes/r5/setup.sh`
+asks apk for it at boot, and `install/10-fabric.sh` repeats that with retries after the deploy, because on the first
+play the management network was not up yet when the setup script ran.
 
 ```
 bedrock-proxy pod ──veth──▶ vxlan100 ──▶ TMM egress listener (tenant-a)

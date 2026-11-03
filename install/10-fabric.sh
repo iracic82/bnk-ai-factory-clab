@@ -100,6 +100,20 @@ kubectl --kubeconfig "$HOME/.kube/config" config delete-user kind-bnk >/dev/null
 ok "containerlab deploy finished"
 fabric_configure
 
+step "r5: masquerade to the internet for the cloud tier (chapter 15)"
+# r5's setup.sh asks apk for iptables, but at first boot the management network is not always ready when containerlab
+# runs the script (play of 2026-11-03: "iptables: not found" on r5, apk fine a minute later). This repeats the install
+# with retries once the deploy is complete, then adds the one POSTROUTING rule, idempotently.
+for _ in $(seq 1 12); do
+  docker exec r5 sh -c 'command -v iptables >/dev/null 2>&1 || apk add --no-cache iptables >/dev/null 2>&1' && break
+  sleep 5
+done
+if docker exec r5 sh -c 'command -v iptables >/dev/null 2>&1 && { iptables -t nat -C POSTROUTING -o eth0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE; } && iptables -t nat -S POSTROUTING | grep -q MASQUERADE'; then
+  ok "r5 masquerades on eth0: the tenants' SNAT addresses reach the internet"
+else
+  warn "r5 has no masquerade rule (iptables could not be installed): the cloud tier cannot reach Bedrock. Fix by hand: docker exec r5 sh -c 'apk add --no-cache iptables && iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE'"
+fi
+
 step "cluster"
 kubectl get nodes -o wide
 step "worker handoff links"

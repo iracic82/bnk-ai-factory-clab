@@ -23,9 +23,12 @@ TA="$API/api/v1/tenants/$T"
 PROF=$(j "$TA/profiles" | jq -r --arg n "$T-ai" '(.data // .items)[]? | select(.name==$n) | .name' | head -1)
 [ -n "$PROF" ] || PROF=$(j "$TA/profiles" | jq -r '(.data // .items)[0].name // empty')
 [ -n "$PROF" ] || { log "tenant $T has no AI Gateway profile yet"; exit 1; }
-log "profile $PROF, current hook: $(j "$TA/profiles/$PROF/semantic-router" | head -c 200)"
-log "delete: HTTP $(j -X DELETE "$TA/profiles/$PROF/semantic-router" -o /dev/null -w '%{http_code}')"
-sleep 3
+cur=$(j "$TA/profiles/$PROF/semantic-router"); log "profile $PROF, current hook: $(echo "$cur" | head -c 200)"
+# a hook that is already configured is removed first (the gateway resolved the old pod); an empty one answers 405 to DELETE
+if echo "$cur" | jq -e '(.data // .) | .configured == true' >/dev/null 2>&1; then
+  log "delete: HTTP $(j -X DELETE "$TA/profiles/$PROF/semantic-router" -o /dev/null -w '%{http_code}')"
+  sleep 3
+fi
 log "put: $(j -X PUT "$TA/profiles/$PROF/semantic-router" --data-binary '{"name":"semantic-router","port":50051,"timeoutMs":1000}' | head -c 300)"
 unset TOK
 if kubectl -n $NS wait --for=condition=Programmed "aigatewayprofiles.inference.k8s.f5.com/$PROF" --timeout=180s >/dev/null 2>&1; then
