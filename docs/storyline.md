@@ -64,7 +64,7 @@ Northlight's platform team. Every chapter opens where that story is.
 | 12 | Nowhere to send it | clean prompt: sandbox refuses, Cobalt's egress policy closed and TMM resets the pod, border1 sees nothing |
 | 13 | On the record | Polaris, TMM, OpenShell logs, Prometheus into one timeline |
 | 14 | Topology as a contract (optional) | labels on the workers, what the picker reads |
-| 15 | A model you don't own | the semantic router on the lab route picks the model, Nova on Bedrock answers through a proxy in Aurora's namespace, one rule on Aurora's exit is closed and opened |
+| 15 | A model you don't own | the semantic router keeps PII and prompt attacks local and sends STEM to Nova on Bedrock through a proxy in Aurora's namespace, the LLM Gateway prices it, scopes it to Aurora's key and fails over to the local model when one rule on Aurora's exit is closed |
 
 About four and a half hours. Chapters 10 to 12 are the incident; 5 to 8 introduce what they rely on. Chapter 15
 stands on its own after the incident: a tier Northlight rents instead of runs.

@@ -340,18 +340,18 @@ def c14():
 
 
 def c15():
-    s = Scene("Chapter 15 · A model you don't own", "A router decides which prompts leave, one rule decides whether they can",
-              "Aurora rents Nova on Bedrock. The router picks the model, a proxy in Aurora's namespace talks to AWS, and its way out is Aurora's exit.")
-    s.row(A, AH, [("model auto, lab route", ["ext_proc semantic-router", "poem -> qwen2.5-0.5b", "STEM -> nova-lite, else pool"], {"color": PURPLE}),
-                  ("provider lab-bedrock", ["LiteLLM proxy x2, tenant-a", "ladder pro -> lite -> micro"], {"color": GREEN}),
+    s = Scene("Chapter 15 · A model you don't own", "A router decides which prompts leave, the gateway decides what they cost and where they fall back",
+              "Aurora rents Nova on Bedrock. PII stays local, STEM goes to the cloud at a price, and when the exit closes the LLM Gateway fails over to the factory floor.")
+    s.row(A, AH, [("model auto, lab route", ["PII, injection -> local models", "poem -> qwen2.5-0.5b", "STEM -> nova-lite, else pool"], {"color": PURPLE}),
+                  ("nova-lite, two deployments", ["bedrock weight 100, priced", "local 1.5b weight 1, failover"], {"color": GREEN}),
                   ("F5SPKEgress tenant-a", ["tunnel, route domain, SNAT .10", "egress-allow-a: cloud-tier 443"], {"hot": True}),
                   ("border1 VLAN 101 -> r5", ["tcpdump: 10.201.200.10 -> :443", "r5 masquerades on the way out"], {"color": BLUE})],
           arrows=[(PURPLE, "rewrites model"), (GREEN, "https"), (BLUE, "")])
-    s.row(B, BH, [("close the cloud tier", ["15-cloud-closed-a.yaml: cloud-tier reject", "the proxy's SYN is reset at TMM", "the local models keep answering"], {"color": PINK}),
-                  ("what the picker never sees", ["no worker, no KV event, no metric", "a cloud model is a provider, not a pool member"], {"color": YELLOW, "dash": True})])
-    s.strip(C, CH, "two levers on one bill",
-            ["router: the tier by what the prompt is · picker: the worker by cache and load · exit policy: whether the packet leaves at all", "production: short-lived keys, fqdn rules with TMM's resolver, two replicas of each, PrivateLink instead of the internet"])
-    s.legend([(PURPLE, "router", "which model"), (GREEN, "proxy", "the only pod that talks to AWS"), (RED, "exit rule", "accept or reject, in place"), (BLUE, "VLAN 101", "where border1 sees it leave")])
+    s.row(B, BH, [("close the cloud tier", ["cloud-tier reject: SYN reset at TMM", "proxy answers 500, gateway retries", "nova-lite answers from the 1.5b"], {"color": PINK}),
+                  ("only the tenant that pays", ["Cobalt's key on Nova: 403", "Aurora's key: answered, priced", "a cloud model is a provider, not a pool member"], {"color": YELLOW, "dash": True})])
+    s.strip(C, CH, "three levers on one bill",
+            ["router: the tier by what the prompt is · gateway: the deployment, the price, the failover · exit policy: whether the packet leaves at all", "production: short-lived keys, fqdn rules with TMM's resolver, two replicas of each, PrivateLink instead of the internet"])
+    s.legend([(PURPLE, "router", "which model"), (GREEN, "LLM Gateway", "deployments, price, failover"), (RED, "exit rule", "accept or reject, in place"), (BLUE, "VLAN 101", "where border1 sees it leave")])
     s.save("scene-15.png")
 
 

@@ -144,7 +144,10 @@ aigw_tenant() {   # name display vip
   declare -A REF=()
   # the cloud tier is one more Generic provider: the proxy in tenant-a, with the proxy's own key as the provider key
   local PROVIDERS=("dynamo|http://mocker-frontend.aigw-models.svc.cluster.local:8000/v1|not-needed" "ollama|http://$KIND_GW:11434/v1|not-needed")
-  [ "$CLOUD" = 1 ] && PROVIDERS+=("bedrock|http://bedrock-proxy.tenant-a.svc.cluster.local:4000/v1|$PROXY_KEY")
+  # the rented tier belongs to the tenant that pays for it: Aurora and the lab tenant get the provider and the Nova
+  # models, Borealis and Cobalt do not, and their keys are refused on them (chapter 15)
+  local RENTS=0; case "$T" in lab|tenant-a) RENTS=1 ;; esac
+  [ "$CLOUD" = 1 ] && [ "$RENTS" = 1 ] && PROVIDERS+=("bedrock|http://bedrock-proxy.tenant-a.svc.cluster.local:4000/v1|$PROXY_KEY")
   for spec in "${PROVIDERS[@]}"; do
     IFS='|' read -r n url val <<<"$spec"; ref=$(pk_ref "$T-$n")
     if [ -z "$ref" ]; then
@@ -157,7 +160,7 @@ aigw_tenant() {   # name display vip
   has_model() { j "$TA/models" | jq -e --arg n "$1" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1; }
   local MODELS=() SPECS=("qwen3-0.6b-dynamo|dynamo|Qwen/Qwen3-0.6B" "qwen2.5-1.5b|ollama|qwen2.5:1.5b" "qwen2.5-0.5b|ollama|qwen2.5:0.5b")
   # the Nova ladder answers from Bedrock; the upstream is the alias the proxy's config.yaml maps to the us.* profile
-  [ "$CLOUD" = 1 ] && SPECS+=("nova-micro|bedrock|nova-micro" "nova-lite|bedrock|nova-lite" "nova-pro|bedrock|nova-pro")
+  [ "$CLOUD" = 1 ] && [ "$RENTS" = 1 ] && SPECS+=("nova-micro|bedrock|nova-micro" "nova-lite|bedrock|nova-lite" "nova-pro|bedrock|nova-pro")
   for spec in "${SPECS[@]}"; do
     IFS='|' read -r name prov up <<<"$spec"
     # a model is backed by an AIModel object named after it, one per cluster: a second tenant cannot register the same
@@ -169,6 +172,20 @@ aigw_tenant() {   # name display vip
       # an org's modelScope is validated against the registered models, and a model just posted takes a moment
       for _ in $(seq 1 30); do has_model "$name" && break; sleep 2; done
       has_model "$name" || warn "$T: model $name not created: $(echo "$r" | head -c 300)"
+      # A rented model gets what a tenant would expect from BNK's LLM Gateway: a price on the deployment (micro-USD per
+      # million tokens, Bedrock list prices on 2026-11-03) so every request is recorded with a cost, and a second
+      # deployment on the local 1.5b CPU model at weight 1 against 100, which the profile's failover uses when the
+      # cloud answers 5xx or 429 (chapter 15 closes the exit and the answers keep coming). The AIModel object is the
+      # source of truth, so the two go in as a patch on it; the API created it a moment ago.
+      if [ "$prov" = bedrock ]; then
+        case "$up" in nova-micro) IN=35000; OUT=140000 ;; nova-lite) IN=60000; OUT=240000 ;; nova-pro) IN=800000; OUT=3200000 ;; *) IN=1; OUT=1 ;; esac
+        for _ in $(seq 1 30); do kubectl -n $NS get aimodels.inference.k8s.f5.com "$name" >/dev/null 2>&1 && break; sleep 2; done
+        # the AIProvider object is named by the key's id (pk-...), without the tenant prefix the API's identity carries
+        kubectl -n $NS patch aimodels.inference.k8s.f5.com "$name" --type merge -p "$(jq -n --arg p "${REF[$prov]##*/}" --arg u "$up" --arg f "${REF[ollama]##*/}" --argjson i "$IN" --argjson o "$OUT" \
+          '{spec:{deployments:[{providerRef:{name:$p},upstream:$u,dialects:["openai"],weight:100,state:"Active",pricing:{inputPerMtok:$i,outputPerMtok:$o}},{providerRef:{name:$f},upstream:"qwen2.5:1.5b",dialects:["openai"],weight:1,state:"Active",pricing:{inputPerMtok:1,outputPerMtok:1}}]}}')" >/dev/null 2>&1 \
+          && ok "$T: $name priced ($IN/$OUT micro-USD per Mtok) with the local 1.5b as its failover deployment" \
+          || warn "$T: could not patch pricing and the failover deployment onto AIModel $name"
+      fi
     fi
   done
   # provider keys that no model uses and that duplicate a used name are leftovers of an earlier double post
@@ -207,6 +224,15 @@ aigw_tenant() {   # name display vip
   kubectl -n $NS get gateway "$T-ai" >/dev/null 2>&1 \
     || jq -n --arg n "$T-ai" --arg a "$VIP" '{name:$n,address:$a,gatewayClassName:"f5-gateway-class"}' | j "$TA/routes" --data-binary @- >/dev/null
   kubectl -n $NS wait --for=condition=Programmed "gateway/$T-ai" --timeout=240s >/dev/null && ok "$T: route $T-ai on $VIP Programmed, ${#MODELS[@]} models$([ -s "$SECRETS_DIR/aigw/$T.key" ] && echo ", key in $SECRETS_DIR/aigw/$T.key" || echo ", NO KEY")" || warn "$T: gateway $T-ai not Programmed"
+  # The profile the route created carries the LLM Gateway's failover: two attempts per request, a failed provider
+  # skipped for 30 s, on upstream 5xx and 429. Only where there is a second deployment to fail over to (RENTS).
+  if [ "$CLOUD" = 1 ] && [ "$RENTS" = 1 ]; then
+    for _ in $(seq 1 30); do kubectl -n $NS get aigatewayprofiles.inference.k8s.f5.com "$T-ai" >/dev/null 2>&1 && break; sleep 2; done
+    kubectl -n $NS patch aigatewayprofiles.inference.k8s.f5.com "$T-ai" --type merge -p '{"spec":{"failover":{"maxAttempts":2,"on5xx":true,"on429":true,"cooldown":"30s"}}}' >/dev/null 2>&1 \
+      && kubectl -n $NS wait --for=condition=Programmed "aigatewayprofiles.inference.k8s.f5.com/$T-ai" --timeout=180s >/dev/null 2>&1 \
+      && ok "$T: failover on profile $T-ai (2 attempts, 30 s cooldown, on 5xx and 429)" \
+      || warn "$T: failover not Programmed on profile $T-ai: kubectl -n $NS get aigatewayprofiles.inference.k8s.f5.com $T-ai -o yaml"
+  fi
 }
 aigw_tenant lab      "AI Factory"    172.16.100.13
 aigw_tenant tenant-a "Aurora Health" 172.16.100.20

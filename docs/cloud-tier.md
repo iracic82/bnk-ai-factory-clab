@@ -30,6 +30,30 @@ client ──▶ lab route 172.16.100.13 ──▶ Polaris (AI Gateway) ──�
 | The internet | `fabric/nodes/r5/setup.sh`, `install/10-fabric.sh` | r5 masquerades on its management interface, so a tenant's SNAT address never leaves the VM and the reply finds its way back through the fabric. The FRR image has no iptables; setup.sh asks apk for it, and because the management network is not always up at first boot (first play, 2026-11-03), 10-fabric.sh repeats the install with retries after the deploy and adds the rule |
 | NetworkPolicies | both manifests | The proxy accepts port 4000 from `f5-bnk` and TMM's internal self IP only (tenant-isolation admits nothing else from outside the namespace). The router accepts 50051 and 8080 from `f5-bnk` and that self IP only |
 
+## What the LLM Gateway itself does here (verified on the running lab, 2026-11-03)
+
+BNK 2.4.1 added the LLM Gateway as Early Access, in the TMM data path, and the 2.4.2 build (Polaris 14.91.12)
+is what this lab runs. The release notes list its capabilities: multi-provider routing with failover, virtual
+keys, budgets and rate limits, JWT and OIDC inbound auth, per-request telemetry with cost, and a prompt cache that
+2.4.1 limits to OpenAI and Anthropic models. A profile's `capabilities` on the API are the live version of that
+list. Chapter 15 uses four of them on top of the router hook.
+
+| Feature | Object and field | What chapter 15 does with it |
+|---|---|---|
+| Model scope per key | virtual key `modelScope`, set by `install/40-ai.sh` | only the lab tenant and Aurora get the Nova models; Cobalt's key on `tenant-a-nova-lite` is refused with `403 model_not_allowed` |
+| Pricing per deployment | `AIModel.spec.deployments[].pricing`, micro-USD per million tokens | Nova list prices on the Bedrock deployment, a nominal 1 on the local one, so the model reports `Priced=True` and every request is recorded with a cost |
+| Failover | `AIGatewayProfile.spec.failover` (`maxAttempts`, `on5xx`, `on429`, `cooldown`, `honorRetryAfter`) | `nova-lite` has a second deployment on the local 1.5b at weight 1 against 100. With the exit closed the proxy answers 500, the gateway retries on the local deployment and the client gets "Mars" under the name `nova-lite` |
+| Model routing hook | `AIGatewayProfile.spec.modelRouting.semanticRouter` | the vLLM semantic router, attached by `install/lib/attach-router.sh` |
+
+Both the pricing and the failover went in as patches on the objects, because the API answers 405 to updates on a
+model or a profile and has no sub-resource for either. The objects are the source of truth: the API reflected the
+patched failover at once as `capabilities.failover: true`, and the profile was Programmed again within a minute.
+
+One rule from F5 engineering about the LLM Gateway, relayed on 2026-11-03: its authentication runs for every path
+under a Gateway, so an unauthenticated route cannot share a Gateway with it. The lab complies by construction, the
+tenant apps and MCP servers are published on their own VIPs (172.16.100.16 to .18) and the AI routes on .13 and
+.20 to .22.
+
 ## Why it is shaped this way
 
 - **A cloud model is a provider, not a pool member.** Nova has no worker, no KV events and no metrics. The picker
@@ -64,15 +88,30 @@ client ──▶ lab route 172.16.100.13 ──▶ Polaris (AI Gateway) ──�
    Service with hand-written endpoints gives plain load balancing only. Across sites, each site keeps its own BNK
    and picker, and site selection happens above the pool.
 
+## The router's cache, tried and left off
+
+The vLLM semantic router carries a semantic response cache (`global.stores.response_cache` plus a `response_cache`
+plugin on each decision that should use it). On the first play it was configured on both cloud decisions, the
+store initialised, and four identical questions cost four Bedrock calls with no lookup or store logged in either
+router pod. The LLM Gateway's hook carries the request to the router and takes the model name back. The response
+never passes through the router, so there is nothing to store. The config keeps the store declared and off, with
+the keys recorded for a later release that passes responses. The LLM Gateway's own prompt cache is limited to
+OpenAI and Anthropic models in 2.4.1, so Generic providers such as the proxy get no cache at the gateway either.
+
 ## Verified and still to verify
 
-Verified on the first play (2026-11-03, participant vjkeaj3ey31c): the AWS account was handed out and the proxy
-was Ready at setup; both router pods were Ready eight minutes after apply and the hook was Programmed at 19:45;
-`model: auto` sent a poem to `qwen2.5-0.5b`, a binary-search question to `nova-lite` and a one-word reply to the
-pool; a direct `nova-micro` request answered from Bedrock once r5 had its masquerade rule; LiteLLM's log carries
+Verified on the first play (2026-11-03, participant vjkeaj3ey31c). The AWS account was handed out and the proxy
+was Ready at setup. Both router pods were Ready eight minutes after apply and the hook was Programmed at 19:45.
+`model: auto` sent a patient record to `qwen2.5-1.5b`, a prompt injection to `qwen2.5-0.5b`, a poem to
+`qwen2.5-0.5b`, a binary-search question to `nova-lite` and a one-word reply to the pool. A direct `nova-micro`
+request answered from Bedrock once r5 had its masquerade rule. Cobalt's key on `tenant-a-nova-lite` got
+`403 model_not_allowed` and Aurora's key an answer. With pricing and the second deployment patched on `nova-lite`
+and failover on the profile, two prompts during a closed exit were answered by the local deployment under the
+name `nova-lite` while the proxy logged 500, and Bedrock answered again after the reopen. LiteLLM's log carries
 `LiteLLM completion() model= converse/us.amazon.nova-micro-v1:0; provider = bedrock`, which the check greps. What
-failed on that play: r5's deploy-time `apk add iptables` (management network not ready), fixed by hand and then
-in `install/10-fabric.sh`.
+failed on that play: r5's deploy-time `apk add iptables` (management network not ready), fixed by hand and then in
+`install/10-fabric.sh`, the router at 6 Gi with four classifiers (OOM-killed, now 12 Gi), and the router's cache
+(see above).
 
 Verified on 2026-11-03 before the first play: the LiteLLM image `v1.106.6` and the extproc `v0.4.0` exist on
 ghcr.io at the pinned digests; the firewall rule fields (`destination.ports`, `ipProtocol: tcp`, `action: reject`)

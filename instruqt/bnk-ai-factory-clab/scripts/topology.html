@@ -230,12 +230,12 @@ const FLOWS = [
    why:"Reachability is the last layer. When no declaration gives a pod a way out, content and identity never come into it." },
  { id:"cloud", label:"A model you don't own", color:C.ten, status:["ch","chapter 15"], steps:[
     {p:"agentInt", c:C.ten, lit:["n-ta","n-int"], t:"A prompt with <code>model: auto</code> reaches the lab route on 172.16.100.13."},
-    {p:"intPol", c:C.tmm, lit:["n-polaris"], t:"Polaris hands the body to the semantic router, the ext_proc on profile <code>lab-ai</code>. A STEM prompt comes back as <code>nova-lite</code>, a story as <code>qwen2.5-0.5b</code>, anything else as the pool model."},
-    {p:"vipTen", c:C.ten, lit:["n-ta"], t:"Provider <code>lab-bedrock</code>: the proxy in Aurora's namespace signs the request for Bedrock. Its way out is Aurora's <code>F5SPKEgress</code>."},
-    {p:"podCsrc", c:C.ten, lit:["n-csrc","n-int"], t:"Into the tunnel, route domain tenant-a, policy <code>egress-allow-a</code>: rule <code>cloud-tier</code> accepts tcp/443 and logs it. On reject the SYN is reset right here."},
+    {p:"intPol", c:C.tmm, lit:["n-polaris"], t:"The LLM Gateway hands the body to the semantic router, the ext_proc on profile <code>lab-ai</code>. A patient record or a prompt injection stays on a local model, a story goes to the small CPU model, a STEM question comes back as <code>nova-lite</code>, anything else as the pool model."},
+    {p:"vipTen", c:C.ten, lit:["n-ta"], t:"Provider <code>lab-bedrock</code>, the first deployment of <code>nova-lite</code>: the proxy in Aurora's namespace signs the request for Bedrock. Its way out is Aurora's <code>F5SPKEgress</code>."},
+    {p:"podCsrc", c:C.ten, lit:["n-csrc","n-int"], t:"Into the tunnel, route domain tenant-a, policy <code>egress-allow-a</code>: rule <code>cloud-tier</code> accepts tcp/443 and logs it. On reject the SYN is reset right here, the proxy answers 500, and the gateway's failover retries on the second deployment, the local 1.5b."},
     {p:"intExt", c:C.tmm, lit:["n-tmm","n-ext"], t:"SNAT 10.201.200.10, then the default route leaf1 gave the VRF on VLAN 101."},
-    {p:"spBord", c:C.fab, lit:["n-border","n-r5"], t:"border1 to r5, where the factory ends. r5 masquerades and the packet goes to bedrock-runtime.us-east-1.amazonaws.com:443. The answer returns the same way."}],
-   why:"A cloud model is a provider at the gateway and one rule on a tenant's exit. The picker never sees it: there is no worker, no KV event, nothing to score." },
+    {p:"spBord", c:C.fab, lit:["n-border","n-r5"], t:"border1 to r5, where the factory ends. r5 masquerades and the packet goes to bedrock-runtime.us-east-1.amazonaws.com:443. The answer returns the same way, priced per token on the record."}],
+   why:"A cloud model is a provider at the gateway, a priced deployment with a local one behind it, and one rule on a tenant's exit. The picker never sees it: there is no worker, no KV event, nothing to score." },
 ];
 const $ = id => document.getElementById(id);
 const segs = $("segs"), pkt = $("pkt");

@@ -17,7 +17,7 @@ Measured on a licensed BNK install (`bnk-ai-factory-real/SIZING.md`), requests, 
 | kagent, OpenShell gateway, Substrate, 3 tenant agents, CPU qwen | ~3 |
 | Prometheus, Grafana, Polaris console, ClickHouse | ~1.5 |
 | FRR fabric (6 containers), client, registry mirrors | ~0.5 |
-| chapter 15: semantic router (2 pods, 0.5 each) + Bedrock proxy (2 pods, 0.25 each) | ~1.5 |
+| chapter 15: semantic router (2 pods, 0.5 each, 4 Gi requested and 12 Gi allowed each: four CPU classifiers in float32 were OOM-killed at 6 Gi) + Bedrock proxy (2 pods, 0.25 each) | ~1.5 |
 | **Total requested** | **~31** |
 
 kind nodes all advertise the host's CPUs, so Kubernetes sees 3 x 32 = 96 allocatable and never refuses a pod on
