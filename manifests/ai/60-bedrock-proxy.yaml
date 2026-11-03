@@ -1,0 +1,113 @@
+# The cloud tier: an OpenAI-compatible proxy in Aurora's namespace that speaks Amazon Bedrock's native API for the
+# Nova models. Polaris registers it as one more Generic provider (install/40-ai.sh), the answers come from AWS, the
+# exit is Aurora's F5SPKEgress, and the rule that lets it out is `cloud-tier` on egress-allow-a
+# (manifests/bnk/30-egress.yaml). Chapter 15 closes that rule and the cloud tier stops while the local models go on.
+#
+# Why a proxy: Nova and Claude are not served on Bedrock's OpenAI-compatible endpoint (the Nova Lite model card lists
+# Chat Completions as not supported, only Invoke and Converse), so something has to speak Converse and sign with the
+# AWS keys. LiteLLM does, with retries and a fallback ladder (pro -> lite -> micro), and it demands its own API key.
+# Why Aurora's namespace: a namespace gets exactly one F5SPKEgress and the egress objects are never touched on a
+# running lab (docs/egress.md), so the cloud tier shares Aurora's exit instead of adding a fourth tunnel.
+# Why two replicas: Polaris calls one Service; the PodDisruptionBudget and the anti-affinity keep one proxy up while
+# the other restarts, which is what a tenant would expect from a tier it pays for.
+#
+# Secrets: bedrock-aws carries the Instruqt AWS account's keys (written by track_scripts/setup-factory, turned into
+# the Secret by 40-ai.sh and shredded from disk), bedrock-proxy carries the proxy's own key, generated at install and
+# handed to Polaris as the provider key. Nothing in this file is applied when no AWS account is attached: 40-ai.sh
+# skips it and chapter 15 says so. __INTERNAL_SELFIP__ is TMM's internal self IP, filled in by 40-ai.sh as for
+# 50-netpol.yaml: the provider call reaches the proxy from a Polaris pod in f5-bnk or from that address.
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: bedrock-proxy-config, namespace: tenant-a, labels: {app: bedrock-proxy}}
+data:
+  config.yaml: |
+    model_list:
+      - model_name: nova-micro
+        litellm_params: {model: bedrock/converse/us.amazon.nova-micro-v1:0, aws_region_name: us-east-1}
+      - model_name: nova-lite
+        litellm_params: {model: bedrock/converse/us.amazon.nova-lite-v1:0, aws_region_name: us-east-1}
+      - model_name: nova-pro
+        litellm_params: {model: bedrock/converse/us.amazon.nova-pro-v1:0, aws_region_name: us-east-1}
+    router_settings:
+      num_retries: 2
+      timeout: 60
+      fallbacks:
+        - {nova-pro: [nova-lite]}
+        - {nova-lite: [nova-micro]}
+    litellm_settings:
+      drop_params: true
+      request_timeout: 60
+      set_verbose: false
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: bedrock-proxy, namespace: tenant-a, labels: {app: bedrock-proxy}}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: bedrock-proxy}}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  template:
+    metadata: {labels: {app: bedrock-proxy}}
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm: {labelSelector: {matchLabels: {app: bedrock-proxy}}, topologyKey: kubernetes.io/hostname}
+      securityContext: {seccompProfile: {type: RuntimeDefault}}
+      containers:
+      - name: litellm
+        # pinned by digest: the tag alone can move under a replay (checked on ghcr.io on 2026-11-03)
+        image: ghcr.io/berriai/litellm:v1.106.6@sha256:37e2dafb088a7723beb998590682957386dfc83ffea1848486f8e0e5cfac0b06
+        args: ["--config", "/app/config.yaml", "--port", "4000"]
+        env:
+        - {name: AWS_REGION, value: us-east-1}
+        - {name: AWS_DEFAULT_REGION, value: us-east-1}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom: {secretKeyRef: {name: bedrock-aws, key: AWS_ACCESS_KEY_ID}}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom: {secretKeyRef: {name: bedrock-aws, key: AWS_SECRET_ACCESS_KEY}}
+        - name: LITELLM_MASTER_KEY
+          valueFrom: {secretKeyRef: {name: bedrock-proxy, key: LITELLM_MASTER_KEY}}
+        - {name: LITELLM_LOG, value: INFO}
+        ports: [{name: http, containerPort: 4000}]
+        securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+        startupProbe: {httpGet: {path: /health/liveliness, port: 4000}, periodSeconds: 5, failureThreshold: 60}
+        readinessProbe: {httpGet: {path: /health/readiness, port: 4000}, periodSeconds: 10, timeoutSeconds: 5, failureThreshold: 3}
+        livenessProbe: {httpGet: {path: /health/liveliness, port: 4000}, periodSeconds: 30, timeoutSeconds: 5, failureThreshold: 5}
+        resources: {requests: {cpu: 250m, memory: 512Mi}, limits: {cpu: "1", memory: 2Gi}}
+        volumeMounts: [{name: config, mountPath: /app/config.yaml, subPath: config.yaml, readOnly: true}]
+      volumes:
+      - name: config
+        configMap: {name: bedrock-proxy-config}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: bedrock-proxy, namespace: tenant-a, labels: {app: bedrock-proxy}}
+spec:
+  selector: {app: bedrock-proxy}
+  ports: [{name: http, port: 4000, targetPort: 4000}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: bedrock-proxy, namespace: tenant-a, labels: {app: bedrock-proxy}}
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app: bedrock-proxy}}
+---
+# tenant-isolation (manifests/agents/tenant-agent/base/k8s/networkpolicy.yaml) admits nothing from f5-bnk on 4000;
+# this policy adds the provider path and nothing else. Calico takes the union.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: bedrock-proxy-from-polaris, namespace: tenant-a}
+spec:
+  podSelector: {matchLabels: {app: bedrock-proxy}}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
+    - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
+    ports: [{protocol: TCP, port: 4000}]

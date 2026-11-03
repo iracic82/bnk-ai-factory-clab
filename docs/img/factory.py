@@ -54,7 +54,7 @@ for n, (x, y) in nodes.items():
     text(x, y - 2, n, 14, "#14532d", 700, "middle"); text(x, y + 14, asn[n], 10.5, "#166534", 400, "middle")
 text(fx + 16, fy + 500, "VRFs on leaves and border1: external (L3VNI 10000), tenant-a/b/c (10001-10003), RT 65000:<vni>", 12.5, "#166534")
 text(fx + 16, fy + 522, "leaf1 eth3 -> bnk-worker eth1: untagged 172.16.10.0/24 (TMM .11, leaf .1 as AS 65000) + VLAN 101-103 (172.17.10x.0/24)", 12.5, "#166534")
-text(fx + 16, fy + 544, "r5 gives every VRF a default and takes the VIP pools and tenant SNAT pools back; the client stands in for the internet", 12.5, "#166534")
+text(fx + 16, fy + 544, "r5 gives every VRF a default and takes the VIP pools and tenant SNAT pools back; the client stands in for the internet, and r5 masquerades to the real one (chapter 15)", 12.5, "#166534")
 
 # ---- kind cluster (right)
 kx, ky, kw = 780, 140, W - 830
@@ -86,13 +86,14 @@ for i, (h, d) in enumerate(cols):
 ax, ay = kx + 16, by + 216
 box(ax, ay, kw - 32, 250, "#ffffff", "#7c3aed", 10, 2)
 text(ax + 14, ay + 24, "AI layer", 14, "#6d28d9", 700)
-chapter(ax + kw - 60, ay + 20, 3); chapter(ax + kw - 95, ay + 20, 4)
-cells = [("Polaris AI Gateway", "console :3000 · tenants lab, tenant-a/b/c · providers dynamo + ollama · virtual keys · routes 172.16.100.13 / .20 / .21 / .22"),
+chapter(ax + kw - 60, ay + 20, 3); chapter(ax + kw - 95, ay + 20, 4); chapter(ax + kw - 130, ay + 20, 15)
+cells = [("Polaris AI Gateway", "console :3000 · tenants lab, tenant-a/b/c · providers dynamo + ollama + bedrock · virtual keys · routes 172.16.100.13 / .20 / .21 / .22"),
          ("NVIDIA Dynamo 1.5.1", "aigw-models: Frontend + 2 Mocker decode workers (vllm:* metrics, KV events on NATS) · simulated, no GPU"),
          ("F5 Endpoint Picker", "F5EPP engine dynamo · prefix-cache + prefill-load scorers · InferencePool model-pool behind VIP 172.16.100.12:8000"),
+         ("Cloud tier + router", "semantic-router x2 (f5-bnk): ext_proc on profile lab-ai, model auto · bedrock-proxy x2 (tenant-a) -> Nova micro/lite/pro on Bedrock · exit: egress-allow-a rule cloud-tier tcp/443"),
          ("GPU simulators", "fake GPU operator 0.2.1: 4 x H100 per worker, nvidia-smi + DCGM · KAI v0.18.6 queues ai-factory -> tenant-a/b/c (4/2/2)"),
          ("Observability", "kube-prometheus-stack · Grafana :30300 · Prometheus :30909 · scrapes mocker, picker, DCGM")]
-cw = (kw - 60) / 5
+cw = (kw - 60) / 6
 for i, (h, d) in enumerate(cells):
     x = ax + 14 + i * cw
     box(x, ay + 40, cw - 12, 190, "#f5f3ff", "#c4b5fd", 8, 1.5)

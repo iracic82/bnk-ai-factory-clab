@@ -2,7 +2,9 @@
 
 The EVE-NG lab (`iracic82/Home_k8s`) rebuilt so it fits one Instruqt VM: BIG-IP Next for Kubernetes 2.4.2 in host
 mode on a kind cluster, with an FRR spine/leaf/border fabric around it, wired together by containerlab. Same
-address plan, same tenants, same agents, OpenShell and Agent Substrate included. No NICo and no semantic router.
+address plan, same tenants, same agents, OpenShell and Agent Substrate included. No NICo. The semantic router is
+back since 2026-11-03, together with a cloud tier the EVE lab never had: Nova on Amazon Bedrock behind a proxy in
+Aurora's namespace, reached through Aurora's egress (chapter 15, `docs/cloud-tier.md`).
 
 This is a new lab in its own repository and its own Instruqt track. The earlier tracks in `bnk-ai-factory-lab`
 stay as they are.
@@ -54,19 +56,23 @@ One TMM, on `bnk-worker`. Labelling a second node sends the lifecycle operator i
 | `install/20-cluster.sh` | kubelet restart so nodes advertise hugepages, taints, node labels |
 | `install/30-bnk.sh` | clones `iracic82/bnk-deploy` and runs it unmodified (`--env lab --profile host`, BNK 2.4.0), raises it to 2.4.2 with the installer's own `upgrade.sh`, then patches on the AI features and the legacy network model (OcNOS, VRFs) |
 | `install/35-bnk-network.sh` | TMM on the fabric: external, internal and per-tenant VLAN legs, the VIP pool, OcNOS routing templates, BGP to leaf1 in the default domain and in every tenant VRF, the tenant VRFs with a first VIP each, per-tenant egress; proves it from the client behind r5 |
-| `install/40-ai.sh` | GAIE CRDs, NVIDIA Dynamo (platform, NATS, two Mocker workers with real `vllm:*` metrics and KV events), the model pool behind its VIP with F5's Endpoint Picker, ollama on the VM for the agents' CPU model, the Polaris AI Gateway with one tenant per lab tenant (providers, models, virtual keys, a route on its own VIP), fake GPU operator (4 x H100 per worker) and KAI queues |
+| `install/40-ai.sh` | GAIE CRDs, NVIDIA Dynamo (platform, NATS, two Mocker workers with real `vllm:*` metrics and KV events), the model pool behind its VIP with F5's Endpoint Picker, ollama on the VM for the agents' CPU model, the Polaris AI Gateway with one tenant per lab tenant (providers, models, virtual keys, a route on its own VIP), fake GPU operator (4 x H100 per worker) and KAI queues. With an AWS account attached: the cloud tier (`manifests/ai/60-bedrock-proxy.yaml`, a LiteLLM proxy in tenant-a, Nova micro/lite/pro as models of every tenant). Always: the vLLM semantic router on the lab tenant's profile (`manifests/ai/70-semantic-router.yaml`, attached by `install/lib/attach-router.sh`) |
 | `install/45-observability.sh` | Prometheus and Grafana (kube-prometheus-stack), scraping the mocker, the picker and the fake DCGM exporter |
 | `install/50-agents.sh` | kagent 0.10.4 (model through the AI Gateway), the operator's agent, one agent app + MCP server + kagent Agent per tenant, NVIDIA OpenShell (gateway + Agent Sandbox controller, one provider and sandbox per tenant; the key is injected only toward that tenant's AI Gateway), Agent Substrate v0.0.11. The shadow agent is written (`manifests/agents/shadow-agent.yaml`) and applied by the learner in chapter 9, never by the installer |
 | `install/60-guardrails.sh` | CalypsoAI: the mock scanner always, the real service through an in-cluster TLS bridge when a key is present; the guardrail `F5BigCneIrule` is created, and the `NetPolicy` that attaches it to Cobalt's gateway is written for the learner to apply in chapter 10 |
-| `install/lib/` | `common.sh` (pins, paths, helpers), `expose.sh` (UIs published on the host by socat units that follow a Service's ClusterIP) |
+| `install/lib/` | `common.sh` (pins, paths, helpers), `expose.sh` (UIs published on the host by socat units that follow a Service's ClusterIP), `attach-router.sh` (programs the semantic router on the lab tenant's AI Gateway profile once a router pod is Ready) |
 | `manifests/` | what the install steps apply: `bnk/` (legs, routing, tenants, egress), `tenants/` (namespaces, hello apps), `ai/`, `agents/` (kagent values, agents, the tenant agent app, OpenShell profile), `guardrails/` (mock, iRule, bridge) |
 | `docs/storyline.md` | the lab's story and the chapter plan |
+| `docs/cloud-tier.md` | chapter 15's pieces: the semantic router, the Bedrock proxy, Aurora's exit rule, r5's NAT, and what a production cluster does differently |
+| `docs/egress.md` | how a tenant's exit works, what must never be touched on a running lab, and the cloud tier's path out |
 | `instruqt/bnk-ai-factory-clab/` | the track: `config.yml` (one n2-standard-32 VM, image `f5/aibnk`, team secrets), `track.yml`, `track_scripts/setup-factory` (runs `install/*` in order), `build/bake-image.sh` + `finalise-image.sh` (the custom image), `SIZING.md` |
 
 Secrets never live here. Locally they come from `~/bnk-secrets`; on Instruqt from team secrets on the `f5` team
 (`FAR_PULL_B64`, `BNK_LICENSE_JWT`, `GH_READ_TOKEN`; `AI_CALYPSO_API` and `AI_CALYPSO_PROJECT` for the real
-CalypsoAI project "AI-Instruqt"). The baked image carries no secret: the bake's `finalise-image.sh` removes them and
-checks for key material before it says "ready to save".
+CalypsoAI project "AI-Instruqt"). The Bedrock keys for chapter 15 come from an AWS account in the team's pool
+(`aws_accounts` in `config.yml`), arrive as Instruqt variables, and live only in the Secret `tenant-a/bedrock-aws`.
+The baked image carries no secret: the bake's `finalise-image.sh` removes them and checks for key material before
+it says "ready to save".
 
 ## Where the pieces come from
 

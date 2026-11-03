@@ -1,0 +1,276 @@
+# The model router: the vLLM Semantic Router as the ext_proc of the lab tenant's AI Gateway profile. A request that
+# names model `auto` on the lab route (172.16.100.13) is classified before Polaris picks a provider: creative prompts
+# go to the small CPU model on ollama, STEM and code prompts to __STEM_MODEL__, prompts that ask for reasoning to
+# __REASON_MODEL__, everything else to the pool behind BNK's picker. The two placeholders are the cloud tier's models
+# when an AWS account is attached and the 1.5b CPU model when it is not (install/40-ai.sh fills them in).
+#
+# This is the same manifest the EVE lab ran (ref/home_k8s/ai3/30-semantic-router.yaml), moved into f5-bnk so the
+# gateway resolves the Service by its short name, with two replicas instead of one. The router downloads its
+# classifier and embedding models from Hugging Face on first start (about 3.6 GB, the EVE lab kept them on NFS), into
+# a volume per replica, which is why the startup probe allows forty minutes and why install/40-ai.sh does not wait
+# for it: chapter 15 is the last chapter. Attach, after the pods are Ready, is one PUT on the management API:
+#   PUT /api/v1/tenants/lab/profiles/lab-ai/semantic-router {"name":"semantic-router","port":50051,"timeoutMs":1000}
+# 40-ai.sh does it at install; chapter 15 shows it and repeats it if the router pods were replaced.
+# __INTERNAL_SELFIP__ is TMM's internal self IP (filled in by 40-ai.sh as for 50-netpol.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: semantic-router-config
+  namespace: f5-bnk
+  labels:
+    app: semantic-router
+data:
+  tools_db.json: '[]'
+  config.yaml: |
+    version: v0.3
+    listeners:
+      - {name: grpc-50051, address: 0.0.0.0, port: 50051, timeout: 300s}
+      - {name: http-8080, address: 0.0.0.0, port: 8080, timeout: 300s}
+    # Without the cloud tier, 40-ai.sh maps both placeholders to qwen2.5-1.5b and drops the lines marked cloud-only,
+    # so no model is listed twice.
+    providers:
+      defaults: {model: qwen3-0.6b-dynamo}
+      models:
+        - name: qwen3-0.6b-dynamo
+          provider_model_id: qwen3-0.6b-dynamo
+          backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]
+        - name: qwen2.5-0.5b
+          provider_model_id: qwen2.5-0.5b
+          backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]
+        - name: __STEM_MODEL__
+          provider_model_id: __STEM_MODEL__
+          backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]
+        - {name: __REASON_MODEL__, provider_model_id: __REASON_MODEL__, backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]}  # cloud-only
+    routing:
+      modelCards:
+        - {name: qwen3-0.6b-dynamo}
+        - {name: qwen2.5-0.5b}
+        - {name: __STEM_MODEL__}
+        - {name: __REASON_MODEL__}  # cloud-only
+      signals:
+        keywords:
+          - {name: reasoning, operator: OR, case_sensitive: false, keywords: ["prove","step by step","derive","explain why","analyze","compare","trade-off"]}
+        domains:
+          - {name: math, description: "Mathematics", mmlu_categories: [math]}
+          - {name: physics, description: "Physics", mmlu_categories: [physics]}
+          - {name: chemistry, description: "Chemistry", mmlu_categories: [chemistry]}
+          - {name: biology, description: "Biology", mmlu_categories: [biology]}
+          - {name: engineering, description: "Engineering", mmlu_categories: [engineering]}
+          - {name: "computer science", description: "Code and computer science", mmlu_categories: ["computer science"]}
+          - {name: other, description: "General fallback", mmlu_categories: [other]}
+        embeddings:
+          - name: creative_writing
+            threshold: 0.65
+            aggregation_method: max
+            candidates:
+              - write a short story
+              - write a poem
+              - creative writing prompt
+              - tell me a fairy tale
+              - write a story about a dragon
+              - compose song lyrics
+      decisions:
+        - name: creative-to-small-cpu-model
+          priority: 30
+          rules: {operator: OR, conditions: [{type: embedding, name: creative_writing}]}
+          modelRefs: [{model: qwen2.5-0.5b, use_reasoning: false}]
+        - name: reasoning-to-the-big-model
+          priority: 25
+          rules: {operator: OR, conditions: [{type: keyword, name: reasoning}]}
+          modelRefs: [{model: __REASON_MODEL__, use_reasoning: false}]
+        - name: stem-and-code-to-the-cloud-tier
+          priority: 20
+          rules:
+            operator: OR
+            conditions:
+              - {type: domain, name: math}
+              - {type: domain, name: physics}
+              - {type: domain, name: chemistry}
+              - {type: domain, name: biology}
+              - {type: domain, name: engineering}
+              - {type: domain, name: "computer science"}
+          modelRefs: [{model: __STEM_MODEL__, use_reasoning: false}]
+        - name: everything-else-to-the-pool
+          priority: 1
+          rules: {operator: AND, conditions: []}
+          modelRefs: [{model: qwen3-0.6b-dynamo, use_reasoning: false}]
+    global:
+      router: {strategy: priority, auto_model_name: auto, auto_model_names: [auto, MoM]}
+      services: {response_api: {enabled: false, store_backend: memory}}
+      stores: {response_cache: {enabled: false, backend_type: memory}}
+      integrations: {tools: {enabled: false, tools_db_path: config/tools_db.json, fallback_to_empty: true}}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: semantic-router
+  namespace: f5-bnk
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: semantic-router
+  namespace: f5-bnk
+  labels:
+    app: semantic-router
+spec:
+  selector:
+    app: semantic-router
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+  - name: classify-api
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: semantic-router
+  namespace: f5-bnk
+  labels:
+    app: semantic-router
+spec:
+  serviceName: semantic-router
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: semantic-router
+  template:
+    metadata:
+      labels:
+        app: semantic-router
+    spec:
+      serviceAccountName: semantic-router
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm: {labelSelector: {matchLabels: {app: semantic-router}}, topologyKey: kubernetes.io/hostname}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: router
+        image: ghcr.io/vllm-project/semantic-router/extproc:v0.4.0@sha256:295a7da1ac432c950667083208a5a227e695efdc7b53502139d4c80c0b18b061
+        args:
+        - --secure=false
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - name: grpc
+          containerPort: 50051
+        - name: classify-api
+          containerPort: 8080
+        - name: metrics
+          containerPort: 9190
+        env:
+        - name: LD_LIBRARY_PATH
+          value: /app/lib
+        - name: HOME
+          value: /tmp
+        - name: TMPDIR
+          value: /tmp
+        - name: HF_HOME
+          value: /app/models/.cache/huggingface
+        - name: VLLM_SR_CONFIG_BACKUP_DIR
+          value: /app/models/.vllm-sr/config-backups
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /app/config/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        - name: config
+          mountPath: /app/config/tools_db.json
+          subPath: tools_db.json
+          readOnly: true
+        - name: models
+          mountPath: /app/models
+        startupProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 240
+        readinessProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          tcpSocket:
+            port: 50051
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+        resources:
+          requests:
+            cpu: 500m
+            memory: 2Gi
+          limits:
+            cpu: '4'
+            memory: 6Gi
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: semantic-router-config
+  volumeClaimTemplates:
+  - metadata:
+      name: models
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: semantic-router
+  namespace: f5-bnk
+  labels:
+    app: semantic-router
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: semantic-router
+---
+# Who may reach the router: the gateway's pods in f5-bnk and TMM's internal self IP, on the gRPC port and the
+# classify API (chapter 15 asks the classifier directly from a pod in f5-bnk). Nothing from a tenant namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: semantic-router-from-gateway-only
+  namespace: f5-bnk
+spec:
+  podSelector:
+    matchLabels:
+      app: semantic-router
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: f5-bnk}}
+    - ipBlock: {cidr: __INTERNAL_SELFIP__/32}
+    ports: [{port: 50051, protocol: TCP}, {port: 8080, protocol: TCP}]

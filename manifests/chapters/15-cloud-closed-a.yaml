@@ -1,0 +1,11 @@
+# Chapter 15: Aurora's exit with the cloud tier closed. Same policy name as manifests/bnk/30-egress.yaml, same two
+# rules, the first one flipped from accept to reject. TMM applies it in place: the proxy's next TLS connection to
+# Bedrock gets a reset before SNAT and routing, Aurora's other traffic still matches allow-all, and nothing about the
+# egress object, the tunnel or the pod rules changes. Open it again by applying manifests/bnk/30-egress.yaml.
+apiVersion: k8s.f5net.com/v1
+kind: F5BigFwPolicy
+metadata: {name: egress-allow-a, namespace: f5-bnk}
+spec:
+  rule:
+  - {name: cloud-tier, action: reject, logging: true, ipProtocol: tcp, destination: {ports: ["443"]}}
+  - {name: allow-all, action: accept, logging: false, ipProtocol: any}

@@ -13,11 +13,18 @@
 # the controller does not relearn a namespace's pods for a recreated egress, counts them to zero on the next pod
 # restart and then sends CSRC a mapping delete with no tunnel name, which removed another tenant's tunnel (play 8,
 # 2026-11-02, docs/egress.md). The tenant isolation itself is the VRF and the SNAT pool.
+# Aurora's policy carries one rule more. `cloud-tier` admits TLS (tcp/443) first and logs it, because the Bedrock
+# proxy of chapter 15 lives in tenant-a and is the one thing in Aurora's namespace that talks to the internet. The
+# rule comes first so that chapter 15 can flip it alone (manifests/chapters/15-cloud-closed-a.yaml): on reject, the
+# proxy's SYN to AWS is reset and Aurora's other traffic still matches allow-all. A destination by name
+# (destination.fqdns) is in the 2.4.2 CRD as well, but it needs TMM's global FQDN resolver (an F5BigDnsCache of type
+# net-resolver), which this lab does not set up. The port rule is the one verified here.
 apiVersion: k8s.f5net.com/v1
 kind: F5BigFwPolicy
 metadata: {name: egress-allow-a, namespace: f5-bnk}
 spec:
   rule:
+  - {name: cloud-tier, action: accept, logging: true, ipProtocol: tcp, destination: {ports: ["443"]}}
   - {name: allow-all, action: accept, logging: false, ipProtocol: any}
 ---
 apiVersion: k8s.f5net.com/v1

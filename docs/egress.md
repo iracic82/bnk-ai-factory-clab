@@ -89,3 +89,30 @@ pod ──veth──▶ vxlanNNN ──▶ TMM egress listener (tenant-c)
                               ├─ accept: SNAT 10.203.200.10 ─▶ VLAN 103 ─▶ border1 ─▶ r5 ─▶ webhook
                               └─ reject: RST back to the pod, nothing on VLAN 103
 ```
+
+## The cloud tier's way out (chapter 15, 2026-11-03)
+
+Aurora's exit carries the one thing in this lab that talks to the internet: the Bedrock proxy in `tenant-a`
+(`manifests/ai/60-bedrock-proxy.yaml`). It takes the same path as any pod of the namespace, and two things were
+added so that the path reaches AWS and can be closed on its own.
+
+The policy `egress-allow-a` has two rules in order. `cloud-tier` accepts tcp/443 and logs it, `allow-all` keeps
+Aurora's other traffic as it was. Chapter 15 flips the first rule to reject (`manifests/chapters/15-cloud-closed-a.yaml`)
+and opens it again from `30-egress.yaml`, the way chapter 12 does for Cobalt. The 2.4.2 CRD also takes
+`destination.fqdns`, which would name `bedrock-runtime.us-east-1.amazonaws.com` instead of a port, but a name in a
+rule needs TMM's global FQDN resolver (an `F5BigDnsCache` of type net-resolver with a reachable DNS server) and this
+lab does not set one up. The port rule is what runs here.
+
+r5 masquerades. A packet for an address outside the factory leaves r5 on its management interface, where docker's
+own NAT only translates docker's subnet. `fabric/nodes/r5/setup.sh` installs iptables at deploy time and adds one
+POSTROUTING rule on eth0, so Aurora's SNAT address stays inside and the reply finds its way back through r5, border1,
+leaf1 and TMM.
+
+```
+bedrock-proxy pod ──veth──▶ vxlan100 ──▶ TMM egress listener (tenant-a)
+                                           │ policy egress-allow-a
+                                           ├─ rule cloud-tier (tcp/443, logged)
+                                           │    ├─ accept: SNAT 10.201.200.10 ─▶ VLAN 101 ─▶ border1 ─▶ r5 ─MASQUERADE─▶ bedrock-runtime.us-east-1.amazonaws.com:443
+                                           │    └─ reject: RST to the proxy; LiteLLM reports the model as unreachable, the local models go on answering
+                                           └─ rule allow-all: everything else Aurora sends, unchanged
+```

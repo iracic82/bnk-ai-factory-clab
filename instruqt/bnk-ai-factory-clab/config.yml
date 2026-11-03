@@ -39,3 +39,19 @@ secrets:
   key: AI_CALYPSO_API
 - name: AI_CALYPSO_PROJECT
   key: AI_CALYPSO_PROJECT
+# The cloud tier (chapter 15): an AWS account from the team's pool with Amazon Bedrock enabled. Instruqt injects
+# INSTRUQT_AWS_ACCOUNT_BEDROCK_AWS_ACCESS_KEY_ID and _AWS_SECRET_ACCESS_KEY into the lifecycle scripts; setup-factory
+# turns them into the Secret the Bedrock proxy in tenant-a reads, and install/40-ai.sh registers the Nova models in
+# Polaris. The lab runs unchanged without this block: no proxy, no cloud models, and chapter 15 says so. The models
+# are the Nova ladder (micro, lite, pro) through the us.* cross-region inference profiles in us-east-1, the ids the
+# earlier track verified against Bedrock on 2026-09-12. Per-model token caps (service_limits.bedrock.models) can be
+# added once the first play has confirmed which model ids Instruqt's allowlist matches.
+aws_accounts:
+- name: bedrock
+  services:
+  - bedrock
+  - sts
+  regions:
+  - us-east-1
+  managed_policies:
+  - arn:aws:iam::aws:policy/AmazonBedrockFullAccess

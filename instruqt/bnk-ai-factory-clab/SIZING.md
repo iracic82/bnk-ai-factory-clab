@@ -17,7 +17,8 @@ Measured on a licensed BNK install (`bnk-ai-factory-real/SIZING.md`), requests, 
 | kagent, OpenShell gateway, Substrate, 3 tenant agents, CPU qwen | ~3 |
 | Prometheus, Grafana, Polaris console, ClickHouse | ~1.5 |
 | FRR fabric (6 containers), client, registry mirrors | ~0.5 |
-| **Total requested** | **~29.5** |
+| chapter 15: semantic router (2 pods, 0.5 each) + Bedrock proxy (2 pods, 0.25 each) | ~1.5 |
+| **Total requested** | **~31** |
 
 kind nodes all advertise the host's CPUs, so Kubernetes sees 3 x 32 = 96 allocatable and never refuses a pod on
 CPU; what matters is that real usage stays under 32. Idle BNK plus the lab layer measured about 6 cores on EVE;
@@ -39,6 +40,7 @@ runs), and one VM removes the sequential-setup trap, the ssh-and-join step and t
 | mirrors: calico, multus, cert-manager, kind node, FRR, dynamo, fake GPU, KAI, kagent, OpenShell, ollama + qwen | ~8 |
 | kind node containers at run time (3 x ~5 GB image stores filled from the mirrors) | ~15 |
 | local-path volumes (ClickHouse, Prometheus, NATS, postgres for kagent) | ~10 |
+| chapter 15 at track start, not in the baked image: the semantic router's models (2 pods x 3.6 GB from Hugging Face), the router and LiteLLM images through the ghcr.io mirror | ~12 |
 | headroom for logs, learner work | rest |
 
 Stock Instruqt images have a 10 GB disk and no way to change it; that is why the image is custom.

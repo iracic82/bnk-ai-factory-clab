@@ -64,8 +64,10 @@ Northlight's platform team. Every chapter opens where that story is.
 | 12 | Nowhere to send it | clean prompt: sandbox refuses, Cobalt's egress policy closed and TMM resets the pod, border1 sees nothing |
 | 13 | On the record | Polaris, TMM, OpenShell logs, Prometheus into one timeline |
 | 14 | Topology as a contract (optional) | labels on the workers, what the picker reads |
+| 15 | A model you don't own | the semantic router on the lab route picks the model, Nova on Bedrock answers through a proxy in Aurora's namespace, one rule on Aurora's exit is closed and opened |
 
-About four hours. Chapters 10 to 12 are the incident; 5 to 8 introduce what they rely on.
+About four and a half hours. Chapters 10 to 12 are the incident; 5 to 8 introduce what they rely on. Chapter 15
+stands on its own after the incident: a tier Northlight rents instead of runs.
 
 ## What is real in each product, checked 2026-10-31
 
@@ -101,3 +103,8 @@ About four hours. Chapters 10 to 12 are the incident; 5 to 8 introduce what they
   prompt. The story is stronger when the rogue thing is made with the sanctioned tooling and does ordinary work.
 - The sanctioned agents live in OpenShell sandboxes on Substrate workers; the shadow one does not. That
   difference is what chapters 9 and 11 turn on.
+- The cloud tier is a provider at the gateway, never a pool member. Nova has no worker, no KV events and no
+  metrics, so the picker has nothing to score. What decides is the semantic router (which model) and the exit
+  policy (whether it can leave). The proxy sits in Aurora's namespace because a namespace gets exactly one
+  F5SPKEgress and the egress objects are never touched on a running lab (`docs/egress.md`). Details and the
+  production shape in `docs/cloud-tier.md`.

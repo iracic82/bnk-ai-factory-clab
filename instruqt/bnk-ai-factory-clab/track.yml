@@ -26,7 +26,10 @@ description: |-
   carried inline by a BNK iRule, OpenShell's network policy around the sandbox, and BNK's egress in the tenant's
   VRF, where the packet is dropped before it reaches a router.
 
-  Fourteen chapters, about four hours, every command ready to run.
+  The last chapter adds a model Northlight does not own. A semantic router decides which prompts leave for Amazon
+  Bedrock, and one rule on the tenant's exit decides whether they can.
+
+  Fifteen chapters, about four and a half hours, every command ready to run.
 icon: ./assets/icon.png
 tags:
 - nvidia
@@ -42,7 +45,7 @@ developers:
 show_timer: true
 skipping_enabled: true
 idle_timeout: 3600
-timelimit: 14400
+timelimit: 16200
 lab_config:
   sidebar_enabled: true
   feedback_recap_enabled: true

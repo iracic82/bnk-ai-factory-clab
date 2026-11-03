@@ -339,7 +339,23 @@ def c14():
     s.save("scene-14.png")
 
 
+def c15():
+    s = Scene("Chapter 15 · A model you don't own", "A router decides which prompts leave, one rule decides whether they can",
+              "Aurora rents Nova on Bedrock. The router picks the model, a proxy in Aurora's namespace talks to AWS, and its way out is Aurora's exit.")
+    s.row(A, AH, [("model auto, lab route", ["ext_proc semantic-router", "poem -> qwen2.5-0.5b", "STEM -> nova-lite, else pool"], {"color": PURPLE}),
+                  ("provider lab-bedrock", ["LiteLLM proxy x2, tenant-a", "ladder pro -> lite -> micro"], {"color": GREEN}),
+                  ("F5SPKEgress tenant-a", ["tunnel, route domain, SNAT .10", "egress-allow-a: cloud-tier 443"], {"hot": True}),
+                  ("border1 VLAN 101 -> r5", ["tcpdump: 10.201.200.10 -> :443", "r5 masquerades on the way out"], {"color": BLUE})],
+          arrows=[(PURPLE, "rewrites model"), (GREEN, "https"), (BLUE, "")])
+    s.row(B, BH, [("close the cloud tier", ["15-cloud-closed-a.yaml: cloud-tier reject", "the proxy's SYN is reset at TMM", "the local models keep answering"], {"color": PINK}),
+                  ("what the picker never sees", ["no worker, no KV event, no metric", "a cloud model is a provider, not a pool member"], {"color": YELLOW, "dash": True})])
+    s.strip(C, CH, "two levers on one bill",
+            ["router: the tier by what the prompt is · picker: the worker by cache and load · exit policy: whether the packet leaves at all", "production: short-lived keys, fqdn rules with TMM's resolver, two replicas of each, PrivateLink instead of the internet"])
+    s.legend([(PURPLE, "router", "which model"), (GREEN, "proxy", "the only pod that talks to AWS"), (RED, "exit rule", "accept or reject, in place"), (BLUE, "VLAN 101", "where border1 sees it leave")])
+    s.save("scene-15.png")
+
+
 if __name__ == "__main__":
-    for f in (c01, c02, c03, c04, c05, c06, c07, c08, c09, c10, c11, c12, c13, c14):
+    for f in (c01, c02, c03, c04, c05, c06, c07, c08, c09, c10, c11, c12, c13, c14, c15):
         f()
-    print("wrote scene-01.png .. scene-14.png")
+    print("wrote scene-01.png .. scene-15.png")

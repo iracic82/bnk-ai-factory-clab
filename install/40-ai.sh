@@ -4,6 +4,10 @@
 # the agents (ollama on the VM, so its weights are part of the baked image), the Polaris AI Gateway with one tenant
 # per lab tenant (providers, models, virtual keys, a route on its own VIP), and NVIDIA's simulators for the GPU
 # side: fake GPU operator (4 x H100 per worker) and the KAI scheduler with one queue per tenant.
+# Chapter 15 adds two pieces. The cloud tier (manifests/ai/60-bedrock-proxy.yaml: Nova on Bedrock behind a proxy in
+# tenant-a, one more Generic provider and three more models per tenant) goes in only when an AWS account is attached
+# (setup-factory leaves $SECRETS_DIR/aws-bedrock.env). The model router (manifests/ai/70-semantic-router.yaml on the
+# lab tenant's profile) always goes in; install/lib/attach-router.sh attaches it once its models are downloaded.
 #
 # Idempotent: every create tolerates "already there"; keys are written once and kept in $SECRETS_DIR/aigw/.
 source "$(dirname "$0")/lib/common.sh"
@@ -99,6 +103,29 @@ API=http://127.0.0.1:18443
 for _ in $(seq 1 60); do curl -fsS -o /dev/null "$API/api/v1/admin/ready" && break; sleep 3; done
 curl -fsS -o /dev/null "$API/api/v1/admin/ready" || fail "the management API is not ready on $API"
 
+step "cloud tier: the Bedrock proxy in tenant-a (only with an AWS account attached)"
+# The keys arrive in one file from setup-factory and become a Secret here, once; a re-run finds the Secret and not the
+# file. The proxy's own key is generated once as well and is what Polaris sends as the provider key.
+CLOUD=0; PROXY_KEY=""
+if [ -s "$SECRETS_DIR/aws-bedrock.env" ]; then
+  kubectl get ns tenant-a >/dev/null 2>&1 || kubectl create ns tenant-a >/dev/null
+  kubectl -n tenant-a create secret generic bedrock-aws --from-env-file="$SECRETS_DIR/aws-bedrock.env" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  shred -u "$SECRETS_DIR/aws-bedrock.env" 2>/dev/null || rm -f "$SECRETS_DIR/aws-bedrock.env"
+fi
+if kubectl -n tenant-a get secret bedrock-aws >/dev/null 2>&1; then
+  kubectl -n tenant-a get secret bedrock-proxy >/dev/null 2>&1 \
+    || kubectl -n tenant-a create secret generic bedrock-proxy --from-literal=LITELLM_MASTER_KEY="sk-$(openssl rand -hex 24)" >/dev/null
+  PROXY_KEY=$(kubectl -n tenant-a get secret bedrock-proxy -o jsonpath='{.data.LITELLM_MASTER_KEY}' | base64 -d)
+  sed "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|g" "$M/60-bedrock-proxy.yaml" | kubectl apply -f - >/dev/null
+  # the image is pulled through the ghcr.io mirror on first use (it is not in the baked cache), so the wait is generous
+  kubectl -n tenant-a rollout status deploy/bedrock-proxy --timeout="$(tmo 600s 180s)" >/dev/null 2>&1 \
+    && ok "bedrock-proxy: Ready in tenant-a (Nova micro, lite, pro through Bedrock us-east-1)" \
+    || warn "bedrock-proxy not Ready yet (image pull or the AWS keys): kubectl -n tenant-a get pods -l app=bedrock-proxy; chapter 15 checks again"
+  CLOUD=1
+else
+  warn "no AWS account attached (no $SECRETS_DIR/aws-bedrock.env, no Secret tenant-a/bedrock-aws): the lab runs without the cloud tier"
+fi
+
 step "tenants in the AI Gateway (providers, models, keys, a route per tenant)"
 mkdir -p "$SECRETS_DIR/aigw"; chmod 700 "$SECRETS_DIR/aigw"
 TOK=$(jq -n --arg u "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath='{.data.username}' | base64 -d)" \
@@ -115,18 +142,23 @@ aigw_tenant() {   # name display vip
   kubectl -n $NS wait --for=condition=Ready "aitenants.inference.k8s.f5.com/$T" --timeout=180s >/dev/null || warn "tenant $T not Ready"
   pk_ref() { j "$TA/provider-keys" | jq -r --arg n "$1" '(.data // .items)[]? | select(.name==$n) | .ref' | head -1; }
   declare -A REF=()
-  for spec in "dynamo|http://mocker-frontend.aigw-models.svc.cluster.local:8000/v1" "ollama|http://$KIND_GW:11434/v1"; do
-    n=${spec%%|*}; url=${spec#*|}; ref=$(pk_ref "$T-$n")
+  # the cloud tier is one more Generic provider: the proxy in tenant-a, with the proxy's own key as the provider key
+  local PROVIDERS=("dynamo|http://mocker-frontend.aigw-models.svc.cluster.local:8000/v1|not-needed" "ollama|http://$KIND_GW:11434/v1|not-needed")
+  [ "$CLOUD" = 1 ] && PROVIDERS+=("bedrock|http://bedrock-proxy.tenant-a.svc.cluster.local:4000/v1|$PROXY_KEY")
+  for spec in "${PROVIDERS[@]}"; do
+    IFS='|' read -r n url val <<<"$spec"; ref=$(pk_ref "$T-$n")
     if [ -z "$ref" ]; then
-      r=$(jq -n --arg n "$T-$n" --arg u "$url" '{name:$n,vendor:"Generic",value:"not-needed",enabled:true,generic:{baseURL:$u}}' | j "$TA/provider-keys" --data-binary @-)
+      r=$(jq -n --arg n "$T-$n" --arg u "$url" --arg v "$val" '{name:$n,vendor:"Generic",value:$v,enabled:true,generic:{baseURL:$u}}' | j "$TA/provider-keys" --data-binary @-)
       ref=$(echo "$r" | jq -r '.data.ref // .ref // empty'); [ -n "$ref" ] || ref=$(pk_ref "$T-$n")
       [ -n "$ref" ] || warn "$T: provider key $T-$n not created: $(echo "$r" | head -c 300)"
     fi
     REF[$n]=$ref
   done
   has_model() { j "$TA/models" | jq -e --arg n "$1" '(.data // .items)[]? | select(.name==$n)' >/dev/null 2>&1; }
-  local MODELS=()
-  for spec in "qwen3-0.6b-dynamo|dynamo|Qwen/Qwen3-0.6B" "qwen2.5-1.5b|ollama|qwen2.5:1.5b" "qwen2.5-0.5b|ollama|qwen2.5:0.5b"; do
+  local MODELS=() SPECS=("qwen3-0.6b-dynamo|dynamo|Qwen/Qwen3-0.6B" "qwen2.5-1.5b|ollama|qwen2.5:1.5b" "qwen2.5-0.5b|ollama|qwen2.5:0.5b")
+  # the Nova ladder answers from Bedrock; the upstream is the alias the proxy's config.yaml maps to the us.* profile
+  [ "$CLOUD" = 1 ] && SPECS+=("nova-micro|bedrock|nova-micro" "nova-lite|bedrock|nova-lite" "nova-pro|bedrock|nova-pro")
+  for spec in "${SPECS[@]}"; do
     IFS='|' read -r name prov up <<<"$spec"
     # a model is backed by an AIModel object named after it, one per cluster: a second tenant cannot register the same
     # name ("already exists", bake of 2026-10-31). The EVE lab prefixes tenant models with the tenant; so does this.
@@ -181,6 +213,19 @@ aigw_tenant tenant-a "Aurora Health" 172.16.100.20
 aigw_tenant tenant-b "Borealis Bank" 172.16.100.21
 aigw_tenant tenant-c "Cobalt Labs"   172.16.100.22
 unset TOK
+
+step "model router: vLLM Semantic Router on the lab tenant's profile (model auto on 172.16.100.13)"
+# Two replicas in f5-bnk, a 10 Gi volume each for the models they download on first start. With the cloud tier the
+# router sends STEM prompts to nova-lite and reasoning prompts to nova-pro; without it both go to the 1.5b CPU model
+# and the cloud-only lines leave the config so nothing is listed twice.
+if [ "$CLOUD" = 1 ]; then STEM=nova-lite; REASON=nova-pro; RENDER=(-e "s|__STEM_MODEL__|$STEM|g" -e "s|__REASON_MODEL__|$REASON|g")
+else STEM=qwen2.5-1.5b; REASON=qwen2.5-1.5b; RENDER=(-e '/# cloud-only$/d' -e "s|__STEM_MODEL__|$STEM|g" -e "s|__REASON_MODEL__|$REASON|g"); fi
+sed "${RENDER[@]}" -e "s|__INTERNAL_SELFIP__|$INTERNAL_SELFIP|g" "$M/70-semantic-router.yaml" | kubectl apply -f - >/dev/null
+ok "semantic-router applied (STEM -> $STEM, reasoning -> $REASON, the rest -> the pool); models download on first start"
+# the attach waits for a Ready router pod (up to an hour) and must not hold this layer: own log, own process
+nohup bash "$REPO_ROOT/install/lib/attach-router.sh" 3600 >/var/log/setup-router-attach.log 2>&1 &
+disown
+ok "attach-router.sh running in the background, log in /var/log/setup-router-attach.log"
 
 fi
 if stage pre; then

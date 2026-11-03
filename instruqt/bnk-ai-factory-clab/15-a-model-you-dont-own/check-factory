@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+pol=$(kubectl -n f5-bnk get f5-big-fw-policies egress-allow-a -o jsonpath='{.spec.rule[0].name}/{.spec.rule[0].action}' 2>/dev/null)
+[ "$pol" = "cloud-tier/accept" ] || fail-message "Aurora's egress policy egress-allow-a must have rule cloud-tier back at accept (now: ${pol:-missing}); apply manifests/bnk/30-egress.yaml."
+kubectl -n f5-bnk get sts semantic-router >/dev/null 2>&1 || fail-message "the semantic router StatefulSet is missing in f5-bnk; install/40-ai.sh applies manifests/ai/70-semantic-router.yaml."
+if kubectl -n tenant-a get secret bedrock-aws >/dev/null 2>&1; then
+  ready=$(kubectl -n tenant-a get deploy bedrock-proxy -o jsonpath='{.status.readyReplicas}' 2>/dev/null); ready=${ready:-0}
+  [ "$ready" -ge 1 ] || fail-message "the Bedrock proxy in tenant-a has no Ready replica; kubectl -n tenant-a get pods -l app=bedrock-proxy."
+  kubectl -n tenant-a logs -l app=bedrock-proxy --since 3h --tail=-1 2>/dev/null | grep -qiE 'nova|bedrock|chat/completions' \
+    || fail-message "no request has reached the Bedrock proxy yet; ask a STEM question with model auto on the lab route (the 'Three prompts' step)."
+fi
+exit 0

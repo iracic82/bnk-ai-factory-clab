@@ -34,6 +34,21 @@ printf '%s' "$BNK_LICENSE_JWT" > "$SECRETS_DIR/license.jwt"
 [ -n "${AI_CALYPSO_PROJECT:-}" ] && printf '%s' "$AI_CALYPSO_PROJECT" > "$SECRETS_DIR/calypso-project-id"
 [ -n "${AI_CALYPSO_URL:-}" ] && printf '%s' "$AI_CALYPSO_URL" > "$SECRETS_DIR/calypso-url"
 unset AI_CALYPSO_API AI_CALYPSO_PROJECT
+# The cloud tier (chapter 15). An AWS account attached in config.yml arrives as INSTRUQT_AWS_ACCOUNT_<NAME>_* variables,
+# NAME being the account's name upper-cased with hyphens as underscores. The keys go to one file that install/40-ai.sh
+# turns into Secret tenant-a/bedrock-aws and shreds. No account, no file, and the lab runs without the cloud tier.
+rm -f "$SECRETS_DIR/aws-bedrock.env"
+for acct in ${INSTRUQT_AWS_ACCOUNTS//,/ }; do
+  N=$(printf '%s' "$acct" | tr '[:lower:]-' '[:upper:]_')
+  id_var="INSTRUQT_AWS_ACCOUNT_${N}_AWS_ACCESS_KEY_ID"; sec_var="INSTRUQT_AWS_ACCOUNT_${N}_AWS_SECRET_ACCESS_KEY"
+  if [ -n "${!id_var:-}" ] && [ -n "${!sec_var:-}" ]; then
+    printf 'AWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "${!id_var}" "${!sec_var}" > "$SECRETS_DIR/aws-bedrock.env"
+    echo "AWS account $acct attached: the cloud tier (Bedrock through the proxy in tenant-a) will be installed"
+    break
+  fi
+done
+[ -f "$SECRETS_DIR/aws-bedrock.env" ] || echo "no AWS account attached: the lab runs without the cloud tier (chapter 15 says so)"
+for v in $(compgen -v | grep '^INSTRUQT_AWS_ACCOUNT_' || true); do unset "$v"; done
 umask 022
 
 step "lab repository"

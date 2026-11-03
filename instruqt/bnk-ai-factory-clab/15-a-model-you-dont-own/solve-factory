@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -uo pipefail
+export KUBECONFIG=/root/lab/clab/kubeconfig
+LAB_ROOT=${LAB_ROOT:-/root/lab}
+kubectl apply -f "$LAB_ROOT/manifests/bnk/30-egress.yaml" >/dev/null 2>&1 || true
+if kubectl -n tenant-a get secret bedrock-aws >/dev/null 2>&1; then
+  kubectl -n tenant-a rollout status deploy/bedrock-proxy --timeout=300s >/dev/null 2>&1 || true
+  bash "$LAB_ROOT/install/lib/attach-router.sh" 600 >/dev/null 2>&1 || true
+  K=$(cat /root/.bnk/aigw/lab.key 2>/dev/null || true)
+  [ -n "$K" ] && docker exec client curl -sS -m 120 http://172.16.100.13/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' \
+    -d '{"model":"nova-micro","messages":[{"role":"user","content":"Reply with one word: ready."}],"max_tokens":8}' >/dev/null 2>&1 || true
+fi
+exit 0
