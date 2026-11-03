@@ -1,11 +1,11 @@
 ---
 slug: a-model-you-dont-own
-id: p2x7qk9m4vhd
+id: wkxptrz9xbim
 type: challenge
 title: 15. A model you don't own
 teaser: Aurora rents a cloud model. A semantic router sends the hard prompts to Nova
-  on Amazon Bedrock, the picker keeps the easy ones on the pool, and the only way out
-  is one rule on Aurora's exit. Close it and only the cloud tier dies.
+  on Amazon Bedrock, the picker keeps the easy ones on the pool, and the only way
+  out is one rule on Aurora's exit. Close it and only the cloud tier dies.
 notes:
 - type: text
   contents: |-
@@ -22,23 +22,23 @@ notes:
     If no AWS account is attached to this play, the router still runs and the cloud tier is off. The chapter says
     which case you are in.
 tabs:
-- id: k3n8rw2tqz5e
+- id: pftpsekokdej
   title: Terminal
   type: terminal
   hostname: factory
   cmd: /bin/bash -l
-- id: m9v4xc7bjh2s
+- id: uz5wbro9jkjr
   title: Terminal 2
   type: terminal
   hostname: factory
   cmd: /bin/bash -l
-- id: q6t1zp8ndw3k
+- id: amciii4qadmj
   title: Lab Topology
   type: service
   hostname: factory
   path: /topology#cloud
   port: 5050
-- id: b5h2ym9rkx7c
+- id: kkuhpzk7zyaj
   title: Polaris
   type: service
   hostname: factory
