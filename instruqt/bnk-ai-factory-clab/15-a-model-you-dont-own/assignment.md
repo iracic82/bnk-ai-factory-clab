@@ -55,7 +55,7 @@ enhanced_loading: false
 Aurora wants a model Northlight cannot run on the pool. Mira rents one and keeps four things in Northlight's hands:
 which prompts leave, who may send them and what they cost, which pod is allowed to carry them, and whether the
 packet can leave at all. The router decides the first. BNK's LLM Gateway decides the second, with a key scope, a
-price per deployment and a failover. The namespace decides the third, and a rule on Aurora's exit the fourth. None
+price per deployment, a budget per key and a failover. The namespace decides the third, and a rule on Aurora's exit the fourth. None
 of them is in the picker's hands, because a cloud model has no worker to pick.
 
 ![The semantic router rewrites the model, the LLM Gateway picks the priced deployment, the proxy in Aurora's namespace signs for Bedrock, and the request leaves through Aurora's egress under one rule on border1's VLAN 101](../assets/scene-15.png)
@@ -175,6 +175,29 @@ kubectl -n f5-bnk get aimodels.inference.k8s.f5.com nova-lite -o jsonpath='{rang
 **Polaris** tab shows the records per tenant and per key. The second deployment is not for load. It is where the
 gateway goes when the first one fails, which the end of this chapter shows.
 
+## A budget on the key
+
+A price is only half of a bill. The other half is a limit. Aurora's pilot team got its own key at setup,
+`lab-pilot-key`, scoped to the rented models alone and carrying a budget: forty tokens an hour, and the gateway
+blocks when they are spent. Read the budget, then spend it:
+
+```bash,run
+API=http://127.0.0.1:18443; NS=f5-bnk
+TOK=$(python3 -c 'import json,sys; print(json.dumps({"username":sys.argv[1],"password":sys.argv[2]}))' "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath='{.data.username}' | base64 -d)" "$(kubectl -n $NS get secret f5-aigateway-admin -o jsonpath='{.data.password}' | base64 -d)" | curl -sS $API/api/v1/auth/login -H 'Content-Type: application/json' --data-binary @- | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+VK=$(curl -sS $API/api/v1/tenants/lab/virtual-keys -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; d=json.load(sys.stdin); k=[k for k in (d.get("data") or d.get("items")) if k["name"]=="lab-pilot-key"][0]; print(k["id"]); print(" key lab-pilot-key, scope:", k["modelScope"], file=sys.stderr)')
+curl -sS $API/api/v1/tenants/lab/governance/vks/$VK/budgets -H "Authorization: Bearer $TOK" | python3 -c 'import json,sys; [print(" budget:", {k: b[k] for k in ("maxTokens","maxUsdMicros","resetPeriod","action")}) for b in json.load(sys.stdin)["items"]]'
+unset TOK
+K=$(cat /root/.bnk/aigw/lab-pilot.key)
+for i in 1 2 3 4 5 6; do printf ' ask %s: ' "$i"; docker exec client curl -sS -m 90 -w '\nHTTP %{http_code}' http://172.16.100.13/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{"model":"nova-micro","messages":[{"role":"user","content":"Name one planet. One word."}],"max_tokens":20}' | python3 -c 'import json,sys; t=sys.stdin.read(); body,_,code=t.rpartition("\nHTTP "); d=json.loads(body); c=d.get("choices"); u=d.get("usage",{}); print(("%s tokens, %s" % (u.get("total_tokens"), c[0]["message"]["content"][:30].strip())) if c else ("HTTP %s %s" % (code.strip(), d.get("error",{}).get("type"))))'; sleep 1; done
+unset K
+```
+
+Five answers of nine tokens each, then `HTTP 429 budget_exceeded`. The gateway counted the hour's tokens on this
+key against its budget and refused the sixth request before any provider saw it. Run the loop again within the
+hour and every ask is refused. The lab key you used above has no budget and keeps answering. In Polaris the same
+object takes `maxUsdMicros` for a spend limit and a `softUsdMicros` warning line, and the owner can be a key, a
+principal, a team or an org, which is how a tenant's bill gets a ceiling at every level.
+
 ## The exit
 
 The proxy is a pod in `tenant-a`, so its packets go where every pod of that namespace goes: into the tunnel to TMM,
@@ -251,8 +274,9 @@ kubectl -n tenant-a logs -l app=bedrock-proxy --since 1m --tail=-1 2>/dev/null |
   attack never leave, whatever the question. The picker chooses the worker by cache and load. They never overlap:
   Nova has no worker, no KV events and no metrics, so there is nothing for the picker to score, and the BNK team
   confirms the picker learns its workers from pods in its own cluster only.
-- BNK's LLM Gateway chooses the deployment, prices it, scopes it to the key that pays, and fails over when the
-  provider answers 5xx or 429. That is the same gateway that holds the virtual keys of chapters 9 and 10.
+- BNK's LLM Gateway chooses the deployment, prices it, scopes it to the key that pays, caps that key's spend with
+  a budget, and fails over when the provider answers 5xx or 429. That is the same gateway that holds the virtual
+  keys of chapters 9 and 10.
 - The exit policy says whether a packet leaves at all, and it changes in place. Reject resets the connection at
   TMM, before SNAT, before the fabric, before AWS.
 - Two caches were tried and left out. The router's semantic cache never stores anything here, because the gateway

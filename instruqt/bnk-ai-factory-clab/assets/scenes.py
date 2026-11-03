@@ -348,7 +348,7 @@ def c15():
                   ("border1 VLAN 101 -> r5", ["tcpdump: 10.201.200.10 -> :443", "r5 masquerades on the way out"], {"color": BLUE})],
           arrows=[(PURPLE, "rewrites model"), (GREEN, "https"), (BLUE, "")])
     s.row(B, BH, [("close the cloud tier", ["cloud-tier reject: SYN reset at TMM", "proxy answers 500, gateway retries", "nova-lite answers from the 1.5b"], {"color": PINK}),
-                  ("only the tenant that pays", ["Cobalt's key on Nova: 403", "Aurora's key: answered, priced", "a cloud model is a provider, not a pool member"], {"color": YELLOW, "dash": True})])
+                  ("only the tenant that pays", ["Cobalt's key on Nova: 403", "Aurora's key: answered, priced", "pilot key: 429 past its budget"], {"color": YELLOW, "dash": True})])
     s.strip(C, CH, "three levers on one bill",
             ["router: the tier by what the prompt is · gateway: the deployment, the price, the failover · exit policy: whether the packet leaves at all", "production: short-lived keys, fqdn rules with TMM's resolver, two replicas of each, PrivateLink instead of the internet"])
     s.legend([(PURPLE, "router", "which model"), (GREEN, "LLM Gateway", "deployments, price, failover"), (RED, "exit rule", "accept or reject, in place"), (BLUE, "VLAN 101", "where border1 sees it leave")])

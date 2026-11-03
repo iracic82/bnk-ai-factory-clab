@@ -42,6 +42,7 @@ list. Chapter 15 uses four of them on top of the router hook.
 |---|---|---|
 | Model scope per key | virtual key `modelScope`, set by `install/40-ai.sh` | only the lab tenant and Aurora get the Nova models; Cobalt's key on `tenant-a-nova-lite` is refused with `403 model_not_allowed` |
 | Pricing per deployment | `AIModel.spec.deployments[].pricing`, micro-USD per million tokens | Nova list prices on the Bedrock deployment, a nominal 1 on the local one, so the model reports `Priced=True` and every request is recorded with a cost |
+| Budgets | `POST /governance/budgets` with `ownerKind` (org, team, principal, vk), `ownerId`, `resetPeriod` (hourly, daily, weekly, monthly), `maxTokens`, `maxUsdMicros`, `softUsdMicros`, `action: block`; listed at `governance/<kind>s/<id>/budgets`, no GET by id, unknown fields silently dropped, the owner is not checked for existence | the pilot key `lab-pilot-key` (scope: the Nova models) has 40 tokens an hour; the sixth nine-token ask is refused with `429 budget_exceeded`, counted for the whole hour on that key |
 | Failover | `AIGatewayProfile.spec.failover` (`maxAttempts`, `on5xx`, `on429`, `cooldown`, `honorRetryAfter`) | `nova-lite` has a second deployment on the local 1.5b at weight 1 against 100. With the exit closed the proxy answers 500, the gateway retries on the local deployment and the client gets "Mars" under the name `nova-lite` |
 | Model routing hook | `AIGatewayProfile.spec.modelRouting.semanticRouter` | the vLLM semantic router, attached by `install/lib/attach-router.sh` |
 

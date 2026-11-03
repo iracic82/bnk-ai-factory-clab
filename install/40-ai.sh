@@ -221,6 +221,29 @@ aigw_tenant() {   # name display vip
     [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "$T: virtual key not created: $(echo "$r" | head -c 300)"
   fi
   [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "no virtual key for $T"
+  # The pilot key (chapter 15): a second principal of the same team whose scope is the rented models only, with a
+  # budget on the key of 40 tokens an hour and action block. Five nine-token answers from nova-micro, then the LLM
+  # Gateway refuses with 429 budget_exceeded until the hour resets. Budgets hang off an owner (org, team, principal
+  # or vk), are listed under governance/<kind>s/<id>/budgets, and keep maxTokens, maxUsdMicros and softUsdMicros.
+  if [ "$CLOUD" = 1 ] && [ "$RENTS" = 1 ]; then
+    local NOVA PILOT_VK
+    NOVA=$(printf '%s\n' "${MODELS[@]}" | grep -E 'nova-' | jq -R . | jq -sc .)
+    j "$TA/governance/principals" | jq -e --arg i "$T-pilot" '(.data // .items)[]? | select(.id==$i)' >/dev/null 2>&1 \
+      || jq -n --arg i "$T-pilot" --arg t "$TEAM" --argjson s "$NOVA" '{id:$i,name:$i,kind:"service",teamId:$t,role:"member",active:true,modelScope:$s}' | j "$TA/governance/principals" --data-binary @- >/dev/null
+    if [ ! -s "$SECRETS_DIR/aigw/$T-pilot.key" ]; then
+      for id in $(j "$TA/virtual-keys" | jq -r --arg n "$T-pilot-key" '(.data // .items)[]? | select(.name==$n) | (.id // .ref // empty)'); do j -X DELETE "$TA/virtual-keys/$id" >/dev/null 2>&1 || true; done
+      r=$(jq -n --arg n "$T-pilot-key" --arg p "$T-pilot" --argjson k "$PKEYS" --argjson s "$NOVA" '{name:$n,principalId:$p,providerKeys:$k,modelScope:$s}' | j "$TA/virtual-keys" --data-binary @-)
+      echo "$r" | jq -r '.data.token // .token // empty' > "$SECRETS_DIR/aigw/$T-pilot.key"; chmod 600 "$SECRETS_DIR/aigw/$T-pilot.key"
+      [ -s "$SECRETS_DIR/aigw/$T-pilot.key" ] || warn "$T: pilot key not created: $(echo "$r" | head -c 300)"
+    fi
+    PILOT_VK=$(j "$TA/virtual-keys" | jq -r --arg n "$T-pilot-key" '(.data // .items)[]? | select(.name==$n) | .id' | head -1)
+    if [ -n "$PILOT_VK" ]; then
+      if ! j "$TA/governance/vks/$PILOT_VK/budgets" | jq -e '(.items // .data // [])[0]' >/dev/null 2>&1; then
+        jq -n --arg o "$PILOT_VK" '{ownerKind:"vk",ownerId:$o,resetPeriod:"hourly",maxTokens:40,action:"block"}' | j "$TA/governance/budgets" --data-binary @- >/dev/null
+      fi
+      ok "$T: pilot key $T-pilot-key (scope ${NOVA}, 40 tokens an hour) in $SECRETS_DIR/aigw/$T-pilot.key"
+    fi
+  fi
   kubectl -n $NS get gateway "$T-ai" >/dev/null 2>&1 \
     || jq -n --arg n "$T-ai" --arg a "$VIP" '{name:$n,address:$a,gatewayClassName:"f5-gateway-class"}' | j "$TA/routes" --data-binary @- >/dev/null
   kubectl -n $NS wait --for=condition=Programmed "gateway/$T-ai" --timeout=240s >/dev/null && ok "$T: route $T-ai on $VIP Programmed, ${#MODELS[@]} models$([ -s "$SECRETS_DIR/aigw/$T.key" ] && echo ", key in $SECRETS_DIR/aigw/$T.key" || echo ", NO KEY")" || warn "$T: gateway $T-ai not Programmed"
