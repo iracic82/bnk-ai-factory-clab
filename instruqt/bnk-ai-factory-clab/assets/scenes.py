@@ -350,7 +350,7 @@ def c15():
     s.row(B, BH, [("close the cloud tier", ["cloud-tier reject: SYN reset at TMM", "proxy answers 500, gateway retries", "nova-lite answers from the 1.5b"], {"color": PINK}),
                   ("only the tenant that pays", ["Cobalt's key on Nova: 403", "Aurora's key: answered, priced", "pilot key: 429 past its budget"], {"color": YELLOW, "dash": True})])
     s.strip(C, CH, "three levers on one bill",
-            ["router: the tier by what the prompt is · gateway: the deployment, the price, the budget, the failover · exit policy: Bedrock by name, nothing else on 443", "production: short-lived keys, the resolver on a private DNS, two replicas of each, PrivateLink instead of the internet"])
+            ["router: the tier by the prompt · gateway: deployment, price, budget, failover · exit: Bedrock by name, nothing else on 443", "production: short-lived keys, the resolver on a private DNS, two replicas of each, PrivateLink instead of the internet"])
     s.legend([(PURPLE, "router", "which model"), (GREEN, "LLM Gateway", "deployments, price, failover"), (RED, "exit rule", "accept or reject, in place"), (BLUE, "VLAN 101", "where border1 sees it leave")])
     s.save("scene-15.png")
 
