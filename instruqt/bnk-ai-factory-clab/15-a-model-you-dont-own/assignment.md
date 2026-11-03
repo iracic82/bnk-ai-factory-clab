@@ -121,11 +121,12 @@ unset K
 
 The poem went to the small CPU model on ollama, the question about binary search to `nova-lite` on Bedrock (or to
 the 1.5b CPU model when the cloud tier is off), and the one-word reply to the pool, where the picker chose the
-worker as in chapter 4. Ask the router directly what it thinks of a prompt, through its classify API from a pod in
-the gateway's namespace:
+worker as in chapter 4. The pool's answer reads as noise because the Mocker workers emit random tokens, as they
+did in chapter 3. What matters is the `model` field. The router writes down every decision it makes, with the
+signals that fired and the model it picked:
 
 ```bash,run
-kubectl -n f5-bnk exec semantic-router-0 -- sh -c 'wget -q -O- --post-data "{\"text\":\"Derive the formula for the sum of a geometric series.\"}" --header "Content-Type: application/json" http://127.0.0.1:8080/api/v1/classify/intent 2>/dev/null | head -c 400'; echo
+kubectl -n f5-bnk logs -l app=semantic-router --since 15m --tail=-1 2>/dev/null | grep -E 'routing_decision|ModelSelection' | tail -6 | python3 -c 'import sys,json; [print(" ", (lambda d: d.get("msg") if "ModelSelection" in d.get("msg","") else "decision: " + str(d.get("decision") or d.get("decision_name") or "?") + " -> " + str(d.get("selected_model") or d.get("model") or "?") + "  from model=" + str(d.get("original_model")))(json.loads(l))[:150]) for l in sys.stdin if l.strip().startswith("{")]'
 ```
 
 With the cloud tier on, the proxy's log shows the Bedrock calls it signed:
@@ -162,8 +163,8 @@ docker exec client curl -sS -m 120 http://172.16.100.13/v1/chat/completions -H "
 unset K
 ```
 
-Terminal 2 shows the TLS handshake on VLAN 101 from `10.201.200.10`, Aurora's SNAT address, to an AWS address on
-port 443. The pod's address never appears, and neither does Northlight's. r5 masquerades on its way out, the way a
+This one lands on `nova-pro`, because "explain why" is one of the reasoning keywords. Terminal 2 shows the TLS
+handshake on VLAN 101 from `10.201.200.10`, Aurora's SNAT address, to an AWS address on port 443. The pod's address never appears, and neither does Northlight's. r5 masquerades on its way out, the way a
 provider edge does. With the cloud tier off there is nothing to see on VLAN 101, and the answer came from the CPU
 model.
 

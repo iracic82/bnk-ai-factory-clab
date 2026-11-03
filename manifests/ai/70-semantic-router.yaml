@@ -96,6 +96,8 @@ data:
           modelRefs: [{model: qwen3-0.6b-dynamo, use_reasoning: false}]
     global:
       router: {strategy: priority, auto_model_name: auto, auto_model_names: [auto, MoM]}
+      # tracing defaults to an OTLP exporter nobody runs here; off keeps "traces export: context deadline exceeded" out of the log
+      observability: {tracing: {enabled: false}}
       services: {response_api: {enabled: false, store_backend: memory}}
       stores: {response_cache: {enabled: false, backend_type: memory}}
       integrations: {tools: {enabled: false, tools_db_path: config/tools_db.json, fallback_to_empty: true}}
