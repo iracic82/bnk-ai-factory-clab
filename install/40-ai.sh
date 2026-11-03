@@ -222,9 +222,10 @@ aigw_tenant() {   # name display vip
   fi
   [ -s "$SECRETS_DIR/aigw/$T.key" ] || warn "no virtual key for $T"
   # The pilot key (chapter 15): a second principal of the same team whose scope is the rented models only, with a
-  # budget on the key of 40 tokens an hour and action block. Five nine-token answers from nova-micro, then the LLM
-  # Gateway refuses with 429 budget_exceeded until the hour resets. Budgets hang off an owner (org, team, principal
-  # or vk), are listed under governance/<kind>s/<id>/budgets, and keep maxTokens, maxUsdMicros and softUsdMicros.
+  # budget on the key of 40 tokens an hour and action block. The gateway reserves prompt plus max_tokens before it
+  # forwards a request, so two nine-token answers from nova-micro with max_tokens 20 fit and the third is refused
+  # with 429 budget_exceeded until the hour resets (first play, 2026-11-03). Budgets hang off an owner (org, team,
+  # principal or vk), are listed under governance/<kind>s/<id>/budgets, and keep maxTokens, maxUsdMicros, softUsdMicros.
   if [ "$CLOUD" = 1 ] && [ "$RENTS" = 1 ]; then
     local NOVA PILOT_VK
     NOVA=$(printf '%s\n' "${MODELS[@]}" | grep -E 'nova-' | jq -R . | jq -sc .)

@@ -45,6 +45,8 @@ data:
           backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]
         - {name: __STEM_MODEL__, provider_model_id: __STEM_MODEL__, backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]}  # cloud-only
         - {name: __REASON_MODEL__, provider_model_id: __REASON_MODEL__, backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]}  # cloud-only
+        # nova-micro is never a decision target, it is listed so a request that names it (the pilot key) passes without a warning
+        - {name: nova-micro, provider_model_id: nova-micro, backend_refs: [{name: front-door, provider: vllm, endpoint: "172.16.100.13:80", protocol: http, weight: 100}]}  # cloud-only
     routing:
       modelCards:
         - {name: qwen3-0.6b-dynamo}
@@ -52,6 +54,7 @@ data:
         - {name: qwen2.5-1.5b}
         - {name: __STEM_MODEL__}  # cloud-only
         - {name: __REASON_MODEL__}  # cloud-only
+        - {name: nova-micro}  # cloud-only
       signals:
         keywords:
           - {name: reasoning, operator: OR, case_sensitive: false, keywords: ["prove","step by step","derive","explain why","analyze","compare","trade-off"]}

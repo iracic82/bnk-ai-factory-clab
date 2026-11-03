@@ -192,9 +192,11 @@ for i in 1 2 3 4 5 6; do printf ' ask %s: ' "$i"; docker exec client curl -sS -m
 unset K
 ```
 
-Five answers of nine tokens each, then `HTTP 429 budget_exceeded`. The gateway counted the hour's tokens on this
-key against its budget and refused the sixth request before any provider saw it. Run the loop again within the
-hour and every ask is refused. The lab key you used above has no budget and keeps answering. In Polaris the same
+Two answers of nine tokens each, then `HTTP 429 budget_exceeded` for the rest. The gateway does not wait for the
+bill. Before it forwards a request it reserves what the request may cost, the prompt plus `max_tokens`, about
+thirty tokens here, and refuses as soon as the hour's spend plus that reservation would cross the budget. Two
+answers used eighteen, the third would have reserved past forty, and no provider ever saw it. Run the loop again
+within the hour and every ask is refused. The lab key you used above has no budget and keeps answering. In Polaris the same
 object takes `maxUsdMicros` for a spend limit and a `softUsdMicros` warning line, and the owner can be a key, a
 principal, a team or an org, which is how a tenant's bill gets a ceiling at every level.
 
