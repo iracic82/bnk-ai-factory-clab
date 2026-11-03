@@ -341,7 +341,7 @@ def c14():
 
 def c15():
     s = Scene("Chapter 15 · A model you don't own", "A router decides which prompts leave, the gateway decides what they cost and where they fall back",
-              "Aurora rents Nova on Bedrock. PII stays local, STEM goes to the cloud at a price, and when the exit closes the LLM Gateway fails over to the factory floor.")
+              "Aurora rents Nova on Bedrock. PII stays local, STEM goes to the cloud at a price, and when the exit closes the gateway falls back to the floor.")
     s.row(A, AH, [("model auto, lab route", ["PII, injection -> local models", "poem -> qwen2.5-0.5b", "STEM -> nova-lite, else pool"], {"color": PURPLE}),
                   ("nova-lite, two deployments", ["bedrock weight 100, priced", "local 1.5b weight 1, failover"], {"color": GREEN}),
                   ("F5SPKEgress tenant-a", ["tunnel, route domain, SNAT .10", "egress-allow-a: cloud-tier 443"], {"hot": True}),
