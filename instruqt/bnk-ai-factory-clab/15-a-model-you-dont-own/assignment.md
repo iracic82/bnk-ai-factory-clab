@@ -4,9 +4,9 @@ id: wkxptrz9xbim
 type: challenge
 title: 15. A model you don't own
 teaser: Aurora rents a cloud model. A semantic router keeps patient records and prompt
-  attacks inside the factory and sends the hard questions to Nova on Amazon Bedrock. The
-  LLM Gateway prices every answer, admits only the key that pays, and fails over to the
-  local model the moment one rule on Aurora's exit is closed.
+  attacks inside the factory and sends the hard questions to Nova on Bedrock. The
+  LLM Gateway prices each answer, budgets the key and fails over when Aurora's exit
+  is closed.
 notes:
 - type: text
   contents: |-
