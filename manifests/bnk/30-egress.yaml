@@ -17,8 +17,9 @@
 # proxy of chapter 15 lives in tenant-a and is the one thing in Aurora's namespace that talks to the internet. The
 # rule comes first so that chapter 15 can flip it alone (manifests/chapters/15-cloud-closed-a.yaml): on reject, the
 # proxy's SYN to AWS is reset and Aurora's other traffic still matches allow-all. A destination by name
-# (destination.fqdns) is in the 2.4.2 CRD as well, but it needs TMM's global FQDN resolver (an F5BigDnsCache of type
-# net-resolver), which this lab does not set up. The port rule is the one verified here.
+# (destination.fqdns) is in the 2.4.2 CRD as well and needs TMM's global FQDN resolver (35-fqdn-resolver.yaml);
+# chapter 15 swaps this rule for the one by name (manifests/chapters/15-cloud-by-name-a.yaml). The port rule stays
+# the install-time baseline and the fallback.
 apiVersion: k8s.f5net.com/v1
 kind: F5BigFwPolicy
 metadata: {name: egress-allow-a, namespace: f5-bnk}

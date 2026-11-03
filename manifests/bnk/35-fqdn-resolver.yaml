@@ -1,0 +1,20 @@
+# The global FQDN resolver for firewall rules. A rule with destination.fqdns (chapter 15, the exit by name) only
+# matches once TMM has resolved the name, and F5's doc for the edge firewall says the feature does not work until
+# this object, with exactly this name, carries a forward zone and a nameserver. TMM sends the queries itself, from
+# its default route domain: here that is the external leg to leaf1, where r5 originates a default route and now
+# masquerades, so a public resolver is reachable the same way the cloud tier is. Two nameservers for the one zone
+# the lab needs. The resolver re-resolves on the record's TTL; fw_fqdn_stat in TMM counts the refreshes.
+# Verified shape: CRD f5-big-dns-caches.k8s.f5net.com v1 in the 2.4.2 f5-cnf-crds-n6lan chart, doc
+# clouddocs.f5.com/cnfs/robin/latest/edge-firewall-fqdn.html. Reachability of the nameserver from TMM is what the
+# first play with this file verifies; install/40-ai.sh prints the object's status, chapter 15 shows the stats.
+apiVersion: k8s.f5net.com/v1
+kind: F5BigDnsCache
+metadata: {name: security-fqdn-dns-resolver, namespace: f5-bnk}
+spec:
+  cacheType: net-resolver
+  netResolver:
+    forwardZones:
+    - forwardZone: amazonaws.com
+      nameServers:
+      - {ipAddress: 8.8.8.8, port: 53}
+      - {ipAddress: 1.1.1.1, port: 53}

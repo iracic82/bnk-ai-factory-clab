@@ -69,9 +69,14 @@ tenant apps and MCP servers are published on their own VIPs (172.16.100.16 to .1
   model card lists Chat Completions as not supported. Open-weight models such as gpt-oss could be reached from
   Polaris directly as a Generic provider with a Bedrock API key, but then the gateway pod itself would need an exit,
   and it has none.
-- **A port rule, not a name.** The 2.4.2 CRD takes `destination.fqdns`, and `bedrock-runtime.us-east-1.amazonaws.com`
-  is the honest allowlist entry. A name in a rule needs TMM's global FQDN resolver (an `F5BigDnsCache` of type
-  net-resolver with a DNS server TMM can reach), which this lab does not set up. The port rule is what is verified.
+- **A port rule at install, the name in the chapter.** The 2.4.2 CRD takes `destination.fqdns`, and
+  `bedrock-runtime.us-east-1.amazonaws.com` is the honest allowlist entry, but a name in a rule only matches once
+  TMM's global FQDN resolver has resolved it. The installer creates that resolver (`manifests/bnk/35-fqdn-resolver.yaml`,
+  an `F5BigDnsCache` named `security-fqdn-dns-resolver` of type net-resolver, zone `amazonaws.com`, nameservers
+  8.8.8.8 and 1.1.1.1 reached through the external leg and r5's masquerade) and leaves the verified port rule on
+  the exit. Chapter 15 then applies `manifests/chapters/15-cloud-by-name-a.yaml`, Bedrock by name plus a reject
+  for every other TLS destination, reads `fw_fqdn_stat` on TMM, and says to put the port rule back if the resolver
+  has no path on that play. Whether TMM's queries reach the public resolvers is what the next fresh play verifies.
 - **The router is attached to the lab tenant only.** Its decisions name the lab tenant's models. A tenant route
   would need a router config of its own, with that tenant's prefixed model names.
 
@@ -79,8 +84,9 @@ tenant apps and MCP servers are published on their own VIPs (172.16.100.16 to .1
 
 1. **Credentials.** No keys in a Secret. On EKS, Pod Identity. On a BNK cluster elsewhere, IAM OIDC federation
    against the cluster's service account issuer, or short-term Bedrock API keys refreshed by a sidecar.
-2. **The rule by name.** `destination.fqdns` with the regional Bedrock endpoint, after the FQDN resolver is set up,
-   and `logging: true` kept.
+2. **The resolver on a private DNS.** The lab's resolver asks public nameservers through the provider edge. A
+   production cluster points the forward zone at its own DNS, with an `F5BigNetStaticroute` if TMM needs one to
+   reach it.
 3. **No internet at all** where the cluster has a path into AWS: a PrivateLink endpoint for bedrock-runtime, and
    the allowlist becomes one private address.
 4. **The router's models baked into an image** or on a shared volume, so nothing downloads at start, plus a

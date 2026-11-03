@@ -1,0 +1,15 @@
+# Chapter 15: Aurora's exit with the cloud tier allowed by name. Same policy as manifests/bnk/30-egress.yaml with
+# the first rule naming the Bedrock endpoint instead of a port, and a second rule that rejects every other TLS
+# destination, so the allowlist is an allowlist: Aurora's pods may open TLS to bedrock-runtime.us-east-1.amazonaws.com
+# and to nothing else outside, while everything that is not TLS still matches allow-all. Needs the global FQDN
+# resolver (manifests/bnk/35-fqdn-resolver.yaml) to have resolved the name; the CRD rejects wildcards, so the
+# endpoint is named in full. Put the port rule back with manifests/bnk/30-egress.yaml if the resolver has no path
+# to its nameserver on a play.
+apiVersion: k8s.f5net.com/v1
+kind: F5BigFwPolicy
+metadata: {name: egress-allow-a, namespace: f5-bnk}
+spec:
+  rule:
+  - {name: cloud-tier, action: accept, logging: true, ipProtocol: tcp, destination: {fqdns: [bedrock-runtime.us-east-1.amazonaws.com], ports: ["443"]}}
+  - {name: no-other-tls, action: reject, logging: true, ipProtocol: tcp, destination: {ports: ["443"]}}
+  - {name: allow-all, action: accept, logging: false, ipProtocol: any}

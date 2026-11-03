@@ -46,7 +46,7 @@ tabs:
   hostname: factory
   port: 3000
 difficulty: intermediate
-timelimit: 2400
+timelimit: 2700
 enhanced_loading: false
 ---
 
@@ -233,6 +233,41 @@ handshake on VLAN 101 from `10.201.200.10`, Aurora's SNAT address, to an AWS add
 never appears, and neither does Northlight's. r5 masquerades on its way out, the way a provider edge does. With the
 cloud tier off there is nothing to see on VLAN 101, and the answer came from the CPU model.
 
+## The exit by name
+
+A rule that admits port 443 to anywhere is a door, not an allowlist. The rule a customer writes names the host.
+TMM can do that once it has a resolver of its own: a global one, `security-fqdn-dns-resolver`, which the installer
+created with a forward zone for `amazonaws.com` and two public nameservers, reached the same way the cloud tier is,
+through the external leg and r5. Read it, then replace Aurora's policy with the version that names the endpoint
+and rejects every other TLS destination:
+
+```bash,run
+kubectl -n f5-bnk get f5-big-dns-caches.k8s.f5net.com security-fqdn-dns-resolver -o jsonpath='{.spec.cacheType}: {.spec.netResolver.forwardZones}{"\n"}'
+grep -vE '^#' $LAB_ROOT/manifests/chapters/15-cloud-by-name-a.yaml
+kubectl apply -f $LAB_ROOT/manifests/chapters/15-cloud-by-name-a.yaml
+sleep 20; kubectl -n f5-bnk get f5-big-fw-policies egress-allow-a -o jsonpath='{range .spec.rule[*]}{.name}{"\t"}{.action}{"\t"}fqdns={.destination.fqdns}{"\t"}ports={.destination.ports}{"\n"}{end}'
+P=$(kubectl -n f5-bnk get pod -l app=f5-tmm -o jsonpath='{.items[0].metadata.name}'); C=$(kubectl -n f5-bnk get pod $P -o jsonpath='{.spec.containers[*].name}' | tr ' ' '\n' | grep -m1 -x debug || echo f5-tmm)
+kubectl -n f5-bnk exec $P -c $C -- tmctl -d blade fw_fqdn_stat 2>&1 | head -8
+```
+
+`fw_fqdn_stat` counts the names registered by policies and the DNS refreshes TMM has sent and failed. With one
+name registered and refreshes succeeding, the rule is live. Now the proof, from the only pod in Aurora's namespace
+that talks to the outside: Bedrock by name, and any other TLS host:
+
+```bash,run
+K=$(cat /root/.bnk/aigw/lab.key)
+docker exec client curl -sS -m 90 http://172.16.100.13/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{"model":"nova-micro","messages":[{"role":"user","content":"Name one planet. One word."}],"max_tokens":20}' | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("choices"); print(" bedrock by name:", d.get("model"), "|", (c[0]["message"]["content"][:40].strip() if c else str(d.get("error"))[:120]))'
+unset K
+kubectl -n tenant-a exec deploy/bedrock-proxy -- python3 -c 'import urllib.request as u
+try: print(" example.com: HTTP", u.urlopen("https://example.com", timeout=8).status)
+except Exception as e: print(" example.com: refused,", str(e)[:70])'
+```
+
+Bedrock answers, the other host is reset by TMM on the second rule. If instead the Bedrock request fails and
+`fw_fqdn_stat` shows refresh failures, TMM's resolver has no path to its nameservers on this play, and the port rule
+goes back on with `kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml`. The rest of the chapter works with
+either rule.
+
 ## Close the cloud tier
 
 Restart the capture in Terminal 2, then apply the closed version of Aurora's policy. Same name, same two rules, the
@@ -259,10 +294,12 @@ changed.
 
 ## Put it back
 
-The policy opens again from the file that declared it. After the cooldown, Bedrock answers again:
+The policy opens again from the file you ended the previous section with, the rule by name here, or
+`manifests/bnk/30-egress.yaml` if the port rule is the one that works on your play. After the cooldown, Bedrock
+answers again:
 
 ```bash,run
-kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml
+kubectl apply -f $LAB_ROOT/manifests/chapters/15-cloud-by-name-a.yaml
 sleep 35; kubectl -n f5-bnk get f5-big-fw-policies egress-allow-a -o jsonpath='{.spec.rule[0].name}: {.spec.rule[0].action}{"\n"}'
 K=$(cat /root/.bnk/aigw/lab.key)
 docker exec client curl -sS -m 120 http://172.16.100.13/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{"model":"nova-lite","messages":[{"role":"user","content":"Name one planet. One word."}],"max_tokens":30}' | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("choices"); print(" model:", d.get("model"), "|", (c[0]["message"]["content"][:80].replace("\n"," ") if c else d.get("error")))'
@@ -284,10 +321,10 @@ kubectl -n tenant-a logs -l app=bedrock-proxy --since 1m --tail=-1 2>/dev/null |
 - Two caches were tried and left out. The router's semantic cache never stores anything here, because the gateway
   hands the router the request only and the response never passes back through it. The gateway's own prompt cache
   is limited to OpenAI and Anthropic models in 2.4.1.
-- In a production cluster the same shape gets four more things: short-lived credentials instead of keys in a
-  Secret, a destination by name in the rule (`destination.fqdns`, which needs TMM's FQDN resolver), a PrivateLink
-  endpoint instead of the internet where the cluster has a path into AWS, and the router's models baked into an
-  image instead of downloaded at start. `docs/cloud-tier.md` in the lab repository has the details.
+- In a production cluster the same shape gets three more things: short-lived credentials instead of keys in a
+  Secret, a PrivateLink endpoint instead of the internet where the cluster has a path into AWS, and the router's
+  models baked into an image instead of downloaded at start. `docs/cloud-tier.md` in the lab repository has the
+  details.
 
 ## Checkpoint
 

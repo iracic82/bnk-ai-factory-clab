@@ -121,6 +121,11 @@ if kubectl -n tenant-a get secret bedrock-aws >/dev/null 2>&1; then
   kubectl -n tenant-a rollout status deploy/bedrock-proxy --timeout="$(tmo 600s 180s)" >/dev/null 2>&1 \
     && ok "bedrock-proxy: Ready in tenant-a (Nova micro, lite, pro through Bedrock us-east-1)" \
     || warn "bedrock-proxy not Ready yet (image pull or the AWS keys): kubectl -n tenant-a get pods -l app=bedrock-proxy; chapter 15 checks again"
+  # TMM's global FQDN resolver, so that chapter 15 can replace the port rule on Aurora's exit with the Bedrock
+  # endpoint by name (manifests/chapters/15-cloud-by-name-a.yaml). The exit keeps the port rule at install.
+  kubectl apply -f "$REPO_ROOT/manifests/bnk/35-fqdn-resolver.yaml" >/dev/null \
+    && ok "fqdn resolver security-fqdn-dns-resolver applied (zone amazonaws.com via 8.8.8.8 and 1.1.1.1): $(kubectl -n $NS get f5-big-dns-caches.k8s.f5net.com security-fqdn-dns-resolver -o jsonpath='{.status.conditions[*].type}={.status.conditions[*].status}' 2>/dev/null | head -c 120)" \
+    || warn "could not apply manifests/bnk/35-fqdn-resolver.yaml; chapter 15's rule by name will not resolve"
   CLOUD=1
 else
   warn "no AWS account attached (no $SECRETS_DIR/aws-bedrock.env, no Secret tenant-a/bedrock-aws): the lab runs without the cloud tier"
