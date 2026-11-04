@@ -114,16 +114,18 @@ kubectl -n ate-system get pods --no-headers | awk '{printf "   %-42s %s\n", $1, 
 helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --version $KAGENT -n kagent -f "$M/kagent-values.yaml" \
   --set substrateWorkerPool.ateomImage="ghcr.io/kagent-dev/substrate/ateom-gvisor:v$SUBSTRATE" --wait --timeout "$(tmo 15m 6m)" >/dev/null
 kubectl -n kagent get workerpools.ate.dev 2>/dev/null || warn "no WorkerPool yet"
-P=$(kubectl -n kagent get pods -o name | grep kagent-controller | tail -1)
-# The controller starts its sandboxagent controller once it has dialled Substrate, up to a minute after the chart is
-# ready (plays of 2026-11-03 and 2026-11-04: the check ran too early and warned, the line was there by the time the
-# lab was up). Give it two minutes before judging.
-for i in $(seq 1 12); do
-  kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -q '"controller":"sandboxagent"' && break; sleep 10
+# The helm upgrade above replaces the controller pod. The first one (installed before Substrate) stays Terminating
+# for a while and can sort last by name, and its log is the one that says "AgentHarness controller disabled: set
+# --substrate-ate-api-endpoint", which is what this warn quoted on every play up to 2026-11-04. The new pod logs
+# the sandboxagent EventSource within seconds of starting (play nuuaqt2gttio: started 09:06:02, line at 09:06:04).
+# So: the newest pod, its whole log, and a minute of grace.
+P=$(kubectl -n kagent get pods --sort-by=.metadata.creationTimestamp -o name | grep kagent-controller | tail -1)
+for i in $(seq 1 6); do
+  kubectl -n kagent logs "$P" 2>/dev/null | grep -q '"controller":"sandboxagent"' && break; sleep 10
 done
-kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -q '"controller":"sandboxagent"' \
-  && ok "kagent controller reaches Substrate (sandboxagent controller started)" \
-  || warn "kagent controller has not started its sandboxagent controller yet: $(kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -iE 'substrate' | grep -viE 'Request completed' | tail -1 | cut -c1-160)"
+kubectl -n kagent logs "$P" 2>/dev/null | grep -q '"controller":"sandboxagent"' \
+  && ok "kagent controller reaches Substrate (sandboxagent controller started in ${P#pod/})" \
+  || warn "kagent controller has not started its sandboxagent controller yet: $(kubectl -n kagent logs "$P" 2>/dev/null | grep -iE 'substrate' | grep -viE 'Request completed' | tail -1 | cut -c1-160)"
 ok "Substrate installed; kagent substrate integration on"
 
 step "what the learner sees"
