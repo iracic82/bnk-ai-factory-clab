@@ -107,16 +107,19 @@ fi
 
 # Available is the installer's own health condition; the upgrade refuses to start without it, and a resume may
 # land while the operator is still rolling something (every rollout flips it False for a while).
+wait_available() {  # $1 = minutes; prints the False conditions every 90 s, fails when the time is up
+  local avail="" i
+  for i in $(seq 1 $(( $1 * 4 ))); do
+    avail=$(kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
+    [ "$avail" = True ] && break
+    [ $((i % 6)) -eq 0 ] && kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}{"\n"}' | tr ' ' '\n' | grep -E '=False$' | paste -sd' ' | sed 's/^/      outstanding: /'
+    sleep 15
+  done
+  [ "$avail" = True ] || fail "CNEInstance Available=$avail after $1 minutes; the conditions above say which component"
+  ok "CNEInstance Available"
+}
 step "CNEInstance Available"
-avail=""
-for i in $(seq 1 120); do
-  avail=$(kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null || true)
-  [ "$avail" = True ] && break
-  [ $((i % 6)) -eq 0 ] && kubectl -n f5-bnk get cneinstance f5-bnk-instance -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}{"\n"}' | tr ' ' '\n' | grep -E '=False$' | paste -sd' ' | sed 's/^/      outstanding: /'
-  sleep 15
-done
-[ "$avail" = True ] || fail "CNEInstance Available=$avail after 30 minutes; the conditions above say which component"
-ok "CNEInstance Available"
+wait_available 30
 step "phase 70 (verify)"
 "$DEPLOY/install.sh" --env lab --profile host --phase 70
 
@@ -126,6 +129,12 @@ if [ "$cur" != "$TARGET_MANIFEST" ]; then
   # the health gate covers the pull of every 2.4.2 image; a first (bake) run pulls them cold, and the fast cap
   # would trip the automatic rollback. The installer's full timeout here, whatever LAB_FAST says.
   BNK_WAIT_TIMEOUT=1800 "$DEPLOY/upgrade.sh" --env lab --profile host --to "$TARGET_MANIFEST"
+  # upgrade.sh verifies right after raising the manifest, while the operator may still be replacing pods (play of
+  # 2026-11-04, 08:52 UTC: the new cwc pod was ContainerCreating with its TLS secrets not issued yet, the verify
+  # reported Available=False and the upgrade finished anyway). The rollout has to be over before the operator chart
+  # and the feature patch below touch the instance again, so the wait is repeated here.
+  step "CNEInstance Available again after the upgrade"
+  wait_available 15
 else ok "already on $TARGET_MANIFEST"; fi
 
 # The installer's upgrade.sh raises the manifest but keeps the operator chart at its own pin (v2.30.0-0.5.2, the 2.4.0
