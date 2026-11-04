@@ -147,7 +147,7 @@ for l in sys.stdin:
 With the cloud tier on, the proxy's log shows the Bedrock calls it signed:
 
 ```bash,run
-kubectl -n tenant-a logs -l app=bedrock-proxy --since 1h --tail=-1 2>/dev/null | grep -iE 'LiteLLM completion|200 OK' | tail -4 | cut -c1-160
+kubectl -n tenant-a logs -l app=bedrock-proxy --since 1h --tail=-1 2>/dev/null | grep -E 'POST /v1/chat/completions' | tail -3 | cut -c1-160
 ```
 
 ## Only the tenant that pays
@@ -258,15 +258,19 @@ that talks to the outside: Bedrock by name, and any other TLS host:
 K=$(cat /root/.bnk/aigw/lab.key)
 docker exec client curl -sS -m 90 http://172.16.100.13/v1/chat/completions -H "Authorization: Bearer $K" -H 'Content-Type: application/json' -d '{"model":"nova-micro","messages":[{"role":"user","content":"Name one planet. One word."}],"max_tokens":20}' | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d.get("choices"); print(" bedrock by name:", d.get("model"), "|", (c[0]["message"]["content"][:40].strip() if c else str(d.get("error"))[:120]))'
 unset K
-kubectl -n tenant-a exec deploy/bedrock-proxy -- python3 -c 'import urllib.request as u
-try: print(" example.com: HTTP", u.urlopen("https://example.com", timeout=8).status)
-except Exception as e: print(" example.com: refused,", str(e)[:70])'
+kubectl -n tenant-a exec deploy/bedrock-proxy -- python3 -c 'import socket
+ip = socket.getaddrinfo("example.com", 443, socket.AF_INET)[0][4][0]
+s = socket.socket(); s.settimeout(8)
+try: s.connect((ip, 443)); print(" example.com %s:443: connected, the second rule did not match" % ip)
+except OSError as e: print(" example.com %s:443: %s" % (ip, e))'
 ```
 
-Bedrock answers, the other host is reset by TMM on the second rule. If instead the Bedrock request fails and
-`fw_fqdn_stat` shows refresh failures, TMM's resolver has no path to its nameservers on this play, and the port rule
-goes back on with `kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml`. The rest of the chapter works with
-either rule.
+Bedrock answers. The other host gets `Connection refused`: TMM reset its SYN on the second rule, before SNAT and
+routing, because the name on the first rule did not match it. The probe asks for the host's IPv4 address on
+purpose. Left to itself the pod would also try the IPv6 address, which has no route from the pod, and report that
+instead of the reset. Should the Bedrock request fail and `fw_fqdn_stat` show refresh failures, the resolver has no
+path to its nameservers on this play, and the port rule goes back on with
+`kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml`. The rest of the chapter works with either rule.
 
 ## Close the cloud tier
 

@@ -76,8 +76,9 @@ tenant apps and MCP servers are published on their own VIPs (172.16.100.16 to .1
   an `F5BigDnsCache` named `security-fqdn-dns-resolver` of type net-resolver, zone `amazonaws.com`, nameservers
   8.8.8.8 and 1.1.1.1 reached through the external leg and r5's masquerade) and leaves the verified port rule on
   the exit. Chapter 15 then applies `manifests/chapters/15-cloud-by-name-a.yaml`, Bedrock by name plus a reject
-  for every other TLS destination, reads `fw_fqdn_stat` on TMM, and says to put the port rule back if the resolver
-  has no path on that play. Whether TMM's queries reach the public resolvers is what the next fresh play verifies.
+  for every other TLS destination, reads `fw_fqdn_stat` on TMM, and keeps one line to put the port rule back should
+  the resolver have no path on a play. On the play of 2026-11-04 it had one: the stat showed one name, eight
+  refreshes and no failures, Bedrock answered through the rule and `example.com` was refused.
 - **The router is attached to the lab tenant only.** Its decisions name the lab tenant's models. A tenant route
   would need a router config of its own, with that tenant's prefixed model names.
 
@@ -121,13 +122,26 @@ failed on that play: r5's deploy-time `apk add iptables` (management network not
 `install/10-fabric.sh`, the router at 6 Gi with four classifiers (OOM-killed, now 12 Gi), and the router's cache
 (see above).
 
+Verified on the second play (2026-11-04, participant xd619i2zecr9), the first cold run of the installer with the
+cloud tier in it. Every cloud tier step printed its ok line: r5's masquerade one second after the fabric came up,
+the proxy Ready, the resolver Accepted and Programmed, the three Nova models priced with the local deployment for
+the lab tenant and Aurora, a pilot key with its budget per tenant, failover on both profiles, the router applied
+and attached by the background script. Chapter 15 ran top to bottom as written. The rule by name: one name
+registered and eight refreshes without a failure in `fw_fqdn_stat`, `nova-micro` answered from Bedrock through it,
+and a TLS connection from the proxy pod to `example.com` got `Connection refused` from TMM's second rule. Two facts
+came out of that play. BNK's lifecycle operator creates `security-fqdn-dns-resolver` itself when it installs the
+CNEInstance, empty, and owns only `spec.cacheType` in it, so the installer's apply fills an existing object, which
+is why kubectl warns once about the missing last-applied annotation. And a probe pod started with `kubectl run`
+during setup can wait minutes in the kubelet's image pull queue behind the agents layer, longer than the one
+minute kubectl allows by default: the two scanner probes in `install/60-guardrails.sh` timed out that way and the
+lab fell back to the mock scanner for no reason, so they now wait five minutes.
+
 Verified on 2026-11-03 before the first play: the LiteLLM image `v1.106.6` and the extproc `v0.4.0` exist on
 ghcr.io at the pinned digests; the firewall rule fields (`destination.ports`, `ipProtocol: tcp`, `action: reject`)
 are in the 2.4.2 `f5-cnf-crds-n6lan` chart; Instruqt's `aws_accounts` keys and the variable names come from the
 Instruqt docs; `model: "auto"` with the router on profile `lab-ai` is how the EVE lab ran it; the Nova inference
 profile ids are the ones the earlier track used against Bedrock on 2026-09-12.
 
-To verify on the first play: that the f5 team's pool hands out the account (the push of `config.yml` says so),
-that LiteLLM's log carries the model name the check greps for, that Polaris admits `auto` through the hook before
-the key's model scope is checked, that the router's two replicas each finish their download, and that r5's NAT
-gives the proxy a reply. The chapter's commands print each of these.
+Still to verify: whether a reconcile by the lifecycle operator after the install keeps the forward zone in the
+resolver. The operator applies `spec.cacheType` only, and on both plays nothing touched the object after setup
+filled it.

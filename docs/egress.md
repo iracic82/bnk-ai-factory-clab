@@ -104,8 +104,10 @@ with the CNEInstance, and the installer fills it (`manifests/bnk/35-fqdn-resolve
 `security-fqdn-dns-resolver`, zone `amazonaws.com`, two public nameservers reached through the external leg and r5).
 Chapter 15 then swaps the port rule for
 `manifests/chapters/15-cloud-by-name-a.yaml`, which admits `bedrock-runtime.us-east-1.amazonaws.com` on 443 and
-rejects every other TLS destination before `allow-all`, and reads `fw_fqdn_stat` on TMM for the resolutions. The
-port rule stays the install-time baseline and the fallback.
+rejects every other TLS destination before `allow-all`, and reads `fw_fqdn_stat` on TMM for the resolutions. On the
+play of 2026-11-04 that showed one name, eight refreshes and no failures, Bedrock answered through the rule and a
+TLS connection from the proxy pod to `example.com` was refused. The port rule stays the install-time baseline and the
+fallback.
 
 r5 masquerades. A packet for an address outside the factory leaves r5 on its management interface, where docker's
 own NAT only translates docker's subnet. One POSTROUTING rule on r5's eth0 keeps Aurora's SNAT address inside, and

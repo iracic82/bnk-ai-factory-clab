@@ -3,8 +3,10 @@
 # destination, so the allowlist is an allowlist: Aurora's pods may open TLS to bedrock-runtime.us-east-1.amazonaws.com
 # and to nothing else outside, while everything that is not TLS still matches allow-all. Needs the global FQDN
 # resolver (manifests/bnk/35-fqdn-resolver.yaml) to have resolved the name; the CRD rejects wildcards, so the
-# endpoint is named in full. Put the port rule back with manifests/bnk/30-egress.yaml if the resolver has no path
-# to its nameserver on a play.
+# endpoint is named in full. Verified on the play of 2026-11-04: fw_fqdn_stat on TMM showed the one name with eight
+# refreshes and no failures, nova-micro answered from Bedrock through the first rule, and a TLS connection from the
+# proxy pod to example.com got ECONNREFUSED from the second. The port rule in manifests/bnk/30-egress.yaml stays the
+# install-time baseline and goes back on if the resolver has no path to its nameservers on a play.
 apiVersion: k8s.f5net.com/v1
 kind: F5BigFwPolicy
 metadata: {name: egress-allow-a, namespace: f5-bnk}

@@ -24,11 +24,8 @@ PROF=$(j "$TA/profiles" | jq -r --arg n "$T-ai" '(.data // .items)[]? | select(.
 [ -n "$PROF" ] || PROF=$(j "$TA/profiles" | jq -r '(.data // .items)[0].name // empty')
 [ -n "$PROF" ] || { log "tenant $T has no AI Gateway profile yet"; exit 1; }
 cur=$(j "$TA/profiles/$PROF/semantic-router"); log "profile $PROF, current hook: $(echo "$cur" | head -c 200)"
-# a hook that is already configured is removed first (the gateway resolved the old pod); an empty one answers 405 to DELETE
-if echo "$cur" | jq -e '(.data // .) | .configured == true' >/dev/null 2>&1; then
-  log "delete: HTTP $(j -X DELETE "$TA/profiles/$PROF/semantic-router" -o /dev/null -w '%{http_code}')"
-  sleep 3
-fi
+# PUT replaces a configured hook in place. DELETE answers 405 whether a hook is configured or not (play of
+# 2026-11-04), so nothing is removed first. The hook names the Service, and Polaris resolves it on each program.
 log "put: $(j -X PUT "$TA/profiles/$PROF/semantic-router" --data-binary '{"name":"semantic-router","port":50051,"timeoutMs":1000}' | head -c 300)"
 unset TOK
 if kubectl -n $NS wait --for=condition=Programmed "aigatewayprofiles.inference.k8s.f5.com/$PROF" --timeout=180s >/dev/null 2>&1; then
