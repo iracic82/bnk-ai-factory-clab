@@ -236,10 +236,10 @@ cloud tier off there is nothing to see on VLAN 101, and the answer came from the
 ## The exit by name
 
 A rule that admits port 443 to anywhere is a door, not an allowlist. The rule a customer writes names the host.
-TMM can do that once it has a resolver of its own: a global one, `security-fqdn-dns-resolver`, which the installer
-created with a forward zone for `amazonaws.com` and two public nameservers, reached the same way the cloud tier is,
-through the external leg and r5. Read it, then replace Aurora's policy with the version that names the endpoint
-and rejects every other TLS destination:
+TMM can do that once it has a resolver of its own: a global one, `security-fqdn-dns-resolver`. BNK's lifecycle
+operator creates it empty with the CNEInstance, and the lab's setup filled it with a forward zone for `amazonaws.com`
+and two public nameservers, reached the same way the cloud tier is, through the external leg and r5. Read it, then
+replace Aurora's policy with the version that names the endpoint and rejects every other TLS destination:
 
 ```bash,run
 kubectl -n f5-bnk get f5-big-dns-caches.k8s.f5net.com security-fqdn-dns-resolver -o jsonpath='{.spec.cacheType}: {.spec.netResolver.forwardZones}{"\n"}'

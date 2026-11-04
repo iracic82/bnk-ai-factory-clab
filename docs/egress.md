@@ -99,9 +99,10 @@ added so that the path reaches AWS and can be closed on its own.
 The policy `egress-allow-a` has two rules in order. `cloud-tier` accepts tcp/443 and logs it, `allow-all` keeps
 Aurora's other traffic as it was. Chapter 15 flips the first rule to reject (`manifests/chapters/15-cloud-closed-a.yaml`)
 and opens it again from `30-egress.yaml`, the way chapter 12 does for Cobalt. The 2.4.2 CRD also takes
-`destination.fqdns`. A name in a rule needs TMM's global FQDN resolver, and the installer creates it
-(`manifests/bnk/35-fqdn-resolver.yaml`: an `F5BigDnsCache` named `security-fqdn-dns-resolver`, zone `amazonaws.com`,
-two public nameservers reached through the external leg and r5). Chapter 15 then swaps the port rule for
+`destination.fqdns`. A name in a rule needs TMM's global FQDN resolver. BNK's lifecycle operator creates it empty
+with the CNEInstance, and the installer fills it (`manifests/bnk/35-fqdn-resolver.yaml`: an `F5BigDnsCache` named
+`security-fqdn-dns-resolver`, zone `amazonaws.com`, two public nameservers reached through the external leg and r5).
+Chapter 15 then swaps the port rule for
 `manifests/chapters/15-cloud-by-name-a.yaml`, which admits `bedrock-runtime.us-east-1.amazonaws.com` on 443 and
 rejects every other TLS destination before `allow-all`, and reads `fw_fqdn_stat` on TMM for the resolutions. The
 port rule stays the install-time baseline and the fallback.

@@ -71,7 +71,8 @@ tenant apps and MCP servers are published on their own VIPs (172.16.100.16 to .1
   and it has none.
 - **A port rule at install, the name in the chapter.** The 2.4.2 CRD takes `destination.fqdns`, and
   `bedrock-runtime.us-east-1.amazonaws.com` is the honest allowlist entry, but a name in a rule only matches once
-  TMM's global FQDN resolver has resolved it. The installer creates that resolver (`manifests/bnk/35-fqdn-resolver.yaml`,
+  TMM's global FQDN resolver has resolved it. BNK's lifecycle operator creates that resolver empty with the
+  CNEInstance, and the installer fills it (`manifests/bnk/35-fqdn-resolver.yaml`,
   an `F5BigDnsCache` named `security-fqdn-dns-resolver` of type net-resolver, zone `amazonaws.com`, nameservers
   8.8.8.8 and 1.1.1.1 reached through the external leg and r5's masquerade) and leaves the verified port rule on
   the exit. Chapter 15 then applies `manifests/chapters/15-cloud-by-name-a.yaml`, Bedrock by name plus a reject

@@ -115,6 +115,12 @@ helm upgrade --install kagent oci://ghcr.io/kagent-dev/kagent/helm/kagent --vers
   --set substrateWorkerPool.ateomImage="ghcr.io/kagent-dev/substrate/ateom-gvisor:v$SUBSTRATE" --wait --timeout "$(tmo 15m 6m)" >/dev/null
 kubectl -n kagent get workerpools.ate.dev 2>/dev/null || warn "no WorkerPool yet"
 P=$(kubectl -n kagent get pods -o name | grep kagent-controller | tail -1)
+# The controller starts its sandboxagent controller once it has dialled Substrate, up to a minute after the chart is
+# ready (plays of 2026-11-03 and 2026-11-04: the check ran too early and warned, the line was there by the time the
+# lab was up). Give it two minutes before judging.
+for i in $(seq 1 12); do
+  kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -q '"controller":"sandboxagent"' && break; sleep 10
+done
 kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -q '"controller":"sandboxagent"' \
   && ok "kagent controller reaches Substrate (sandboxagent controller started)" \
   || warn "kagent controller has not started its sandboxagent controller yet: $(kubectl -n kagent logs "$P" --tail=400 2>/dev/null | grep -iE 'substrate' | grep -viE 'Request completed' | tail -1 | cut -c1-160)"

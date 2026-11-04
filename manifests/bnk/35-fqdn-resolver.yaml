@@ -7,6 +7,10 @@
 # Verified shape: CRD f5-big-dns-caches.k8s.f5net.com v1 in the 2.4.2 f5-cnf-crds-n6lan chart, doc
 # clouddocs.f5.com/cnfs/robin/latest/edge-firewall-fqdn.html. Reachability of the nameserver from TMM is what the
 # first play with this file verifies; install/40-ai.sh prints the object's status, chapter 15 shows the stats.
+# BNK's lifecycle operator creates this object itself, empty, when it installs the CNEInstance (play of 2026-11-04:
+# created 07:49:47 UTC by manager f5-lifecycle-operator, this file applied at 08:04:25). kubectl apply therefore fills
+# an existing object, warns once about the missing last-applied annotation and adds it. The operator's defaults for
+# the resolver and transparent sections stay in the object. cacheType selects the net-resolver one.
 apiVersion: k8s.f5net.com/v1
 kind: F5BigDnsCache
 metadata: {name: security-fqdn-dns-resolver, namespace: f5-bnk}
