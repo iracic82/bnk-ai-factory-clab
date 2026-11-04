@@ -131,7 +131,11 @@ registered and eight refreshes without a failure in `fw_fqdn_stat`, `nova-micro`
 and a TLS connection from the proxy pod to `example.com` got `Connection refused` from TMM's second rule. Two facts
 came out of that play. BNK's lifecycle operator creates `security-fqdn-dns-resolver` itself when it installs the
 CNEInstance, empty, and owns only `spec.cacheType` in it, so the installer's apply fills an existing object, which
-is why kubectl warns once about the missing last-applied annotation. And a probe pod started with `kubectl run`
+is why kubectl warns once about the missing last-applied annotation. The CNEInstance has no field for the
+resolver, and the operator applies its default only when the object is absent: its log says `cr already exists,
+not applying default cr` on every reconcile after that, and a reconcile forced on the third play of the day
+(an annotation on the CNEInstance, 09:27 UTC) walked every component and left the resolver's resource version,
+its zone and every F5 pod as they were. And a probe pod started with `kubectl run`
 during setup can wait minutes in the kubelet's image pull queue behind the agents layer, longer than the one
 minute kubectl allows by default: the two scanner probes in `install/60-guardrails.sh` timed out that way and the
 lab fell back to the mock scanner for no reason, so they now wait five minutes.
@@ -142,6 +146,8 @@ are in the 2.4.2 `f5-cnf-crds-n6lan` chart; Instruqt's `aws_accounts` keys and t
 Instruqt docs; `model: "auto"` with the router on profile `lab-ai` is how the EVE lab ran it; the Nova inference
 profile ids are the ones the earlier track used against Bedrock on 2026-09-12.
 
-Still to verify: whether a reconcile by the lifecycle operator after the install keeps the forward zone in the
-resolver. The operator applies `spec.cacheType` only, and on both plays nothing touched the object after setup
-filled it.
+Verified on the third play (2026-11-04, participant nuuaqt2gttio), the first with the probe timeouts: all fifteen
+chapters passed their solve and check scripts in one terminal loop, the Skip path, in under two minutes. The real
+scanner answered at setup. The rule by name worked again, and `fw_rule_stat` with a wide table (`tmctl -w 300`)
+keeps the counters on the row, which the chapter now shows after the two proofs. Nothing in chapter 15 is left
+to verify.

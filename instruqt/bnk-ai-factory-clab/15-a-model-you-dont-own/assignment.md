@@ -263,11 +263,14 @@ ip = socket.getaddrinfo("example.com", 443, socket.AF_INET)[0][4][0]
 s = socket.socket(); s.settimeout(8)
 try: s.connect((ip, 443)); print(" example.com %s:443: connected, the second rule did not match" % ip)
 except OSError as e: print(" example.com %s:443: %s" % (ip, e))'
+P=$(kubectl -n f5-bnk get pod -l app=f5-tmm -o jsonpath='{.items[0].metadata.name}'); C=$(kubectl -n f5-bnk get pod $P -o jsonpath='{.spec.containers[*].name}' | tr ' ' '\n' | grep -m1 -x debug || echo f5-tmm)
+kubectl -n f5-bnk exec $P -c $C -- tmctl -d blade -w 300 fw_rule_stat 2>&1 | grep -E 'rule_name|tenant-a-egress' | cut -c1-120
 ```
 
 Bedrock answers. The other host gets `Connection refused`: TMM reset its SYN on the second rule, before SNAT and
-routing, because the name on the first rule did not match it. The probe asks for the host's IPv4 address on
-purpose. Left to itself the pod would also try the IPv6 address, which has no route from the pod, and report that
+routing, because the name on the first rule did not match it. The rule counters are TMM's own account of the same
+two events: `cloud-tier` counted the connection to Bedrock, `no-other-tls` the one it reset. The probe asks for
+the host's IPv4 address on purpose. Left to itself the pod would also try the IPv6 address, which has no route from the pod, and report that
 instead of the reset. Should the Bedrock request fail and `fw_fqdn_stat` show refresh failures, the resolver has no
 path to its nameservers on this play, and the port rule goes back on with
 `kubectl apply -f $LAB_ROOT/manifests/bnk/30-egress.yaml`. The rest of the chapter works with either rule.

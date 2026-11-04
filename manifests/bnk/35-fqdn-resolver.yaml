@@ -11,7 +11,10 @@
 # BNK's lifecycle operator creates this object itself, empty, when it installs the CNEInstance (play of 2026-11-04:
 # created 07:49:47 UTC by manager f5-lifecycle-operator, this file applied at 08:04:25). kubectl apply therefore fills
 # an existing object, warns once about the missing last-applied annotation and adds it. The operator's defaults for
-# the resolver and transparent sections stay in the object. cacheType selects the net-resolver one.
+# the resolver and transparent sections stay in the object. cacheType selects the net-resolver one. The operator
+# applies its default only when the object is absent ("cr already exists, not applying default cr" in its log on
+# every later reconcile) and the CNEInstance has no field for it, so a reconcile after setup leaves this zone alone
+# (forced one on 2026-11-04 09:27 UTC: resource version unchanged, every F5 pod Running).
 apiVersion: k8s.f5net.com/v1
 kind: F5BigDnsCache
 metadata: {name: security-fqdn-dns-resolver, namespace: f5-bnk}
